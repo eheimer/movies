@@ -1,4 +1,8 @@
-use std::fs;
+mod config;
+mod display;
+
+use config::{Config, read_config};
+use display::{initialize_terminal, restore_terminal, draw_screen, get_terminal_size};
 use std::io;
 use std::path::Path;
 use std::path::PathBuf;
@@ -6,127 +10,8 @@ use std::process::{Command, Child, Stdio};
 use std::sync::mpsc::{self, Sender, Receiver};
 use std::thread;
 use std::time::Duration;
-use crossterm::{
-    execute,
-    terminal::{self, ClearType, EnterAlternateScreen, LeaveAlternateScreen, size},
-    cursor::{self, Hide, Show},
-    event::{self, Event, KeyCode, KeyEvent, DisableMouseCapture, EnableMouseCapture},
-    style::{Color, Stylize},
-    ExecutableCommand,
-};
-use serde::{Deserialize, Serialize};
-use std::io::stdout;
+use crossterm::event::{self, Event, KeyCode, KeyEvent};
 use walkdir::WalkDir;
-
-#[derive(Deserialize, Serialize)]
-struct Config {
-    path: String,
-    current_fg: String,
-    current_bg: String,
-    video_extensions: Vec<String>,
-    video_player: String,
-}
-
-impl Default for Config {
-    fn default() -> Self {
-        Config {
-            path: ".".to_string(),
-            current_fg: "Black".to_string(),
-            current_bg: "White".to_string(),
-            video_extensions: vec!["mp4".to_string(), "mkv".to_string(), "avi".to_string(), "mov".to_string(), "flv".to_string(), "wmv".to_string(), "webm".to_string()],
-            video_player: "/usr/bin/vlc".to_string(),
-        }
-    }
-}
-
-fn string_to_color(color: &str) -> Option<Color> {
-    match color.to_lowercase().as_str() {
-        "black" => Some(Color::Black),
-        "red" => Some(Color::Red),
-        "green" => Some(Color::Green),
-        "yellow" => Some(Color::Yellow),
-        "blue" => Some(Color::Blue),
-        "magenta" => Some(Color::Magenta),
-        "cyan" => Some(Color::Cyan),
-        "white" => Some(Color::White),
-        _ => None,
-    }
-}
-
-fn string_to_bg_color_or_default(color: &str) -> Color {
-    string_to_color(color).unwrap_or(Color::White)
-}
-
-fn string_to_fg_color_or_default(color: &str) -> Color {
-    string_to_color(color).unwrap_or(Color::Black)
-}
-
-fn read_config(config_path: &str) -> Config {
-    if Path::new(config_path).exists() {
-        match fs::read_to_string(config_path) {
-            Ok(content) => serde_json::from_str(&content).unwrap_or_default(),
-            Err(_) => {
-                eprintln!("Error: Could not read the config.json file. Using default values.");
-                Config::default()
-            }
-        }
-    } else {
-        let default_config = Config::default();
-        let default_config_json = serde_json::to_string_pretty(&default_config).unwrap();
-        fs::write(config_path, default_config_json).unwrap();
-        default_config
-    }
-}
-
-fn initialize_terminal() -> io::Result<()> {
-    let mut stdout = stdout();
-    stdout.execute(EnterAlternateScreen)?;
-    terminal::enable_raw_mode()?;
-    stdout.execute(EnableMouseCapture)?;
-    stdout.execute(Hide)?;
-    Ok(())
-}
-
-fn restore_terminal() -> io::Result<()> {
-    let mut stdout = stdout();
-    stdout.execute(LeaveAlternateScreen)?;
-    terminal::disable_raw_mode()?;
-    stdout.execute(DisableMouseCapture)?;
-    stdout.execute(Show)?;
-    Ok(())
-}
-
-fn get_terminal_size() -> io::Result<(u16, u16)> {
-    let (cols, rows) = size()?;
-    Ok((cols, rows))
-}
-
-fn draw_screen(entries: &[PathBuf], current_item: usize, filter: &String, config: &Config, window_start: usize, playing_file: Option<&PathBuf>) -> io::Result<()> {
-    let mut stdout = stdout();
-    execute!(stdout, terminal::Clear(ClearType::All), cursor::MoveTo(0, 0))?;
-    println!("Use the arrow keys to navigate, 'Enter' play video, 'Esc' to exit, type to search");
-    execute!(stdout, cursor::MoveTo(0, 2))?;
-    if let Some(file) = playing_file {
-        println!("Playing video: {}", file.file_name().unwrap_or_default().to_string_lossy());
-    }
-    execute!(stdout, cursor::MoveTo(0, 3))?;
-    println!("Filter: {}", filter);
-
-    let (_, rows) = get_terminal_size()?;
-    let max_lines = rows as usize - 6; // Adjust for header and footer lines
-
-    for (i, entry) in entries.iter().enumerate().skip(window_start).take(max_lines) {
-        execute!(stdout, cursor::MoveTo(0, (i - window_start) as u16 + 5))?;
-        let file_name = entry.file_name().unwrap_or_default().to_string_lossy();
-        if i == current_item {
-            let styled_entry = file_name.with(string_to_fg_color_or_default(&config.current_fg)).on(string_to_bg_color_or_default(&config.current_bg));
-            println!("{}", styled_entry);
-        } else {
-            println!("{}", file_name);
-        }
-    }
-    Ok(())
-}
 
 fn run_video_player(config: &Config, file_path: &Path) -> io::Result<Child> {
     Command::new(&config.video_player)
@@ -197,7 +82,7 @@ fn main_loop(entries: Vec<PathBuf>, config: Config) -> io::Result<()> {
                         if current_item < filtered_entries.len() - 1 {
                             current_item += 1;
                             let (_, rows) = get_terminal_size()?;
-                            let max_lines = rows as usize - 5;
+                            let max_lines = rows as usize - 6;
                             if current_item >= window_start + max_lines {
                                 window_start = current_item - max_lines + 1;
                             }
