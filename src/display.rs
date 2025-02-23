@@ -50,7 +50,7 @@ pub fn restore_terminal() -> io::Result<()> {
     Ok(())
 }
 
-pub fn get_terminal_size() -> io::Result<(u16, u16)> {
+fn get_terminal_size() -> io::Result<(u16, u16)> {
     let (cols, rows) = size()?;
     Ok((cols, rows))
 }
@@ -58,36 +58,40 @@ pub fn get_terminal_size() -> io::Result<(u16, u16)> {
 pub fn draw_screen(
     entries: &[Entry],
     current_item: usize,
+    first_entry: &mut usize,
     filter: &String,
     config: &Config,
-    window_start: usize,
-    playing_file: Option<&String>,
     entry_mode: bool,
     entry_path: &String,
 ) -> io::Result<()> {
     let mut stdout = stdout();
+    let header_size = 3;
+    let footer_size = 1;
     execute!(stdout, terminal::Clear(ClearType::All), cursor::MoveTo(0, 0))?;
     println!("Use the arrow keys to navigate, 'Enter' play video, 'Esc' to exit, type to search");
-    execute!(stdout, cursor::MoveTo(0, 2))?;
-    if let Some(file) = playing_file {
-        println!("Playing video: {}", file);
-    }
-    execute!(stdout, cursor::MoveTo(0, 3))?;
+    execute!(stdout, cursor::MoveTo(0, 1))?;
     println!("Filter: {}", filter);
 
     if entries.is_empty() {
-        execute!(stdout, cursor::MoveTo(0, 5))?;
+        execute!(stdout, cursor::MoveTo(0, header_size))?;
         println!("{}", "No videos found, press CTRL-S to scan for files".italic());
         if entry_mode {
-          execute!(stdout, cursor::MoveTo(0, 6))?;
+          execute!(stdout, cursor::MoveTo(0, header_size + 1))?;
           println!("Enter a file path to scan: {}", entry_path);
         }
     } else {
         let (_, rows) = get_terminal_size()?;
-        let max_lines = rows as usize - 6; // Adjust for header and footer lines
+        let max_lines = rows - header_size - footer_size - 1; // Adjust for header and footer lines
 
-        for (i, entry) in entries.iter().enumerate().skip(window_start).take(max_lines) {
-            execute!(stdout, cursor::MoveTo(0, (i - window_start) as u16 + 5))?;
+        //make sure current_item is between first_entry and first_entry + max_lines.  If it's not, adjust first_entry
+        if current_item < *first_entry {
+            *first_entry = current_item;
+        } else if current_item >= *first_entry + max_lines as usize {
+            *first_entry = current_item - max_lines as usize + 1;
+        }
+
+        for (i, entry) in entries.iter().enumerate().skip(*first_entry).take(max_lines as usize) {
+            execute!(stdout, cursor::MoveTo(0, (i - *first_entry) as u16 + header_size))?;
             let display_text = match entry {
                 Entry::Series { name, .. } => format!("[{}]", name).with(Color::Blue),
                 Entry::Episode { name, .. } => name.clone().stylize(),

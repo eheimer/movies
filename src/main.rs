@@ -5,16 +5,14 @@ mod util;
 
 use config::{Config, read_config};
 use database::{initialize_database, get_entries};
-use display::{initialize_terminal, restore_terminal, draw_screen, get_terminal_size};
+use display::{initialize_terminal, restore_terminal, draw_screen};
 use util::Entry;
 use std::io;
-use std::io::stdout;
 use std::path::Path;
 use std::process::{Command, Child, Stdio};
 use std::sync::mpsc::{self, Sender, Receiver};
 use std::thread;
 use std::time::Duration;
-use crossterm::{execute, cursor};
 use crossterm::event::{self, Event, KeyCode, KeyEvent};
 use walkdir::WalkDir;
 
@@ -31,10 +29,10 @@ fn main_loop(mut entries: Vec<Entry>, config: Config) -> io::Result<()> {
     let mut redraw = true;
     let mut search: String = String::new();
     let mut filtered_entries: Vec<Entry> = entries.clone();
-    let mut window_start = 0;
     let mut playing_file: Option<String> = None;
     let mut entry_mode = false;
     let mut entry_path = String::new();
+    let mut first_entry = 0;
 
     // Create a channel to communicate between the thread and the main loop
     let (tx, rx): (Sender<()>, Receiver<()>) = mpsc::channel();
@@ -75,7 +73,7 @@ fn main_loop(mut entries: Vec<Entry>, config: Config) -> io::Result<()> {
                 current_item = if filtered_entries.is_empty() { 0 } else { filtered_entries.len() - 1 };
             }
 
-            draw_screen(&filtered_entries, current_item, &search, &config, window_start, playing_file.as_ref(), entry_mode, &entry_path)?;
+            draw_screen(&filtered_entries, current_item, &mut first_entry, &search, &config, entry_mode, &entry_path)?;
             redraw = false;
         }
 
@@ -144,8 +142,8 @@ fn main_loop(mut entries: Vec<Entry>, config: Config) -> io::Result<()> {
                         KeyCode::Up => {
                             if current_item > 0 {
                                 current_item -= 1;
-                                if current_item < window_start {
-                                    window_start = current_item;
+                                if current_item < first_entry {
+                                    first_entry = current_item;
                                 }
                                 redraw = true;
                             }
@@ -153,11 +151,6 @@ fn main_loop(mut entries: Vec<Entry>, config: Config) -> io::Result<()> {
                         KeyCode::Down => {
                             if current_item < filtered_entries.len() - 1 {
                                 current_item += 1;
-                                let (_, rows) = get_terminal_size()?;
-                                let max_lines = rows as usize - 6;
-                                if current_item >= window_start + max_lines {
-                                    window_start = current_item - max_lines + 1;
-                                }
                                 redraw = true;
                             }
                         }
