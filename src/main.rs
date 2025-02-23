@@ -91,7 +91,6 @@ fn main_loop(mut entries: Vec<Entry>, config: Config) -> io::Result<()> {
                         KeyCode::Enter => {
                             // Scan the entered path for video files and insert them into the database
                             let path = Path::new(&entry_path);
-
                             let new_entries: Vec<_> = WalkDir::new(path)
                                 .into_iter()
                                 .filter_map(|e| e.ok())
@@ -103,7 +102,7 @@ fn main_loop(mut entries: Vec<Entry>, config: Config) -> io::Result<()> {
                                 })
                                 .map(|e| e.into_path())
                                 .collect();
-                                println!("Importing files from {}...", entry_path);
+                            display::load_videos(&entry_path, new_entries.len())?;
                             for entry in &new_entries {
                                 let location = entry.to_string_lossy().to_string();
                                 let name = entry.file_name().unwrap_or_default().to_string_lossy().to_string();
@@ -134,10 +133,12 @@ fn main_loop(mut entries: Vec<Entry>, config: Config) -> io::Result<()> {
                     }
                 } else {
                     match code {
-                        KeyCode::Char('s') if modifiers.contains(event::KeyModifiers::CONTROL) => {
-                            entry_mode = true;
-                            entry_path.clear();
-                            redraw = true;
+                        KeyCode::Char('l') if modifiers.contains(event::KeyModifiers::CONTROL) => {
+                            if entries.len() == 0{
+                                entry_mode = true;
+                                entry_path.clear();
+                                redraw = true;
+                            }
                         }
                         KeyCode::Up => {
                             if current_item > 0 {

@@ -1,6 +1,6 @@
 use crossterm::{
     execute,
-    terminal::{self, ClearType, size},
+    terminal::{self, Clear, ClearType, size},
     cursor,
     style::{Color, Stylize},
     event::{DisableMouseCapture, EnableMouseCapture},
@@ -75,7 +75,7 @@ pub fn draw_screen(
 
     if entries.is_empty() {
         execute!(stdout, cursor::MoveTo(0, HEADER_SIZE))?;
-        println!("{}", "No videos found, press CTRL-S to scan for files".italic());
+        println!("{}", "No videos found, press CTRL-L to load videos from the file system".italic());
         if entry_mode {
           execute!(stdout, cursor::MoveTo(0, HEADER_SIZE + 1))?;
           println!("Enter a file path to scan: {}", entry_path);
@@ -105,6 +105,13 @@ pub fn draw_screen(
         }
     }
 
+    Ok(())
+}
+
+pub fn load_videos(path: &str, count: usize) -> io::Result<()> {
+    let mut stdout = stdout();
+    execute!(stdout, cursor::MoveTo(0, HEADER_SIZE + 1), Clear(ClearType::CurrentLine))?;
+    println!("Importing {} videos from {}...", count, path);
     Ok(())
 }
 
