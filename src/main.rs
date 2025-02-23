@@ -154,6 +154,14 @@ fn main_loop(mut entries: Vec<Entry>, config: Config) -> io::Result<()> {
                                 redraw = true;
                             }
                         }
+                        KeyCode::PageUp => {
+                            display::page_up(&mut current_item, &mut first_entry)?;
+                            redraw = true;
+                        }
+                        KeyCode::PageDown => {
+                            display::page_down(&mut current_item, &mut first_entry)?;
+                            redraw = true;
+                        }
                         KeyCode::Enter => {
                             if playing_file.is_none() {
                                 let selected = current_item;

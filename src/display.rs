@@ -10,6 +10,9 @@ use std::io::{self, stdout};
 use crate::config::Config;
 use crate::util::Entry;
 
+const HEADER_SIZE: u16 = 3;
+const FOOTER_SIZE: u16 = 0;
+
 pub fn string_to_color(color: &str) -> Option<Color> {
     match color.to_lowercase().as_str() {
         "black" => Some(Color::Black),
@@ -65,23 +68,20 @@ pub fn draw_screen(
     entry_path: &String,
 ) -> io::Result<()> {
     let mut stdout = stdout();
-    let header_size = 3;
-    let footer_size = 1;
     execute!(stdout, terminal::Clear(ClearType::All), cursor::MoveTo(0, 0))?;
     println!("Use the arrow keys to navigate, 'Enter' play video, 'Esc' to exit, type to search");
     execute!(stdout, cursor::MoveTo(0, 1))?;
     println!("Filter: {}", filter);
 
     if entries.is_empty() {
-        execute!(stdout, cursor::MoveTo(0, header_size))?;
+        execute!(stdout, cursor::MoveTo(0, HEADER_SIZE))?;
         println!("{}", "No videos found, press CTRL-S to scan for files".italic());
         if entry_mode {
-          execute!(stdout, cursor::MoveTo(0, header_size + 1))?;
+          execute!(stdout, cursor::MoveTo(0, HEADER_SIZE + 1))?;
           println!("Enter a file path to scan: {}", entry_path);
         }
     } else {
-        let (_, rows) = get_terminal_size()?;
-        let max_lines = rows - header_size - footer_size - 1; // Adjust for header and footer lines
+        let max_lines = get_max_displayed_items()?;
 
         //make sure current_item is between first_entry and first_entry + max_lines.  If it's not, adjust first_entry
         if current_item < *first_entry {
@@ -91,7 +91,7 @@ pub fn draw_screen(
         }
 
         for (i, entry) in entries.iter().enumerate().skip(*first_entry).take(max_lines as usize) {
-            execute!(stdout, cursor::MoveTo(0, (i - *first_entry) as u16 + header_size))?;
+            execute!(stdout, cursor::MoveTo(0, (i - *first_entry) as u16 + HEADER_SIZE))?;
             let display_text = match entry {
                 Entry::Series { name, .. } => format!("[{}]", name).with(Color::Blue),
                 Entry::Episode { name, .. } => name.clone().stylize(),
@@ -105,5 +105,31 @@ pub fn draw_screen(
         }
     }
 
+    Ok(())
+}
+
+fn get_max_displayed_items() -> io::Result<usize> {
+    let (_, rows) = get_terminal_size()?;
+    let max_lines = (rows  - HEADER_SIZE - FOOTER_SIZE - 1) as usize; // Adjust for header and footer lines
+    Ok(max_lines)
+}
+
+pub fn page_up(current_item: &mut usize, first_entry: &mut usize) -> io::Result<()> {
+    let max_lines = get_max_displayed_items()?;
+    if *current_item > *first_entry {
+        *current_item = *first_entry;
+    } else {
+        *current_item = (*current_item).saturating_sub(max_lines);
+    }
+    Ok(())
+}
+
+pub fn page_down(current_item: &mut usize, first_entry: &mut usize) -> io::Result<()> {
+    let max_lines = get_max_displayed_items()?;
+    if *current_item < *first_entry + max_lines - 1 {
+        *current_item = *first_entry + max_lines - 1;
+    } else {
+        *current_item = (*current_item).saturating_add(max_lines);
+    }
     Ok(())
 }
