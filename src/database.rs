@@ -1,4 +1,5 @@
 use rusqlite::{params, Connection, Result};
+use crate::util::Entry;
 use std::sync::Mutex;
 use lazy_static::lazy_static;
 
@@ -80,4 +81,40 @@ pub fn import_episode(
         params![location, name, watched],
     )?;
     Ok(())
+}
+
+pub fn get_entries() -> Result<Vec<Entry>> {
+    let conn = DB_CONN.lock().unwrap();
+    let conn = conn.as_ref().expect("Database connection is not initialized");
+
+    let mut entries = Vec::new();
+
+    // Retrieve series
+    let mut stmt = conn.prepare("SELECT id, name FROM series")?;
+    let series_iter = stmt.query_map([], |row| {
+        Ok(Entry::Series {
+            id: row.get(0)?,
+            name: row.get(1)?,
+        })
+    })?;
+
+    for series in series_iter {
+        entries.push(series?);
+    }
+
+    // Retrieve episodes that are not part of a series
+    let mut stmt = conn.prepare("SELECT id, name, location FROM episode WHERE series_id IS NULL")?;
+    let episode_iter = stmt.query_map([], |row| {
+        Ok(Entry::Episode {
+            id: row.get(0)?,
+            name: row.get(1)?,
+            location: row.get(2)?,
+        })
+    })?;
+
+    for episode in episode_iter {
+        entries.push(episode?);
+    }
+
+    Ok(entries)
 }

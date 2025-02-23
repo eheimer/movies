@@ -1,17 +1,20 @@
 mod config;
 mod display;
 mod database;
+mod util;
 
 use config::{Config, read_config};
-use database::{initialize_database, import_episode};
+use database::{initialize_database, get_entries};
 use display::{initialize_terminal, restore_terminal, draw_screen, get_terminal_size};
+use util::Entry;
 use std::io;
+use std::io::stdout;
 use std::path::Path;
-use std::path::PathBuf;
 use std::process::{Command, Child, Stdio};
 use std::sync::mpsc::{self, Sender, Receiver};
 use std::thread;
 use std::time::Duration;
+use crossterm::{execute, cursor};
 use crossterm::event::{self, Event, KeyCode, KeyEvent};
 use walkdir::WalkDir;
 
@@ -23,19 +26,20 @@ fn run_video_player(config: &Config, file_path: &Path) -> io::Result<Child> {
         .spawn()
 }
 
-fn main_loop(entries: Vec<PathBuf>, config: Config) -> io::Result<()> {
+fn main_loop(mut entries: Vec<Entry>, config: Config) -> io::Result<()> {
     let mut current_item = 0;
     let mut redraw = true;
     let mut search: String = String::new();
-    let mut filtered_entries: Vec<PathBuf> = entries.clone();
+    let mut filtered_entries: Vec<Entry> = entries.clone();
     let mut window_start = 0;
-    let mut playing_file: Option<PathBuf> = None;
+    let mut playing_file: Option<String> = None;
+    let mut entry_mode = false;
+    let mut entry_path = String::new();
 
     // Create a channel to communicate between the thread and the main loop
     let (tx, rx): (Sender<()>, Receiver<()>) = mpsc::channel();
 
     loop {
-        
         if redraw {
             // Split the search string into terms
             let search_terms: Vec<String> = search.to_lowercase().split_whitespace().map(String::from).collect();
@@ -43,21 +47,35 @@ fn main_loop(entries: Vec<PathBuf>, config: Config) -> io::Result<()> {
             // Filter entries based on the search terms (case-insensitive)
             filtered_entries = entries.iter()
                 .filter(|entry| {
-                    let file_name = entry.file_name().unwrap_or_default().to_string_lossy().to_lowercase();
-                    search_terms.iter().all(|term| file_name.contains(term))
+                    let name = match entry {
+                        Entry::Series { name, .. } => name,
+                        Entry::Episode { name, .. } => name,
+                    };
+                    let name_lowercase = name.to_lowercase();
+                    search_terms.iter().all(|term| name_lowercase.contains(term))
                 })
                 .cloned()
                 .collect();
 
-            // Sort the filtered entries by filename
-            filtered_entries.sort_by(|a, b| a.file_name().unwrap_or_default().to_string_lossy().cmp(&b.file_name().unwrap_or_default().to_string_lossy()));
+            // Sort the filtered entries by name
+            filtered_entries.sort_by(|a, b| {
+                let name_a = match a {
+                    Entry::Series { name, .. } => name,
+                    Entry::Episode { name, .. } => name,
+                };
+                let name_b = match b {
+                    Entry::Series { name, .. } => name,
+                    Entry::Episode { name, .. } => name,
+                };
+                name_a.cmp(name_b)
+            });
 
             // Ensure current_item is within bounds
             if current_item >= filtered_entries.len() {
                 current_item = if filtered_entries.is_empty() { 0 } else { filtered_entries.len() - 1 };
             }
 
-            draw_screen(&filtered_entries, current_item, &search, &config, window_start, playing_file.as_ref())?;
+            draw_screen(&filtered_entries, current_item, &search, &config, window_start, playing_file.as_ref(), entry_mode, &entry_path)?;
             redraw = false;
         }
 
@@ -69,56 +87,114 @@ fn main_loop(entries: Vec<PathBuf>, config: Config) -> io::Result<()> {
 
         // Poll for events with a timeout
         if event::poll(Duration::from_millis(100))? {
-            if let Event::Key(KeyEvent { code, .. }) = event::read()? {
-                match code {
-                    KeyCode::Up => {
-                        if current_item > 0 {
-                            current_item -= 1;
-                            if current_item < window_start {
-                                window_start = current_item;
-                            }
-                            redraw = true;
-                        }
-                    }
-                    KeyCode::Down => {
-                        if current_item < filtered_entries.len() - 1 {
-                            current_item += 1;
-                            let (_, rows) = get_terminal_size()?;
-                            let max_lines = rows as usize - 6;
-                            if current_item >= window_start + max_lines {
-                                window_start = current_item - max_lines + 1;
-                            }
-                            redraw = true;
-                        }
-                    }
-                    KeyCode::Enter => {
-                        if playing_file.is_none() {
-                            let selected = current_item;
-                            let mut player_process = Some(run_video_player(&config, &filtered_entries[selected])?);
-                            playing_file = Some(filtered_entries[selected].clone());
+            if let Event::Key(KeyEvent { code, modifiers, .. }) = event::read()? {
+                if entry_mode {
+                    match code {
+                        KeyCode::Enter => {
+                            // Scan the entered path for video files and insert them into the database
+                            let path = Path::new(&entry_path);
 
-                            // Spawn a thread to wait for the process to finish
-                            let tx = tx.clone();
-                            thread::spawn(move || {
-                                if let Some(mut process) = player_process.take() {
-                                    process.wait().ok();
-                                    tx.send(()).ok();
-                                }
-                            });
-                        }
-                        redraw = true;
-                    }
-                    KeyCode::Esc => break,
-                    KeyCode::Backspace => {
-                        //if backspace is pressed, I want to remove the last character from the search string
-                        search.pop();
-                        redraw = true;
-                    }
-                    _ => {
-                        //if a displayable character is pressed, I want to add it to the search string
-                        if let KeyCode::Char(c) = code {
-                            search.push(c);
+                            let new_entries: Vec<_> = WalkDir::new(path)
+                                .into_iter()
+                                .filter_map(|e| e.ok())
+                                .filter(|e| e.file_type().is_file())
+                                .filter(|e| {
+                                    e.path().extension()
+                                        .and_then(|ext| ext.to_str())
+                                        .map_or(false, |ext| config.video_extensions.contains(&ext.to_lowercase()))
+                                })
+                                .map(|e| e.into_path())
+                                .collect();
+                                println!("Importing files from {}...", entry_path);
+                            for entry in &new_entries {
+                                let location = entry.to_string_lossy().to_string();
+                                let name = entry.file_name().unwrap_or_default().to_string_lossy().to_string();
+                                let watched = false;
+
+                                database::import_episode(&location, &name, watched).expect("Failed to import episode");
+                            }
+
+                            // Reload entries from the database
+                            entries = database::get_entries().expect("Failed to get entries");
+                            filtered_entries = entries.clone();
+                            entry_mode = false;
                             redraw = true;
+                        }
+                        KeyCode::Esc => {
+                            entry_mode = false;
+                            redraw = true;
+                        }
+                        KeyCode::Backspace => {
+                            entry_path.pop();
+                            redraw = true;
+                        }
+                        KeyCode::Char(c) => {
+                            entry_path.push(c);
+                            redraw = true;
+                        }
+                        _ => {}
+                    }
+                } else {
+                    match code {
+                        KeyCode::Char('s') if modifiers.contains(event::KeyModifiers::CONTROL) => {
+                            entry_mode = true;
+                            entry_path.clear();
+                            redraw = true;
+                        }
+                        KeyCode::Up => {
+                            if current_item > 0 {
+                                current_item -= 1;
+                                if current_item < window_start {
+                                    window_start = current_item;
+                                }
+                                redraw = true;
+                            }
+                        }
+                        KeyCode::Down => {
+                            if current_item < filtered_entries.len() - 1 {
+                                current_item += 1;
+                                let (_, rows) = get_terminal_size()?;
+                                let max_lines = rows as usize - 6;
+                                if current_item >= window_start + max_lines {
+                                    window_start = current_item - max_lines + 1;
+                                }
+                                redraw = true;
+                            }
+                        }
+                        KeyCode::Enter => {
+                            if playing_file.is_none() {
+                                let selected = current_item;
+                                let selected_entry = &filtered_entries[selected];
+                                let file_path = match selected_entry {
+                                    Entry::Episode { location, .. } => location,
+                                    _ => return Ok(()),
+                                };
+                                let mut player_process = Some(run_video_player(&config, Path::new(file_path))?);
+                                playing_file = Some(file_path.clone());
+
+                                // Spawn a thread to wait for the process to finish
+                                let tx = tx.clone();
+                                thread::spawn(move || {
+                                    if let Some(mut process) = player_process.take() {
+                                        process.wait().ok();
+                                        tx.send(()).ok();
+                                    }
+                                });
+                            }
+                            redraw = true;
+                        }
+                        KeyCode::Esc => break,
+                        KeyCode::Backspace => {
+                            // If backspace is pressed, remove the last character from the search string
+                            search.pop();
+                            redraw = true;
+                        }
+                        _ => {
+                            // If a displayable character is pressed, add it to the search string
+                            if let KeyCode::Char(c) = code {
+                                search.push(c);
+                                redraw = true;
+                            }
                         }
                     }
                 }
@@ -133,32 +209,19 @@ fn main() -> io::Result<()> {
     let config_path = "config.json";
     let config = read_config(config_path);
 
-    let path = if Path::new(&config.path).exists() {
-        &config.path
-    } else {
-        eprintln!("Warning: Configured path '{}' does not exist. Using current directory instead.", config.path);
-        "."
-    };
-
     initialize_database("videos.db").expect("Failed to initialize database");
-    let entries: Vec<_> = WalkDir::new(path)
-        .into_iter()
-        .filter_map(|e| e.ok())
-        .filter(|e| e.file_type().is_file())
-        .filter(|e| {
-            e.path().extension()
-                .and_then(|ext| ext.to_str())
-                .map_or(false, |ext| config.video_extensions.contains(&ext.to_lowercase()))
-        })
-        .map(|e| e.into_path())
-        .collect();
 
-    for entry in &entries {
-        let location = entry.to_string_lossy().to_string();
-        let name = entry.file_name().unwrap_or_default().to_string_lossy().to_string();
-        let watched = false;
+    let entries = get_entries().expect("Failed to get entries");
 
-        import_episode(&location, &name, watched).expect("Failed to import episode");
+    if entries.is_empty() {
+        println!("No videos found, press CTRL-S to scan for files");
+    } else {
+        for entry in &entries {
+            match entry {
+                Entry::Series { id, name } => println!("Series: {} (ID: {})", name, id),
+                Entry::Episode { id, name, location } => println!("Episode: {} (ID: {}, Location: {})", name, id, location),
+            }
+        }
     }
 
     initialize_terminal()?;
