@@ -1,7 +1,9 @@
 mod config;
 mod display;
+mod database;
 
 use config::{Config, read_config};
+use database::{initialize_database, import_episode};
 use display::{initialize_terminal, restore_terminal, draw_screen, get_terminal_size};
 use std::io;
 use std::path::Path;
@@ -138,6 +140,7 @@ fn main() -> io::Result<()> {
         "."
     };
 
+    initialize_database("videos.db").expect("Failed to initialize database");
     let entries: Vec<_> = WalkDir::new(path)
         .into_iter()
         .filter_map(|e| e.ok())
@@ -149,6 +152,14 @@ fn main() -> io::Result<()> {
         })
         .map(|e| e.into_path())
         .collect();
+
+    for entry in &entries {
+        let location = entry.to_string_lossy().to_string();
+        let name = entry.file_name().unwrap_or_default().to_string_lossy().to_string();
+        let watched = false;
+
+        import_episode(&location, &name, watched).expect("Failed to import episode");
+    }
 
     initialize_terminal()?;
     let result = main_loop(entries, config);
