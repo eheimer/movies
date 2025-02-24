@@ -7,11 +7,15 @@ use crossterm::{
     ExecutableCommand,
 };
 use std::io::{self, stdout};
+use crate::database::get_entry_details;
 use crate::config::Config;
 use crate::util::Entry;
 
 const HEADER_SIZE: u16 = 3;
 const FOOTER_SIZE: u16 = 0;
+const COL1_WIDTH: usize = 80;
+const COL2_WIDTH: usize = 82;
+const COL2_HEIGHT: usize = 9;
 
 pub fn string_to_color(color: &str) -> Option<Color> {
     match color.to_lowercase().as_str() {
@@ -93,9 +97,10 @@ pub fn draw_screen(
         for (i, entry) in entries.iter().enumerate().skip(*first_entry).take(max_lines as usize) {
             execute!(stdout, cursor::MoveTo(0, (i - *first_entry) as u16 + HEADER_SIZE))?;
             let display_text = match entry {
-                Entry::Series { name, .. } => format!("[{}]", name).with(Color::Blue),
-                Entry::Episode { name, .. } => name.clone().stylize(),
+                Entry::Series { name, .. } => format!("[{}]", truncate_string(name,COL1_WIDTH)).with(Color::Blue),
+                Entry::Episode { name, .. } => truncate_string(name,COL1_WIDTH).clone().stylize(),
             };
+
             if i == current_item {
                 let styled_entry = display_text.with(string_to_fg_color_or_default(&config.current_fg)).on(string_to_bg_color_or_default(&config.current_bg));
                 println!("{}", styled_entry);
@@ -103,9 +108,68 @@ pub fn draw_screen(
                 println!("{}", display_text);
             }
         }
+        draw_sidebar(&entries[current_item])?;
     }
 
     Ok(())
+}
+
+fn draw_sidebar(entry: &Entry) -> io::Result<()> {
+    let mut stdout = stdout();
+    let start_col: u16 = COL1_WIDTH as u16 + 2;
+    let start_row = HEADER_SIZE;
+
+    // Draw top border
+    execute!(stdout, cursor::MoveTo(start_col, start_row))?;
+    print!("+");
+    for _ in 1..COL2_WIDTH - 1 {
+        print!("-");
+    }
+    println!("+");
+
+    // Draw side borders
+    for row in (start_row + 1)..(start_row + COL2_HEIGHT as u16 - 1) {
+        execute!(stdout, cursor::MoveTo(start_col, row))?;
+        print!("|");
+        execute!(stdout, cursor::MoveTo(start_col + COL2_WIDTH as u16 - 1, row))?;
+        println!("|");
+    }
+
+    // Draw bottom border
+    execute!(stdout, cursor::MoveTo(start_col, start_row + COL2_HEIGHT as u16 -1))?;
+    print!("+");
+    for _ in 1..COL2_WIDTH - 1 {
+        print!("-");
+    }
+    println!("+");
+
+    // Display details inside the sidebar
+    let details = get_entry_details(entry).map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+    let detail_lines = vec![
+        format!("Title: {}", details.title),
+        format!("Year: {}", details.year),
+        format!("Watched: {}", details.watched),
+        format!("Length: {}", details.length),
+        format!("Series: {}", details.series),
+        format!("Season: {}", details.season),
+        format!("Ep #: {}", details.episode_number),
+    ];
+
+    for (i, line) in detail_lines.iter().enumerate() {
+        execute!(stdout, cursor::MoveTo(start_col + 1, start_row + 1 + i as u16))?;
+        println!("{}", truncate_string(line, COL2_WIDTH - 2));
+    }
+
+    Ok(())
+            
+}
+
+fn truncate_string(s: &str, max_length: usize) -> String {
+    if s.len() > max_length {
+        format!("{}...", &s[..max_length - 3])
+    } else {
+        s.to_string()
+    }
 }
 
 pub fn load_videos(path: &str, count: usize) -> io::Result<()> {

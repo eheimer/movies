@@ -3,6 +3,16 @@ use crate::util::Entry;
 use std::sync::Mutex;
 use lazy_static::lazy_static;
 
+pub struct EntryDetails{
+    pub title: String,
+    pub year: String,
+    pub watched: String,
+    pub length: String,
+    pub series: String,
+    pub season: String,
+    pub episode_number: String,
+}
+
 lazy_static! {
     pub static ref DB_CONN: Mutex<Option<Connection>> = Mutex::new(None);
 }
@@ -65,8 +75,7 @@ pub fn episode_exists(location: &str) -> Result<bool> {
 
 pub fn import_episode(
     location: &str,
-    name: &str,
-    watched: bool
+    name: &str
 ) -> Result<()> {
     if episode_exists(location)? {
         return Ok(());
@@ -77,8 +86,8 @@ pub fn import_episode(
 
     conn.execute(
         "INSERT INTO episode (location, name, watched, length, series_id, season_id, episode_number, year)
-         VALUES (?1, ?2, ?3, 0, null, null, null, null)",
-        params![location, name, watched],
+         VALUES (?1, ?2, false, 0, null, null, null, null)",
+        params![location, name],
     )?;
     Ok(())
 }
@@ -117,4 +126,54 @@ pub fn get_entries() -> Result<Vec<Entry>> {
     }
 
     Ok(entries)
+}
+
+pub fn get_entry_details(entry: &Entry) -> Result<EntryDetails, Box<dyn std::error::Error>> {
+     match entry {
+        Entry::Series { name, .. } => {
+            // Return sample data for series
+            Ok(EntryDetails {
+                title: name.clone(),
+                year: "2025".to_string(),
+                watched: "No".to_string(),
+                length: "N/A".to_string(),
+                series: name.clone(),
+                season: "N/A".to_string(),
+                episode_number: "N/A".to_string(),
+            })
+        }
+        Entry::Episode { id, .. } => {
+            // Fetch details from the database for episode
+            let conn = Connection::open("videos.db")?;
+            let mut stmt = conn.prepare(
+                "SELECT episode.name as title,
+                        COALESCE(episode.year, ''),
+                        episode.watched, 
+                        episode.length, 
+                        COALESCE(series.name, '') as series, 
+                        COALESCE(season.number, '') as season, 
+                        COALESCE(episode.episode_number, '') as episode_number
+                 FROM episode
+                 LEFT JOIN season ON season.id = episode.season_id
+                 LEFT JOIN series ON series.id = episode.series_id
+                 WHERE episode.id = ?1"
+            )?;
+            let mut rows = stmt.query(params![id])?;
+
+            if let Some(row) = rows.next()? {
+                Ok(EntryDetails {
+                    title: row.get(0)?,
+                    year: row.get(1)?,
+                    watched: if row.get(2)? { "Yes".to_string() } else { "No".to_string() },
+                    //length: row.get::<_, Option<i32>>(3)?.map_or_else(|| "".to_string(), |v| v.to_string()),
+                    length: row.get::<_, i32>(3)?.to_string(),
+                    series: row.get(4)?,
+                    season: row.get(5)?,
+                    episode_number: row.get(6)?,
+                })
+            } else {
+                Err("Episode not found".into())
+            }
+        }
+    }
 }

@@ -106,9 +106,8 @@ fn main_loop(mut entries: Vec<Entry>, config: Config) -> io::Result<()> {
                             for entry in &new_entries {
                                 let location = entry.to_string_lossy().to_string();
                                 let name = entry.file_name().unwrap_or_default().to_string_lossy().to_string();
-                                let watched = false;
 
-                                database::import_episode(&location, &name, watched).expect("Failed to import episode");
+                                database::import_episode(&location, &name).expect("Failed to import episode");
                             }
 
                             // Reload entries from the database
