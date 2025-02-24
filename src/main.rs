@@ -159,11 +159,17 @@ fn main_loop(mut entries: Vec<Entry>, config: Config) -> io::Result<()> {
                                 } else {
                                     edit_field -= 1;
                                 }
+                                if edit_field == 2 {
+                                    edit_field = 1;
+                                }
                                 edit_cursor_pos = 0;
                                 redraw = true;
                             }
                             KeyCode::Down => {
                                 edit_field = (edit_field + 1) % 7;
+                                if edit_field == 2 {
+                                    edit_field = 3;
+                                }
                                 edit_cursor_pos = 0;
                                 redraw = true;
                             }
@@ -335,6 +341,16 @@ fn main_loop(mut entries: Vec<Entry>, config: Config) -> io::Result<()> {
                                 edit_details = database::get_entry_details(&filtered_entries[current_item]).expect("Failed to get entry details");
                                 edit_field = 0;
                                 redraw = true;
+                            }
+                            KeyCode::Char('w') if modifiers.contains(event::KeyModifiers::CONTROL) => {
+                                // Toggle the watched status of the selected entry
+                                let entry = &filtered_entries[current_item];
+                                if let Entry::Episode { .. } = entry {
+                                    database::toggle_watched_status(&entry).expect("Failed to toggle watched status");
+                                    entries = database::get_entries().expect("Failed to get entries");
+                                    filtered_entries = entries.clone();
+                                    redraw = true;
+                                }
                             }
                             KeyCode::Up => {
                                 if current_item > 0 {

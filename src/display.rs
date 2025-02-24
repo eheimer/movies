@@ -11,7 +11,7 @@ use crate::database::{get_entry_details, EntryDetails};
 use crate::config::Config;
 use crate::util::{Entry,Mode};
 
-const HEADER_SIZE: u16 = 3;
+const HEADER_SIZE: u16 = 4;
 const FOOTER_SIZE: u16 = 0;
 const COL1_WIDTH: usize = 45;
 const MIN_COL2_WIDTH: usize = 20;
@@ -70,15 +70,21 @@ fn get_terminal_size() -> io::Result<(u16, u16)> {
 
 fn draw_header(mode: &Mode, filter: &String) -> io::Result<()> {
     let mut stdout = stdout();
-    let instructions = match mode {
-        Mode::Browse => "[UP]/[DOWN] navigate list, [ENTER] play video, [ESC] exit, type to filter list, [CTRL][E] edit current file",
-        Mode::Edit => "[UP]/[DOWN] change field, type to edit, [ESC] cancel, [CTRL][E] save changes",
-        Mode::Entry => "Enter a file path to scan, [ESC] exit",
+    let instructions: Vec<&str> = match mode {
+        Mode::Browse => vec![
+            "[UP]/[DOWN] navigate list, [ENTER] play video, [ESC] exit",
+            "type to filter list, [CTRL][E] edit current file, [CTRL][W] toggle watched",
+        ],
+        Mode::Edit => vec!["[UP]/[DOWN] change field, type to edit, [ESC] cancel, [CTRL][E] save changes"],
+        Mode::Entry => vec!["Enter a file path to scan, [ESC] exit"],
     };
+    //loop through the instructions and print them in the header
+    for (i, instructions) in instructions.iter().enumerate() {
+        execute!(stdout, cursor::MoveTo(0, i as u16))?;
+        println!("{}", instructions.with(Color::Black).on(Color::White));
+    }
 
-    println!("{}", instructions.with(Color::Black).on(Color::White));
-
-    execute!(stdout, cursor::MoveTo(0, 1))?;
+    execute!(stdout, cursor::MoveTo(0, 2))?;
     println!("Filter: {}", filter);
     Ok(())
 }

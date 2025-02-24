@@ -196,3 +196,17 @@ pub fn update_entry_details(entry: &Entry, details: &EntryDetails) -> Result<(),
     }
     Ok(())
 }
+
+pub fn toggle_watched_status(entry: &Entry) -> Result<(), Box<dyn std::error::Error>> {
+    let conn = Connection::open("videos.db")?;
+    match entry {
+        Entry::Episode { id, .. } => {
+            conn.execute(
+                "UPDATE episode SET watched = NOT watched WHERE id = ?1",
+                params![id],
+            )?;
+        }
+        _ => {}
+    }
+    Ok(())
+}
