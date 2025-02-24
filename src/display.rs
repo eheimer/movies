@@ -13,9 +13,15 @@ use crate::util::Entry;
 
 const HEADER_SIZE: u16 = 3;
 const FOOTER_SIZE: u16 = 0;
-const COL1_WIDTH: usize = 80;
-const COL2_WIDTH: usize = 82;
+const COL1_WIDTH: usize = 45;
+const MIN_COL2_WIDTH: usize = 20;
 const COL2_HEIGHT: usize = 9;
+
+fn get_sidebar_width() -> io::Result<usize> {
+    let (cols, _) = get_terminal_size()?;
+    let sidebar_width = (cols as usize).saturating_sub(COL1_WIDTH + 2);
+    Ok(sidebar_width.max(MIN_COL2_WIDTH))
+}
 
 pub fn string_to_color(color: &str) -> Option<Color> {
     match color.to_lowercase().as_str() {
@@ -118,11 +124,12 @@ fn draw_sidebar(entry: &Entry) -> io::Result<()> {
     let mut stdout = stdout();
     let start_col: u16 = COL1_WIDTH as u16 + 2;
     let start_row = HEADER_SIZE;
+    let sidebar_width = get_sidebar_width()?;
 
     // Draw top border
     execute!(stdout, cursor::MoveTo(start_col, start_row))?;
     print!("+");
-    for _ in 1..COL2_WIDTH - 1 {
+    for _ in 1..sidebar_width - 1 {
         print!("-");
     }
     println!("+");
@@ -131,14 +138,14 @@ fn draw_sidebar(entry: &Entry) -> io::Result<()> {
     for row in (start_row + 1)..(start_row + COL2_HEIGHT as u16 - 1) {
         execute!(stdout, cursor::MoveTo(start_col, row))?;
         print!("|");
-        execute!(stdout, cursor::MoveTo(start_col + COL2_WIDTH as u16 - 1, row))?;
+        execute!(stdout, cursor::MoveTo(start_col + sidebar_width as u16 - 1, row))?;
         println!("|");
     }
 
     // Draw bottom border
-    execute!(stdout, cursor::MoveTo(start_col, start_row + COL2_HEIGHT as u16 -1))?;
+    execute!(stdout, cursor::MoveTo(start_col, start_row + COL2_HEIGHT as u16 - 1))?;
     print!("+");
-    for _ in 1..COL2_WIDTH - 1 {
+    for _ in 1..sidebar_width - 1 {
         print!("-");
     }
     println!("+");
@@ -157,11 +164,10 @@ fn draw_sidebar(entry: &Entry) -> io::Result<()> {
 
     for (i, line) in detail_lines.iter().enumerate() {
         execute!(stdout, cursor::MoveTo(start_col + 1, start_row + 1 + i as u16))?;
-        println!("{}", truncate_string(line, COL2_WIDTH - 2));
+        println!("{}", truncate_string(line, sidebar_width - 2));
     }
 
     Ok(())
-            
 }
 
 fn truncate_string(s: &str, max_length: usize) -> String {
