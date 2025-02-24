@@ -9,7 +9,7 @@ use crossterm::{
 use std::io::{self, stdout};
 use crate::database::{get_entry_details, EntryDetails};
 use crate::config::Config;
-use crate::util::Entry;
+use crate::util::{Entry,Mode};
 
 const HEADER_SIZE: u16 = 3;
 const FOOTER_SIZE: u16 = 0;
@@ -68,29 +68,41 @@ fn get_terminal_size() -> io::Result<(u16, u16)> {
     Ok((cols, rows))
 }
 
+fn draw_header(mode: &Mode, filter: &String) -> io::Result<()> {
+    let mut stdout = stdout();
+    let instructions = match mode {
+        Mode::Browse => "[UP]/[DOWN] navigate list, [ENTER] play video, [ESC] exit, type to filter list, [CTRL][E] edit current file",
+        Mode::Edit => "[UP]/[DOWN] change field, type to edit, [ESC] cancel, [CTRL][E] save changes",
+        Mode::Entry => "Enter a file path to scan, [ESC] exit",
+    };
+
+    println!("{}", instructions.with(Color::Black).on(Color::White));
+
+    execute!(stdout, cursor::MoveTo(0, 1))?;
+    println!("Filter: {}", filter);
+    Ok(())
+}
+
 pub fn draw_screen(
     entries: &[Entry],
     current_item: usize,
     first_entry: &mut usize,
     filter: &String,
     config: &Config,
-    entry_mode: bool,
+    mode: &Mode,
     entry_path: &String,
-    edit_mode: bool,
     edit_details: &EntryDetails,
     edit_field: usize,
     edit_cursor_pos: usize,
 ) -> io::Result<()> {
     let mut stdout = stdout();
     execute!(stdout, terminal::Clear(ClearType::All), cursor::MoveTo(0, 0))?;
-    println!("Use the arrow keys to navigate, 'Enter' play video, 'Esc' to exit, type to search");
-    execute!(stdout, cursor::MoveTo(0, 1))?;
-    println!("Filter: {}", filter);
-
+    draw_header(mode, filter)?;
+    
     if entries.is_empty() {
         execute!(stdout, cursor::MoveTo(0, HEADER_SIZE))?;
         println!("{}", "No videos found, press CTRL-L to load videos from the file system".italic());
-        if entry_mode {
+        if let Mode::Entry = mode {
           execute!(stdout, cursor::MoveTo(0, HEADER_SIZE + 1))?;
           println!("Enter a file path to scan: {}", entry_path);
         }
@@ -118,17 +130,21 @@ pub fn draw_screen(
                 println!("{}", display_text);
             }
         }
-        draw_sidebar(&entries[current_item], edit_mode, edit_details, edit_field, edit_cursor_pos)?;
+        draw_sidebar(&entries[current_item], &mode, edit_details, edit_field, edit_cursor_pos)?;
     }
 
     Ok(())
 }
 
-fn draw_sidebar(entry: &Entry, edit_mode: bool, edit_details: &EntryDetails, edit_field: usize, edit_cursor_pos: usize) -> io::Result<()> {
+fn draw_sidebar(entry: &Entry, mode: &Mode, edit_details: &EntryDetails, edit_field: usize, edit_cursor_pos: usize) -> io::Result<()> {
     let mut stdout = stdout();
     let start_col: u16 = COL1_WIDTH as u16 + 2;
     let start_row = HEADER_SIZE;
     let sidebar_width = get_sidebar_width()?;
+    let edit_mode = match mode {
+        Mode::Edit => true,
+        _ => false,
+    };
 
     // Show or hide the cursor based on edit_mode
     if edit_mode {
