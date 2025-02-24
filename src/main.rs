@@ -4,7 +4,8 @@ mod database;
 mod util;
 
 use config::{Config, read_config};
-use database::{initialize_database, get_entries};
+use crossterm::cursor::{Hide, Show};
+use database::{initialize_database, get_entries, EntryDetails};
 use display::{initialize_terminal, restore_terminal, draw_screen};
 use util::Entry;
 use std::io;
@@ -31,8 +32,19 @@ fn main_loop(mut entries: Vec<Entry>, config: Config) -> io::Result<()> {
     let mut filtered_entries: Vec<Entry> = entries.clone();
     let mut playing_file: Option<String> = None;
     let mut entry_mode = false;
+    let mut edit_mode = false;
     let mut entry_path = String::new();
     let mut first_entry = 0;
+    let mut edit_field = 0;
+    let mut edit_details = EntryDetails {
+        title: String::new(),
+        year: String::new(),
+        watched: String::new(),
+        length: String::new(),
+        series: String::new(),
+        season: String::new(),
+        episode_number: String::new(),
+    };
 
     // Create a channel to communicate between the thread and the main loop
     let (tx, rx): (Sender<()>, Receiver<()>) = mpsc::channel();
@@ -73,7 +85,7 @@ fn main_loop(mut entries: Vec<Entry>, config: Config) -> io::Result<()> {
                 current_item = if filtered_entries.is_empty() { 0 } else { filtered_entries.len() - 1 };
             }
 
-            draw_screen(&filtered_entries, current_item, &mut first_entry, &search, &config, entry_mode, &entry_path)?;
+            draw_screen(&filtered_entries, current_item, &mut first_entry, &search, &config, entry_mode, &entry_path, edit_mode, &edit_details, edit_field)?;
             redraw = false;
         }
 
@@ -128,6 +140,50 @@ fn main_loop(mut entries: Vec<Entry>, config: Config) -> io::Result<()> {
                             entry_path.push(c);
                             redraw = true;
                         }
+                        _ => (),
+                    }
+                } else if edit_mode {
+                    match code {
+                        KeyCode::Char('e') if modifiers.contains(event::KeyModifiers::CONTROL) => {
+                            // Commit changes to the database and exit edit mode
+                            database::update_entry_details(&filtered_entries[current_item], &edit_details);
+                            edit_mode = false;
+                            redraw = true;
+                        }
+                        KeyCode::Tab => {
+                            edit_field = (edit_field + 1) % 7;
+                            redraw = true;
+                        }
+                        KeyCode::Backspace => {
+                            match edit_field {
+                                0 => { edit_details.title.pop(); }
+                                1 => { edit_details.year.pop(); }
+                                2 => { edit_details.watched.pop(); }
+                                3 => { edit_details.length.pop(); }
+                                4 => { edit_details.series.pop(); }
+                                5 => { edit_details.season.pop(); }
+                                6 => { edit_details.episode_number.pop(); }
+                                _ => {}
+                            }
+                            redraw = true;
+                        }
+                        KeyCode::Esc => {
+                            edit_mode = false;
+                            redraw = true;
+                        }
+                        KeyCode::Char(c) => {
+                            match edit_field {
+                                0 => edit_details.title.push(c),
+                                1 => edit_details.year.push(c),
+                                2 => edit_details.watched.push(c),
+                                3 => edit_details.length.push(c),
+                                4 => edit_details.series.push(c),
+                                5 => edit_details.season.push(c),
+                                6 => edit_details.episode_number.push(c),
+                                _ => {}
+                            }
+                            redraw = true;
+                        }
                         _ => {}
                     }
                 } else {
@@ -138,6 +194,14 @@ fn main_loop(mut entries: Vec<Entry>, config: Config) -> io::Result<()> {
                                 entry_path.clear();
                                 redraw = true;
                             }
+                        }
+                        KeyCode::Char('e') if modifiers.contains(event::KeyModifiers::CONTROL) => {
+                            // Enter edit mode
+                            edit_mode = true;
+                            edit_details = database::get_entry_details(&filtered_entries[current_item]).expect("Failed to get entry details");
+                            edit_field = 0;
+                            Show;
+                            redraw = true;
                         }
                         KeyCode::Up => {
                             if current_item > 0 {

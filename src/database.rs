@@ -3,6 +3,7 @@ use crate::util::Entry;
 use std::sync::Mutex;
 use lazy_static::lazy_static;
 
+#[derive(Clone)]
 pub struct EntryDetails{
     pub title: String,
     pub year: String,
@@ -146,13 +147,13 @@ pub fn get_entry_details(entry: &Entry) -> Result<EntryDetails, Box<dyn std::err
             // Fetch details from the database for episode
             let conn = Connection::open("videos.db")?;
             let mut stmt = conn.prepare(
-                "SELECT episode.name as title,
-                        COALESCE(episode.year, ''),
-                        episode.watched, 
-                        episode.length, 
+                "SELECT episode.name as title, 
+                        COALESCE(CAST(episode.year AS TEXT), '') as year, 
+                        CASE WHEN episode.watched THEN 'true' ELSE 'false' END as watched, 
+                        COALESCE(CAST(episode.length AS TEXT), '') as length, 
                         COALESCE(series.name, '') as series, 
-                        COALESCE(season.number, '') as season, 
-                        COALESCE(episode.episode_number, '') as episode_number
+                        COALESCE(CAST(season.number AS TEXT), '') as season, 
+                        COALESCE(CAST(episode.episode_number AS TEXT), '') as episode_number
                  FROM episode
                  LEFT JOIN season ON season.id = episode.season_id
                  LEFT JOIN series ON series.id = episode.series_id
@@ -164,9 +165,8 @@ pub fn get_entry_details(entry: &Entry) -> Result<EntryDetails, Box<dyn std::err
                 Ok(EntryDetails {
                     title: row.get(0)?,
                     year: row.get(1)?,
-                    watched: if row.get(2)? { "Yes".to_string() } else { "No".to_string() },
-                    //length: row.get::<_, Option<i32>>(3)?.map_or_else(|| "".to_string(), |v| v.to_string()),
-                    length: row.get::<_, i32>(3)?.to_string(),
+                    watched: row.get(2)?,
+                    length: row.get(3)?,
                     series: row.get(4)?,
                     season: row.get(5)?,
                     episode_number: row.get(6)?,
@@ -176,4 +176,23 @@ pub fn get_entry_details(entry: &Entry) -> Result<EntryDetails, Box<dyn std::err
             }
         }
     }
+}
+
+pub fn update_entry_details(entry: &Entry, details: &EntryDetails) -> Result<(), Box<dyn std::error::Error>> {
+    let conn = Connection::open("videos.db")?;
+    match entry {
+        Entry::Series { id, .. } => {
+            conn.execute(
+                "UPDATE series SET name = ?1 WHERE id = ?2",
+                params![details.title, id],
+            )?;
+        }
+        Entry::Episode { id, .. } => {
+            conn.execute(
+                "UPDATE episode SET name = ?1, year = ?2, watched = ?3, length = ?4, series_id = (SELECT id FROM series WHERE name = ?5), season_id = (SELECT id FROM season WHERE number = ?6), episode_number = ?7 WHERE id = ?8",
+                params![details.title, details.year, details.watched == "true", details.length, details.series, details.season, details.episode_number, id],
+            )?;
+        }
+    }
+    Ok(())
 }

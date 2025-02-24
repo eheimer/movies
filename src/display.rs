@@ -7,7 +7,7 @@ use crossterm::{
     ExecutableCommand,
 };
 use std::io::{self, stdout};
-use crate::database::get_entry_details;
+use crate::database::{get_entry_details, EntryDetails};
 use crate::config::Config;
 use crate::util::Entry;
 
@@ -76,6 +76,9 @@ pub fn draw_screen(
     config: &Config,
     entry_mode: bool,
     entry_path: &String,
+    edit_mode: bool,
+    edit_details: &EntryDetails,
+    edit_field: usize,
 ) -> io::Result<()> {
     let mut stdout = stdout();
     execute!(stdout, terminal::Clear(ClearType::All), cursor::MoveTo(0, 0))?;
@@ -114,13 +117,13 @@ pub fn draw_screen(
                 println!("{}", display_text);
             }
         }
-        draw_sidebar(&entries[current_item])?;
+        draw_sidebar(&entries[current_item], edit_mode, edit_details, edit_field)?;
     }
 
     Ok(())
 }
 
-fn draw_sidebar(entry: &Entry) -> io::Result<()> {
+fn draw_sidebar(entry: &Entry, edit_mode: bool, edit_details: &EntryDetails, edit_field: usize) -> io::Result<()> {
     let mut stdout = stdout();
     let start_col: u16 = COL1_WIDTH as u16 + 2;
     let start_row = HEADER_SIZE;
@@ -151,7 +154,7 @@ fn draw_sidebar(entry: &Entry) -> io::Result<()> {
     println!("+");
 
     // Display details inside the sidebar
-    let details = get_entry_details(entry).map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+    let details: EntryDetails = if edit_mode { edit_details.clone() } else { get_entry_details(entry).map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))? };
     let detail_lines = vec![
         format!("Title: {}", details.title),
         format!("Year: {}", details.year),
@@ -164,12 +167,16 @@ fn draw_sidebar(entry: &Entry) -> io::Result<()> {
 
     for (i, line) in detail_lines.iter().enumerate() {
         execute!(stdout, cursor::MoveTo(start_col + 1, start_row + 1 + i as u16))?;
-        println!("{}", truncate_string(line, sidebar_width - 2));
+        if edit_mode && i == edit_field {
+            print!("> {}", truncate_string(line, sidebar_width - 4));
+        } else {
+            println!("{}", truncate_string(line, sidebar_width - 2));
+        }
     }
 
     Ok(())
 }
-
+            
 fn truncate_string(s: &str, max_length: usize) -> String {
     if s.len() > max_length {
         format!("{}...", &s[..max_length - 3])
