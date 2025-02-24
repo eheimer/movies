@@ -4,9 +4,8 @@ mod database;
 mod util;
 
 use config::{Config, read_config};
-use crossterm::cursor::{Hide, Show};
 use database::{initialize_database, get_entries, EntryDetails};
-use display::{initialize_terminal, restore_terminal, draw_screen};
+use display::{draw_screen, initialize_terminal, restore_terminal};
 use util::Entry;
 use std::io;
 use std::path::Path;
@@ -36,6 +35,7 @@ fn main_loop(mut entries: Vec<Entry>, config: Config) -> io::Result<()> {
     let mut entry_path = String::new();
     let mut first_entry = 0;
     let mut edit_field = 0;
+    let mut edit_cursor_pos: usize = 0;
     let mut edit_details = EntryDetails {
         title: String::new(),
         year: String::new(),
@@ -85,7 +85,7 @@ fn main_loop(mut entries: Vec<Entry>, config: Config) -> io::Result<()> {
                 current_item = if filtered_entries.is_empty() { 0 } else { filtered_entries.len() - 1 };
             }
 
-            draw_screen(&filtered_entries, current_item, &mut first_entry, &search, &config, entry_mode, &entry_path, edit_mode, &edit_details, edit_field)?;
+            draw_screen(&filtered_entries, current_item, &mut first_entry, &search, &config, entry_mode, &entry_path, edit_mode, &edit_details, edit_field, edit_cursor_pos)?;
             redraw = false;
         }
 
@@ -145,46 +145,175 @@ fn main_loop(mut entries: Vec<Entry>, config: Config) -> io::Result<()> {
                 } else if edit_mode {
                     match code {
                         KeyCode::Char('e') if modifiers.contains(event::KeyModifiers::CONTROL) => {
-                            // Commit changes to the database and exit edit mode
                             let _ = database::update_entry_details(&filtered_entries[current_item], &edit_details);
-                            //when leaving edit mode, after saving changes, we need to reload the entries
                             entries = database::get_entries().expect("Failed to get entries");
                             filtered_entries = entries.clone();
                             edit_mode = false;
+                            edit_cursor_pos = 0;
                             redraw = true;
                         }
-                        KeyCode::Tab => {
+                        KeyCode::Up  => {
+                            if edit_field == 0 {
+                                edit_field = 6;
+                            } else {
+                                edit_field -= 1;
+                            }
+                            edit_cursor_pos = 0;
+                            redraw = true;
+                        }
+                        KeyCode::Down => {
                             edit_field = (edit_field + 1) % 7;
+                            edit_cursor_pos = 0;
                             redraw = true;
                         }
-                        KeyCode::Backspace => {
-                            match edit_field {
-                                0 => { edit_details.title.pop(); }
-                                1 => { edit_details.year.pop(); }
-                                2 => { edit_details.watched.pop(); }
-                                3 => { edit_details.length.pop(); }
-                                4 => { edit_details.series.pop(); }
-                                5 => { edit_details.season.pop(); }
-                                6 => { edit_details.episode_number.pop(); }
-                                _ => {}
+                        KeyCode::Left if modifiers.contains(event::KeyModifiers::CONTROL) => {
+                            // jump back in the current field by words (separated by spaces)
+                            let field = match edit_field {
+                                0 => &edit_details.title,
+                                1 => &edit_details.year,
+                                2 => &edit_details.watched,
+                                3 => &edit_details.length,
+                                4 => &edit_details.series,
+                                5 => &edit_details.season,
+                                6 => &edit_details.episode_number,
+                                _ => &String::new(),
+                            };
+                            if edit_cursor_pos > 0 {
+                                let mut i = edit_cursor_pos - 1;
+                                while i > 0 && field.chars().nth(i - 1).unwrap() == ' ' {
+                                    i -= 1;
+                                }
+                                while i > 0 && field.chars().nth(i - 1).unwrap() != ' ' {
+                                    i -= 1;
+                                }
+                                edit_cursor_pos = i;
+                                redraw = true;
+                            }
+                        }
+                        KeyCode::Left => {
+                            if(edit_cursor_pos > 0){
+                                edit_cursor_pos -= 1;
                             }
                             redraw = true;
                         }
+                        KeyCode::Right if modifiers.contains(event::KeyModifiers::CONTROL) => {
+                            // jump forward in the current field by words (separated by spaces)
+                            let field = match edit_field {
+                                0 => &edit_details.title,
+                                1 => &edit_details.year,
+                                2 => &edit_details.watched,
+                                3 => &edit_details.length,
+                                4 => &edit_details.series,
+                                5 => &edit_details.season,
+                                6 => &edit_details.episode_number,
+                                _ => &String::new(),
+                            };
+                            if edit_cursor_pos < field.len() {
+                                let mut i = edit_cursor_pos;
+                                while i < field.len() && field.chars().nth(i).unwrap() != ' ' {
+                                    i += 1;
+                                }
+                                while i < field.len() && field.chars().nth(i).unwrap() == ' ' {
+                                    i += 1;
+                                }
+                                edit_cursor_pos = i;
+                                redraw = true;
+                            }
+                        }
+                        KeyCode::Right => {
+                            let field_length = match edit_field {
+                                0 => edit_details.title.len(),
+                                1 => edit_details.year.len(),
+                                2 => edit_details.watched.len(),
+                                3 => edit_details.length.len(),
+                                4 => edit_details.series.len(),
+                                5 => edit_details.season.len(),
+                                6 => edit_details.episode_number.len(),
+                                _ => 0,
+                            };
+                            if edit_cursor_pos < field_length {
+                                edit_cursor_pos += 1;
+                            }
+                            redraw = true;
+                        }
+                        KeyCode::Home => {
+                            edit_cursor_pos = 0;
+                            redraw = true;
+                        }
+                        KeyCode::End => {
+                            let field_length = match edit_field {
+                                0 => edit_details.title.len(),
+                                1 => edit_details.year.len(),
+                                2 => edit_details.watched.len(),
+                                3 => edit_details.length.len(),
+                                4 => edit_details.series.len(),
+                                5 => edit_details.season.len(),
+                                6 => edit_details.episode_number.len(),
+                                _ => 0,
+                            };
+                            edit_cursor_pos = field_length;
+                            redraw = true;
+                        }
+                        KeyCode::Backspace => {
+                            // removes the character BEFORE the edit_cursor_pos as long as edit_cursor_pos is > 0, otherwise it does nothing
+                            if edit_cursor_pos > 0 {
+                                match edit_field {
+                                    0 => { edit_details.title.remove(edit_cursor_pos - 1); }
+                                    1 => { edit_details.year.remove(edit_cursor_pos - 1); }
+                                    2 => { edit_details.watched.remove(edit_cursor_pos - 1); }
+                                    3 => { edit_details.length.remove(edit_cursor_pos - 1); }
+                                    4 => { edit_details.series.remove(edit_cursor_pos - 1); }
+                                    5 => { edit_details.season.remove(edit_cursor_pos - 1); }
+                                    6 => { edit_details.episode_number.remove(edit_cursor_pos - 1); }
+                                    _ => {}
+                                }
+                                edit_cursor_pos -= 1;
+                                redraw = true;
+                            }
+                        }
+                        KeyCode::Delete => {
+                            // removes the character AT the edit_cursor_pos as long as edit_cursor_pos is < the length of the field, otherwise it does nothing
+                            let field_length = match edit_field {
+                                0 => edit_details.title.len(),
+                                1 => edit_details.year.len(),
+                                2 => edit_details.watched.len(),
+                                3 => edit_details.length.len(),
+                                4 => edit_details.series.len(),
+                                5 => edit_details.season.len(),
+                                6 => edit_details.episode_number.len(),
+                                _ => 0,
+                            };
+                            if edit_cursor_pos < field_length {
+                                match edit_field {
+                                    0 => { edit_details.title.remove(edit_cursor_pos); }
+                                    1 => { edit_details.year.remove(edit_cursor_pos); }
+                                    2 => { edit_details.watched.remove(edit_cursor_pos); }
+                                    3 => { edit_details.length.remove(edit_cursor_pos); }
+                                    4 => { edit_details.series.remove(edit_cursor_pos); }
+                                    5 => { edit_details.season.remove(edit_cursor_pos); }
+                                    6 => { edit_details.episode_number.remove(edit_cursor_pos); }
+                                    _ => {}
+                                }
+                                redraw = true;
+                            }
+                        }
                         KeyCode::Esc => {
                             edit_mode = false;
+                            edit_cursor_pos = 0;
                             redraw = true;
                         }
                         KeyCode::Char(c) => {
                             match edit_field {
-                                0 => edit_details.title.push(c),
-                                1 => edit_details.year.push(c),
-                                2 => edit_details.watched.push(c),
-                                3 => edit_details.length.push(c),
-                                4 => edit_details.series.push(c),
-                                5 => edit_details.season.push(c),
-                                6 => edit_details.episode_number.push(c),
+                                0 => edit_details.title.insert(edit_cursor_pos, c),
+                                1 => edit_details.year.insert(edit_cursor_pos, c),
+                                2 => edit_details.watched.insert(edit_cursor_pos, c),
+                                3 => edit_details.length.insert(edit_cursor_pos, c),
+                                4 => edit_details.series.insert(edit_cursor_pos, c),
+                                5 => edit_details.season.insert(edit_cursor_pos, c),
+                                6 => edit_details.episode_number.insert(edit_cursor_pos, c),
                                 _ => {}
                             }
+                            edit_cursor_pos += 1;
                             redraw = true;
                         }
                         _ => {}
@@ -203,7 +332,6 @@ fn main_loop(mut entries: Vec<Entry>, config: Config) -> io::Result<()> {
                             edit_mode = true;
                             edit_details = database::get_entry_details(&filtered_entries[current_item]).expect("Failed to get entry details");
                             edit_field = 0;
-                            Show;
                             redraw = true;
                         }
                         KeyCode::Up => {

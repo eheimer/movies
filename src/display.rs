@@ -79,6 +79,7 @@ pub fn draw_screen(
     edit_mode: bool,
     edit_details: &EntryDetails,
     edit_field: usize,
+    edit_cursor_pos: usize,
 ) -> io::Result<()> {
     let mut stdout = stdout();
     execute!(stdout, terminal::Clear(ClearType::All), cursor::MoveTo(0, 0))?;
@@ -117,17 +118,24 @@ pub fn draw_screen(
                 println!("{}", display_text);
             }
         }
-        draw_sidebar(&entries[current_item], edit_mode, edit_details, edit_field)?;
+        draw_sidebar(&entries[current_item], edit_mode, edit_details, edit_field, edit_cursor_pos)?;
     }
 
     Ok(())
 }
 
-fn draw_sidebar(entry: &Entry, edit_mode: bool, edit_details: &EntryDetails, edit_field: usize) -> io::Result<()> {
+fn draw_sidebar(entry: &Entry, edit_mode: bool, edit_details: &EntryDetails, edit_field: usize, edit_cursor_pos: usize) -> io::Result<()> {
     let mut stdout = stdout();
     let start_col: u16 = COL1_WIDTH as u16 + 2;
     let start_row = HEADER_SIZE;
     let sidebar_width = get_sidebar_width()?;
+
+    // Show or hide the cursor based on edit_mode
+    if edit_mode {
+        execute!(stdout, cursor::Show)?;
+    } else {
+        execute!(stdout, cursor::Hide)?;
+    }
 
     // Draw top border
     execute!(stdout, cursor::MoveTo(start_col, start_row))?;
@@ -165,13 +173,30 @@ fn draw_sidebar(entry: &Entry, edit_mode: bool, edit_details: &EntryDetails, edi
         format!("Ep #: {}", details.episode_number),
     ];
 
+    let mut edit_cursor_min: usize = 0;
+
     for (i, line) in detail_lines.iter().enumerate() {
         execute!(stdout, cursor::MoveTo(start_col + 1, start_row + 1 + i as u16))?;
         if edit_mode && i == edit_field {
-            print!("> {}", truncate_string(line, sidebar_width - 4));
+            let field_length = match edit_field {
+                0 => details.title.len(),
+                1 => details.year.len(),
+                2 => details.watched.len(),
+                3 => details.length.len(),
+                4 => details.series.len(),
+                5 => details.season.len(),
+                6 => details.episode_number.len(),
+                _ => 0,
+            };
+            edit_cursor_min = line.len() - field_length;
+            print!("{}", truncate_string(line, sidebar_width - 4));
         } else {
             println!("{}", truncate_string(line, sidebar_width - 2));
         }
+    }
+    //put the cursor at the end of the current edit_field line
+    if edit_mode {
+        execute!(stdout, cursor::MoveTo(start_col + 1 + edit_cursor_min as u16 + edit_cursor_pos as u16, start_row + 1 + edit_field as u16))?;
     }
 
     Ok(())
