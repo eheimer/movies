@@ -146,7 +146,10 @@ fn main_loop(mut entries: Vec<Entry>, config: Config) -> io::Result<()> {
                     match code {
                         KeyCode::Char('e') if modifiers.contains(event::KeyModifiers::CONTROL) => {
                             // Commit changes to the database and exit edit mode
-                            database::update_entry_details(&filtered_entries[current_item], &edit_details);
+                            let _ = database::update_entry_details(&filtered_entries[current_item], &edit_details);
+                            //when leaving edit mode, after saving changes, we need to reload the entries
+                            entries = database::get_entries().expect("Failed to get entries");
+                            filtered_entries = entries.clone();
                             edit_mode = false;
                             redraw = true;
                         }
