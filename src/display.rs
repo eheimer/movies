@@ -15,7 +15,7 @@ const HEADER_SIZE: u16 = 4;
 const FOOTER_SIZE: u16 = 0;
 const COL1_WIDTH: usize = 45;
 const MIN_COL2_WIDTH: usize = 20;
-const COL2_HEIGHT: usize = 9;
+const COL2_HEIGHT: usize = 11;
 
 fn get_sidebar_width() -> io::Result<usize> {
     let (cols, _) = get_terminal_size()?;
@@ -147,10 +147,7 @@ fn draw_sidebar(entry: &Entry, mode: &Mode, edit_details: &EntryDetails, edit_fi
     let start_col: u16 = COL1_WIDTH as u16 + 2;
     let start_row = HEADER_SIZE;
     let sidebar_width = get_sidebar_width()?;
-    let edit_mode = match mode {
-        Mode::Edit => true,
-        _ => false,
-    };
+    let edit_mode = matches!(mode, Mode::Edit);
 
     // Show or hide the cursor based on edit_mode
     if edit_mode {
@@ -159,33 +156,51 @@ fn draw_sidebar(entry: &Entry, mode: &Mode, edit_details: &EntryDetails, edit_fi
         execute!(stdout, cursor::Hide)?;
     }
 
+    // Choose border characters based on whether the sidebar is focused (edit mode)
+    let (top_left, top_right, bottom_left, bottom_right, horizontal, vertical) = if edit_mode {
+        ('╔', '╗', '╚', '╝', '═', '║')
+    } else {
+        ('┌', '┐', '└', '┘', '─', '│')
+    };
+
     // Draw top border
     execute!(stdout, cursor::MoveTo(start_col, start_row))?;
-    print!("+");
+    print!("{}", top_left);
     for _ in 1..sidebar_width - 1 {
-        print!("-");
+        print!("{}", horizontal);
     }
-    println!("+");
+    println!("{}", top_right);
 
     // Draw side borders
     for row in (start_row + 1)..(start_row + COL2_HEIGHT as u16 - 1) {
         execute!(stdout, cursor::MoveTo(start_col, row))?;
-        print!("|");
+        print!("{}", vertical);
         execute!(stdout, cursor::MoveTo(start_col + sidebar_width as u16 - 1, row))?;
-        println!("|");
+        println!("{}", vertical);
     }
 
     // Draw bottom border
     execute!(stdout, cursor::MoveTo(start_col, start_row + COL2_HEIGHT as u16 - 1))?;
-    print!("+");
+    print!("{}", bottom_left);
     for _ in 1..sidebar_width - 1 {
-        print!("-");
+        print!("{}", horizontal);
     }
-    println!("+");
+    println!("{}", bottom_right);
 
     // Display details inside the sidebar
     let details: EntryDetails = if edit_mode { edit_details.clone() } else { get_entry_details(entry).map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))? };
+
+    // Extract path and filename from location
+    let location = match entry {
+        Entry::Episode { location, .. } => location,
+        _ => "",
+    };
+    let path = location.rsplitn(2, '/').nth(1).unwrap_or("");
+    let filename = location.rsplitn(2, '/').next().unwrap_or("");
+
     let detail_lines = vec![
+        format!("Path: {}", path),
+        format!("Filename: {}", filename),
         format!("Title: {}", details.title),
         format!("Year: {}", details.year),
         format!("Watched: {}", details.watched),
@@ -201,13 +216,13 @@ fn draw_sidebar(entry: &Entry, mode: &Mode, edit_details: &EntryDetails, edit_fi
         execute!(stdout, cursor::MoveTo(start_col + 1, start_row + 1 + i as u16))?;
         if edit_mode && i == edit_field {
             let field_length = match edit_field {
-                0 => details.title.len(),
-                1 => details.year.len(),
-                2 => details.watched.len(),
-                3 => details.length.len(),
-                4 => details.series.len(),
-                5 => details.season.len(),
-                6 => details.episode_number.len(),
+                2 => details.title.len(),
+                3 => details.year.len(),
+                4 => details.watched.len(),
+                5 => details.length.len(),
+                6 => details.series.len(),
+                7 => details.season.len(),
+                8 => details.episode_number.len(),
                 _ => 0,
             };
             edit_cursor_min = line.len() - field_length;
@@ -216,7 +231,7 @@ fn draw_sidebar(entry: &Entry, mode: &Mode, edit_details: &EntryDetails, edit_fi
             println!("{}", truncate_string(line, sidebar_width - 2));
         }
     }
-    //put the cursor at the end of the current edit_field line
+    // Put the cursor at the end of the current edit_field line
     if edit_mode {
         execute!(stdout, cursor::MoveTo(start_col + 1 + edit_cursor_min as u16 + edit_cursor_pos as u16, start_row + 1 + edit_field as u16))?;
     }

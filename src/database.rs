@@ -113,12 +113,16 @@ pub fn get_entries() -> Result<Vec<Entry>> {
     }
 
     // Retrieve episodes that are not part of a series
-    let mut stmt = conn.prepare("SELECT id, name, location FROM episode WHERE series_id IS NULL")?;
+    let mut stmt = conn.prepare(
+        "SELECT id, name, location, 
+              COALESCE(CAST(episode.episode_number AS TEXT), '') as episode_number 
+         FROM episode WHERE series_id IS NULL")?;
     let episode_iter = stmt.query_map([], |row| {
         Ok(Entry::Episode {
             id: row.get(0)?,
             name: row.get(1)?,
             location: row.get(2)?,
+            episode_number: row.get(3)?,
         })
     })?;
 

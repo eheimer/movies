@@ -24,6 +24,15 @@ fn run_video_player(config: &Config, file_path: &Path) -> io::Result<Child> {
         .spawn()
 }
 
+fn pad_string_as_number(s: &str, width: usize) -> String {
+    let mut padded = String::new();
+    for _ in 0..width.saturating_sub(s.len()) {
+        padded.push('0');
+    }
+    padded.push_str(s);
+    padded
+}
+
 fn main_loop(mut entries: Vec<Entry>, config: Config) -> io::Result<()> {
     let mut current_item = 0;
     let mut redraw = true;
@@ -33,7 +42,7 @@ fn main_loop(mut entries: Vec<Entry>, config: Config) -> io::Result<()> {
     let mut mode = Mode::Browse;
     let mut entry_path = String::new();
     let mut first_entry = 0;
-    let mut edit_field = 0;
+    let mut edit_field = 2;
     let mut edit_cursor_pos: usize = 0;
     let mut edit_details = EntryDetails {
         title: String::new(),
@@ -70,11 +79,11 @@ fn main_loop(mut entries: Vec<Entry>, config: Config) -> io::Result<()> {
             filtered_entries.sort_by(|a, b| {
                 let name_a = match a {
                     Entry::Series { name, .. } => name,
-                    Entry::Episode { name, .. } => name,
+                    Entry::Episode { episode_number, .. } => &pad_string_as_number(episode_number,2),
                 };
                 let name_b = match b {
                     Entry::Series { name, .. } => name,
-                    Entry::Episode { name, .. } => name,
+                    Entry::Episode { episode_number, .. } => &pad_string_as_number(episode_number,2),
                 };
                 name_a.cmp(name_b)
             });
@@ -154,21 +163,24 @@ fn main_loop(mut entries: Vec<Entry>, config: Config) -> io::Result<()> {
                                 redraw = true;
                             }
                             KeyCode::Up  => {
-                                if edit_field == 0 {
-                                    edit_field = 6;
+                                if edit_field == 2 {
+                                    edit_field = 8;
                                 } else {
                                     edit_field -= 1;
                                 }
-                                if edit_field == 2 {
-                                    edit_field = 1;
+                                if edit_field == 4 {
+                                    edit_field = 3;
                                 }
                                 edit_cursor_pos = 0;
                                 redraw = true;
                             }
                             KeyCode::Down => {
-                                edit_field = (edit_field + 1) % 7;
-                                if edit_field == 2 {
-                                    edit_field = 3;
+                                edit_field = (edit_field + 1) % 9;
+                                if edit_field < 2 {
+                                    edit_field = 2;
+                                }
+                                if edit_field == 4 {
+                                    edit_field = 5;
                                 }
                                 edit_cursor_pos = 0;
                                 redraw = true;
@@ -176,13 +188,13 @@ fn main_loop(mut entries: Vec<Entry>, config: Config) -> io::Result<()> {
                             KeyCode::Left if modifiers.contains(event::KeyModifiers::CONTROL) => {
                                 // jump back in the current field by words (separated by spaces)
                                 let field = match edit_field {
-                                    0 => &edit_details.title,
-                                    1 => &edit_details.year,
-                                    2 => &edit_details.watched,
-                                    3 => &edit_details.length,
-                                    4 => &edit_details.series,
-                                    5 => &edit_details.season,
-                                    6 => &edit_details.episode_number,
+                                    2 => &edit_details.title,
+                                    3 => &edit_details.year,
+                                    4 => &edit_details.watched,
+                                    5 => &edit_details.length,
+                                    6 => &edit_details.series,
+                                    7 => &edit_details.season,
+                                    8 => &edit_details.episode_number,
                                     _ => &String::new(),
                                 };
                                 if edit_cursor_pos > 0 {
@@ -206,13 +218,13 @@ fn main_loop(mut entries: Vec<Entry>, config: Config) -> io::Result<()> {
                             KeyCode::Right if modifiers.contains(event::KeyModifiers::CONTROL) => {
                                 // jump forward in the current field by words (separated by spaces)
                                 let field = match edit_field {
-                                    0 => &edit_details.title,
-                                    1 => &edit_details.year,
-                                    2 => &edit_details.watched,
-                                    3 => &edit_details.length,
-                                    4 => &edit_details.series,
-                                    5 => &edit_details.season,
-                                    6 => &edit_details.episode_number,
+                                    2 => &edit_details.title,
+                                    3 => &edit_details.year,
+                                    4 => &edit_details.watched,
+                                    5 => &edit_details.length,
+                                    6 => &edit_details.series,
+                                    7 => &edit_details.season,
+                                    8 => &edit_details.episode_number,
                                     _ => &String::new(),
                                 };
                                 if edit_cursor_pos < field.len() {
@@ -229,13 +241,13 @@ fn main_loop(mut entries: Vec<Entry>, config: Config) -> io::Result<()> {
                             }
                             KeyCode::Right => {
                                 let field_length = match edit_field {
-                                    0 => edit_details.title.len(),
-                                    1 => edit_details.year.len(),
-                                    2 => edit_details.watched.len(),
-                                    3 => edit_details.length.len(),
-                                    4 => edit_details.series.len(),
-                                    5 => edit_details.season.len(),
-                                    6 => edit_details.episode_number.len(),
+                                    2 => edit_details.title.len(),
+                                    3 => edit_details.year.len(),
+                                    4 => edit_details.watched.len(),
+                                    5 => edit_details.length.len(),
+                                    6 => edit_details.series.len(),
+                                    7 => edit_details.season.len(),
+                                    8 => edit_details.episode_number.len(),
                                     _ => 0,
                                 };
                                 if edit_cursor_pos < field_length {
@@ -249,13 +261,13 @@ fn main_loop(mut entries: Vec<Entry>, config: Config) -> io::Result<()> {
                             }
                             KeyCode::End => {
                                 let field_length = match edit_field {
-                                    0 => edit_details.title.len(),
-                                    1 => edit_details.year.len(),
-                                    2 => edit_details.watched.len(),
-                                    3 => edit_details.length.len(),
-                                    4 => edit_details.series.len(),
-                                    5 => edit_details.season.len(),
-                                    6 => edit_details.episode_number.len(),
+                                    2 => edit_details.title.len(),
+                                    3 => edit_details.year.len(),
+                                    4 => edit_details.watched.len(),
+                                    5 => edit_details.length.len(),
+                                    6 => edit_details.series.len(),
+                                    7 => edit_details.season.len(),
+                                    8 => edit_details.episode_number.len(),
                                     _ => 0,
                                 };
                                 edit_cursor_pos = field_length;
@@ -265,13 +277,13 @@ fn main_loop(mut entries: Vec<Entry>, config: Config) -> io::Result<()> {
                                 // removes the character BEFORE the edit_cursor_pos as long as edit_cursor_pos is > 0, otherwise it does nothing
                                 if edit_cursor_pos > 0 {
                                     match edit_field {
-                                        0 => { edit_details.title.remove(edit_cursor_pos - 1); }
-                                        1 => { edit_details.year.remove(edit_cursor_pos - 1); }
-                                        2 => { edit_details.watched.remove(edit_cursor_pos - 1); }
-                                        3 => { edit_details.length.remove(edit_cursor_pos - 1); }
-                                        4 => { edit_details.series.remove(edit_cursor_pos - 1); }
-                                        5 => { edit_details.season.remove(edit_cursor_pos - 1); }
-                                        6 => { edit_details.episode_number.remove(edit_cursor_pos - 1); }
+                                        2 => { edit_details.title.remove(edit_cursor_pos - 1); }
+                                        3 => { edit_details.year.remove(edit_cursor_pos - 1); }
+                                        4 => { edit_details.watched.remove(edit_cursor_pos - 1); }
+                                        5 => { edit_details.length.remove(edit_cursor_pos - 1); }
+                                        6 => { edit_details.series.remove(edit_cursor_pos - 1); }
+                                        7 => { edit_details.season.remove(edit_cursor_pos - 1); }
+                                        8 => { edit_details.episode_number.remove(edit_cursor_pos - 1); }
                                         _ => {}
                                     }
                                     edit_cursor_pos -= 1;
@@ -281,24 +293,24 @@ fn main_loop(mut entries: Vec<Entry>, config: Config) -> io::Result<()> {
                             KeyCode::Delete => {
                                 // removes the character AT the edit_cursor_pos as long as edit_cursor_pos is < the length of the field, otherwise it does nothing
                                 let field_length = match edit_field {
-                                    0 => edit_details.title.len(),
-                                    1 => edit_details.year.len(),
-                                    2 => edit_details.watched.len(),
-                                    3 => edit_details.length.len(),
-                                    4 => edit_details.series.len(),
-                                    5 => edit_details.season.len(),
-                                    6 => edit_details.episode_number.len(),
+                                    2 => edit_details.title.len(),
+                                    3 => edit_details.year.len(),
+                                    4 => edit_details.watched.len(),
+                                    5 => edit_details.length.len(),
+                                    6 => edit_details.series.len(),
+                                    7 => edit_details.season.len(),
+                                    8 => edit_details.episode_number.len(),
                                     _ => 0,
                                 };
                                 if edit_cursor_pos < field_length {
                                     match edit_field {
-                                        0 => { edit_details.title.remove(edit_cursor_pos); }
-                                        1 => { edit_details.year.remove(edit_cursor_pos); }
-                                        2 => { edit_details.watched.remove(edit_cursor_pos); }
-                                        3 => { edit_details.length.remove(edit_cursor_pos); }
-                                        4 => { edit_details.series.remove(edit_cursor_pos); }
-                                        5 => { edit_details.season.remove(edit_cursor_pos); }
-                                        6 => { edit_details.episode_number.remove(edit_cursor_pos); }
+                                        2 => { edit_details.title.remove(edit_cursor_pos); }
+                                        3 => { edit_details.year.remove(edit_cursor_pos); }
+                                        4 => { edit_details.watched.remove(edit_cursor_pos); }
+                                        5 => { edit_details.length.remove(edit_cursor_pos); }
+                                        6 => { edit_details.series.remove(edit_cursor_pos); }
+                                        7 => { edit_details.season.remove(edit_cursor_pos); }
+                                        8 => { edit_details.episode_number.remove(edit_cursor_pos); }
                                         _ => {}
                                     }
                                     redraw = true;
@@ -311,13 +323,13 @@ fn main_loop(mut entries: Vec<Entry>, config: Config) -> io::Result<()> {
                             }
                             KeyCode::Char(c) => {
                                 match edit_field {
-                                    0 => edit_details.title.insert(edit_cursor_pos, c),
-                                    1 => edit_details.year.insert(edit_cursor_pos, c),
-                                    2 => edit_details.watched.insert(edit_cursor_pos, c),
-                                    3 => edit_details.length.insert(edit_cursor_pos, c),
-                                    4 => edit_details.series.insert(edit_cursor_pos, c),
-                                    5 => edit_details.season.insert(edit_cursor_pos, c),
-                                    6 => edit_details.episode_number.insert(edit_cursor_pos, c),
+                                    2 => edit_details.title.insert(edit_cursor_pos, c),
+                                    3 => edit_details.year.insert(edit_cursor_pos, c),
+                                    4 => edit_details.watched.insert(edit_cursor_pos, c),
+                                    5 => edit_details.length.insert(edit_cursor_pos, c),
+                                    6 => edit_details.series.insert(edit_cursor_pos, c),
+                                    7 => edit_details.season.insert(edit_cursor_pos, c),
+                                    8 => edit_details.episode_number.insert(edit_cursor_pos, c),
                                     _ => {}
                                 }
                                 edit_cursor_pos += 1;
@@ -339,7 +351,7 @@ fn main_loop(mut entries: Vec<Entry>, config: Config) -> io::Result<()> {
                                 // Enter edit mode
                                 mode = Mode::Edit;
                                 edit_details = database::get_entry_details(&filtered_entries[current_item]).expect("Failed to get entry details");
-                                edit_field = 0;
+                                edit_field = 2;
                                 redraw = true;
                             }
                             KeyCode::Char('w') if modifiers.contains(event::KeyModifiers::CONTROL) => {
@@ -427,17 +439,6 @@ fn main() -> io::Result<()> {
     initialize_database("videos.db").expect("Failed to initialize database");
 
     let entries = get_entries().expect("Failed to get entries");
-
-    if entries.is_empty() {
-        println!("No videos found, press CTRL-S to scan for files");
-    } else {
-        for entry in &entries {
-            match entry {
-                Entry::Series { id, name } => println!("Series: {} (ID: {})", name, id),
-                Entry::Episode { id, name, location } => println!("Episode: {} (ID: {}, Location: {})", name, id, location),
-            }
-        }
-    }
 
     initialize_terminal()?;
     let result = main_loop(entries, config);
