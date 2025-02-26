@@ -1,21 +1,16 @@
-use crossterm::{
-    execute,
-    terminal::{self, Clear, ClearType, size},
-    cursor,
-    style::{Color, Stylize},
-    event::{DisableMouseCapture, EnableMouseCapture},
-    ExecutableCommand,
-};
-use std::io::{self, stdout};
-use crate::database::{get_entry_details, EntryDetails};
+use crossterm::style::{Color, Stylize};
+use std::io;
+use crate::dto::{EpisodeDetail,Series};
 use crate::config::Config;
-use crate::util::{Entry,Mode};
+use crate::util::{Entry,Mode, truncate_string};
+use crate::terminal::{clear_screen,clear_line,get_terminal_size,print_at,hide_cursor,show_cursor,move_cursor};
 
-const HEADER_SIZE: u16 = 4;
-const FOOTER_SIZE: u16 = 0;
+const HEADER_SIZE: usize = 4;
+const FOOTER_SIZE: usize = 0;
 const COL1_WIDTH: usize = 45;
 const MIN_COL2_WIDTH: usize = 20;
-const COL2_HEIGHT: usize = 11;
+const DETAIL_HEIGHT: usize = 11;
+const SERIES_WIDTH: usize = 40;
 
 fn get_sidebar_width() -> io::Result<usize> {
     let (cols, _) = get_terminal_size()?;
@@ -45,47 +40,29 @@ pub fn string_to_fg_color_or_default(color: &str) -> Color {
     string_to_color(color).unwrap_or(Color::Black)
 }
 
-pub fn initialize_terminal() -> io::Result<()> {
-    let mut stdout = stdout();
-    stdout.execute(terminal::EnterAlternateScreen)?;
-    terminal::enable_raw_mode()?;
-    stdout.execute(EnableMouseCapture)?;
-    stdout.execute(cursor::Hide)?;
-    Ok(())
-}
-
-pub fn restore_terminal() -> io::Result<()> {
-    let mut stdout = stdout();
-    stdout.execute(terminal::LeaveAlternateScreen)?;
-    terminal::disable_raw_mode()?;
-    stdout.execute(DisableMouseCapture)?;
-    stdout.execute(cursor::Show)?;
-    Ok(())
-}
-
-fn get_terminal_size() -> io::Result<(u16, u16)> {
-    let (cols, rows) = size()?;
-    Ok((cols, rows))
-}
-
 fn draw_header(mode: &Mode, filter: &String) -> io::Result<()> {
-    let mut stdout = stdout();
     let instructions: Vec<&str> = match mode {
         Mode::Browse => vec![
             "[UP]/[DOWN] navigate list, [ENTER] play video, [ESC] exit",
-            "type to filter list, [CTRL][E] edit current file, [CTRL][W] toggle watched",
+            "type to filter list, [CTRL][E] edit details, [CTRL][W] toggle watched",
         ],
-        Mode::Edit => vec!["[UP]/[DOWN] change field, type to edit, [ESC] cancel, [CTRL][E] save changes"],
+        Mode::Edit => vec![
+            "[UP]/[DOWN] change field, [ESC] cancel, [CTRL][E] save changes",
+            "[CTRL][R] choose series"
+        ],
         Mode::Entry => vec!["Enter a file path to scan, [ESC] exit"],
+        Mode::SeriesSelect => vec![
+            "[UP]/[DOWN] navigate list, [ENTER] assign current, [ESC] exit",
+            "[+] create a new series, [CTRL][-] deselect series",
+        ],
+        Mode::SeriesCreate => vec!["Type in a series name, [ENTER] save, [ESC] cancel"],
     };
     //loop through the instructions and print them in the header
     for (i, instructions) in instructions.iter().enumerate() {
-        execute!(stdout, cursor::MoveTo(0, i as u16))?;
-        println!("{}", instructions.with(Color::Black).on(Color::White));
+        print_at(1,i, &instructions.with(Color::Black).on(Color::White))?;
     }
 
-    execute!(stdout, cursor::MoveTo(0, 2))?;
-    println!("Filter: {}", filter);
+    print_at(0,2, &format!("filter: {}", filter))?;
     Ok(())
 }
 
@@ -97,20 +74,19 @@ pub fn draw_screen(
     config: &Config,
     mode: &Mode,
     entry_path: &String,
-    edit_details: &EntryDetails,
+    edit_details: &EpisodeDetail,
     edit_field: usize,
     edit_cursor_pos: usize,
+    series: &Vec<Series>,
 ) -> io::Result<()> {
-    let mut stdout = stdout();
-    execute!(stdout, terminal::Clear(ClearType::All), cursor::MoveTo(0, 0))?;
+    clear_screen()?;
     draw_header(mode, filter)?;
     
     if entries.is_empty() {
-        execute!(stdout, cursor::MoveTo(0, HEADER_SIZE))?;
-        println!("{}", "No videos found, press CTRL-L to load videos from the file system".italic());
+        print_at(0,HEADER_SIZE, 
+            &format!("{}", "No videos found. Adjust your filter or press CTRL-L to scan the file system".italic()))?;
         if let Mode::Entry = mode {
-          execute!(stdout, cursor::MoveTo(0, HEADER_SIZE + 1))?;
-          println!("Enter a file path to scan: {}", entry_path);
+            print_at(0,HEADER_SIZE + 1, &format!("Enter a file path to scan: {}", entry_path))?;
         }
     } else {
         let max_lines = get_max_displayed_items()?;
@@ -123,72 +99,42 @@ pub fn draw_screen(
         }
 
         for (i, entry) in entries.iter().enumerate().skip(*first_entry).take(max_lines as usize) {
-            execute!(stdout, cursor::MoveTo(0, (i - *first_entry) as u16 + HEADER_SIZE))?;
+
             let display_text = match entry {
                 Entry::Series { name, .. } => format!("[{}]", truncate_string(name,COL1_WIDTH)).with(Color::Blue),
                 Entry::Episode { name, .. } => truncate_string(name,COL1_WIDTH).clone().stylize(),
             };
 
+            let mut formatted_text = format!("{}", display_text);
             if i == current_item {
-                let styled_entry = display_text.with(string_to_fg_color_or_default(&config.current_fg)).on(string_to_bg_color_or_default(&config.current_bg));
-                println!("{}", styled_entry);
-            } else {
-                println!("{}", display_text);
+                formatted_text = format!("{}", display_text.with(string_to_fg_color_or_default(&config.current_fg)).on(string_to_bg_color_or_default(&config.current_bg)));
             }
+            print_at(0, i - *first_entry + HEADER_SIZE, &formatted_text)?;
+
         }
-        draw_sidebar(&entries[current_item], &mode, edit_details, edit_field, edit_cursor_pos)?;
+        draw_detail_window(&entries[current_item], &mode, edit_details, edit_field, edit_cursor_pos)?;
+        if let Mode::SeriesSelect | Mode::SeriesCreate = mode {
+            draw_series_window(&mode, &series)?;
+        }
     }
 
     Ok(())
 }
 
-fn draw_sidebar(entry: &Entry, mode: &Mode, edit_details: &EntryDetails, edit_field: usize, edit_cursor_pos: usize) -> io::Result<()> {
-    let mut stdout = stdout();
-    let start_col: u16 = COL1_WIDTH as u16 + 2;
+fn draw_detail_window(entry: &Entry, mode: &Mode, edit_details: &EpisodeDetail, edit_field: usize, edit_cursor_pos: usize) -> io::Result<()> {
+    let start_col: usize = COL1_WIDTH + 2;
     let start_row = HEADER_SIZE;
     let sidebar_width = get_sidebar_width()?;
     let edit_mode = matches!(mode, Mode::Edit);
 
     // Show or hide the cursor based on edit_mode
     if edit_mode {
-        execute!(stdout, cursor::Show)?;
+        show_cursor()?;
     } else {
-        execute!(stdout, cursor::Hide)?;
+        hide_cursor()?;
     }
 
-    // Choose border characters based on whether the sidebar is focused (edit mode)
-    let (top_left, top_right, bottom_left, bottom_right, horizontal, vertical) = if edit_mode {
-        ('╔', '╗', '╚', '╝', '═', '║')
-    } else {
-        ('┌', '┐', '└', '┘', '─', '│')
-    };
-
-    // Draw top border
-    execute!(stdout, cursor::MoveTo(start_col, start_row))?;
-    print!("{}", top_left);
-    for _ in 1..sidebar_width - 1 {
-        print!("{}", horizontal);
-    }
-    println!("{}", top_right);
-
-    // Draw side borders
-    for row in (start_row + 1)..(start_row + COL2_HEIGHT as u16 - 1) {
-        execute!(stdout, cursor::MoveTo(start_col, row))?;
-        print!("{}", vertical);
-        execute!(stdout, cursor::MoveTo(start_col + sidebar_width as u16 - 1, row))?;
-        println!("{}", vertical);
-    }
-
-    // Draw bottom border
-    execute!(stdout, cursor::MoveTo(start_col, start_row + COL2_HEIGHT as u16 - 1))?;
-    print!("{}", bottom_left);
-    for _ in 1..sidebar_width - 1 {
-        print!("{}", horizontal);
-    }
-    println!("{}", bottom_right);
-
-    // Display details inside the sidebar
-    let details: EntryDetails = if edit_mode { edit_details.clone() } else { get_entry_details(entry).map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))? };
+    draw_window(start_col, start_row, sidebar_width, DETAIL_HEIGHT, edit_mode)?;
 
     // Extract path and filename from location
     let location = match entry {
@@ -201,81 +147,113 @@ fn draw_sidebar(entry: &Entry, mode: &Mode, edit_details: &EntryDetails, edit_fi
     let detail_lines = vec![
         format!("Path: {}", path),
         format!("Filename: {}", filename),
-        format!("Title: {}", details.title),
-        format!("Year: {}", details.year),
-        format!("Watched: {}", details.watched),
-        format!("Length: {}", details.length),
-        format!("Series: {}", details.series),
-        format!("Season: {}", details.season),
-        format!("Ep #: {}", details.episode_number),
+        format!("Title: {}", edit_details.title),
+        format!("Year: {}", edit_details.year),
+        format!("Watched: {}", edit_details.watched),
+        format!("Length: {}", edit_details.length),
+        format!("Series: {}", edit_details.series.as_ref().map_or(String::new(), |s| s.name.clone())),
+        format!("Season: {}", edit_details.season.as_ref().map_or(String::new(), |s| s.number.to_string())),
+        format!("Ep #: {}", edit_details.episode_number),
     ];
 
     let mut edit_cursor_min: usize = 0;
 
     for (i, line) in detail_lines.iter().enumerate() {
-        execute!(stdout, cursor::MoveTo(start_col + 1, start_row + 1 + i as u16))?;
         if edit_mode && i == edit_field {
             let field_length = match edit_field {
-                2 => details.title.len(),
-                3 => details.year.len(),
-                4 => details.watched.len(),
-                5 => details.length.len(),
-                6 => details.series.len(),
-                7 => details.season.len(),
-                8 => details.episode_number.len(),
+                2 => edit_details.title.len(),
+                3 => edit_details.year.len(),
+                4 => edit_details.watched.len(),
+                5 => edit_details.length.len(),
+                8 => edit_details.episode_number.len(),
                 _ => 0,
             };
             edit_cursor_min = line.len() - field_length;
-            print!("{}", truncate_string(line, sidebar_width - 4));
+            print_at(start_col + 1, start_row + 1 + i, &format!("{}", truncate_string(line, sidebar_width - 4)))?;
         } else {
-            println!("{}", truncate_string(line, sidebar_width - 2));
+            print_at(start_col + 1, start_row + 1 + i, &format!("{}", truncate_string(line, sidebar_width - 2)))?;
         }
     }
     // Put the cursor at the end of the current edit_field line
     if edit_mode {
-        execute!(stdout, cursor::MoveTo(start_col + 1 + edit_cursor_min as u16 + edit_cursor_pos as u16, start_row + 1 + edit_field as u16))?;
+        move_cursor(start_col + 1 + edit_cursor_min + edit_cursor_pos, start_row + 1 + edit_field)?;
     }
 
     Ok(())
 }
-            
-fn truncate_string(s: &str, max_length: usize) -> String {
-    if s.len() > max_length {
-        format!("{}...", &s[..max_length - 3])
+
+fn draw_series_window(mode: &Mode, series: &Vec<Series>) -> io::Result<()> {
+    let start_col = COL1_WIDTH + 2;
+    let start_row = HEADER_SIZE + DETAIL_HEIGHT;
+    let sidebar_width = get_sidebar_width()?;
+    let series_window_width = SERIES_WIDTH + 2;
+
+    // Calculate the available height for the terminal
+    let (_, terminal_height) = get_terminal_size()?;
+    let max_height = terminal_height.saturating_sub(start_row + 2); // Adjust for borders
+    let mut series_window_height = (series.len() + 2).min(max_height).max(4); // Minimum height is 4
+
+    if let Mode::SeriesCreate = mode {
+        series_window_height = 4;  // all we need internal is a single line (plus header)
     } else {
-        s.to_string()
+        hide_cursor()?;
     }
+
+    let series_window_start_col = start_col + ((sidebar_width - series_window_width) / 2);
+
+    draw_window(series_window_start_col, start_row, series_window_width, series_window_height, matches!(mode, Mode::SeriesCreate))?;
+
+    // write the header
+    print_at(series_window_start_col + 1, start_row + 1, &format!("{}", "Choose a series or [+] to create".with(Color::Black).on(Color::White)))?;
+
+    // loop through the series and print each one out starting at start_row + 2
+    for (i, series) in series.iter().enumerate() {
+        let formatted_text = format!("[{}] {}", i + 1, truncate_string(&series.name, SERIES_WIDTH));
+        print_at(series_window_start_col + 1, start_row + 2 + i, &formatted_text)?;
+    }
+
+    Ok(())
+}
+
+fn draw_window(left: usize, top: usize, width: usize, height: usize, thick: bool) -> io::Result<()> {
+    // Choose border characters based on the thickness
+    let (top_left, top_right, bottom_left, bottom_right, horizontal, vertical) = if thick {
+        ('╔', '╗', '╚', '╝', '═', '║')
+    } else {
+        ('┌', '┐', '└', '┘', '─', '│')
+    };
+
+    // Draw top border
+    print_at(left,top, &top_left)?;
+    for _ in 1..width - 1 {
+        print!("{}", horizontal);
+    }
+    print!("{}", top_right);
+
+    // Draw side borders
+    for row in (top + 1)..(top + height - 1) {
+        print_at(left,row,&vertical)?;
+        print_at(left+width-1,row, &vertical)?;
+    }
+
+    // Draw bottom border
+    print_at(left,top + height - 1, &bottom_left)?;
+    for _ in 1..width - 1 {
+        print!("{}", horizontal);
+    }
+    println!("{}", bottom_right);
+
+    Ok(())
 }
 
 pub fn load_videos(path: &str, count: usize) -> io::Result<()> {
-    let mut stdout = stdout();
-    execute!(stdout, cursor::MoveTo(0, HEADER_SIZE + 1), Clear(ClearType::CurrentLine))?;
-    println!("Importing {} videos from {}...", count, path);
+    clear_line(HEADER_SIZE + 1)?;
+    print!("Importing {} videos from {}...", count, path);
     Ok(())
 }
 
-fn get_max_displayed_items() -> io::Result<usize> {
+pub fn get_max_displayed_items() -> io::Result<usize> {
     let (_, rows) = get_terminal_size()?;
     let max_lines = (rows  - HEADER_SIZE - FOOTER_SIZE - 1) as usize; // Adjust for header and footer lines
     Ok(max_lines)
-}
-
-pub fn page_up(current_item: &mut usize, first_entry: &mut usize) -> io::Result<()> {
-    let max_lines = get_max_displayed_items()?;
-    if *current_item > *first_entry {
-        *current_item = *first_entry;
-    } else {
-        *current_item = (*current_item).saturating_sub(max_lines);
-    }
-    Ok(())
-}
-
-pub fn page_down(current_item: &mut usize, first_entry: &mut usize) -> io::Result<()> {
-    let max_lines = get_max_displayed_items()?;
-    if *current_item < *first_entry + max_lines - 1 {
-        *current_item = *first_entry + max_lines - 1;
-    } else {
-        *current_item = (*current_item).saturating_add(max_lines);
-    }
-    Ok(())
 }

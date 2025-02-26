@@ -1,18 +1,8 @@
 use rusqlite::{params, Connection, Result};
 use crate::util::Entry;
+use crate::dto::{EpisodeDetail, Series, Season};
 use std::sync::Mutex;
 use lazy_static::lazy_static;
-
-#[derive(Clone)]
-pub struct EntryDetails{
-    pub title: String,
-    pub year: String,
-    pub watched: String,
-    pub length: String,
-    pub series: String,
-    pub season: String,
-    pub episode_number: String,
-}
 
 lazy_static! {
     pub static ref DB_CONN: Mutex<Option<Connection>> = Mutex::new(None);
@@ -133,84 +123,111 @@ pub fn get_entries() -> Result<Vec<Entry>> {
     Ok(entries)
 }
 
-pub fn get_entry_details(entry: &Entry) -> Result<EntryDetails, Box<dyn std::error::Error>> {
-     match entry {
-        Entry::Series { name, .. } => {
-            // Return sample data for series
-            Ok(EntryDetails {
-                title: name.clone(),
-                year: "2025".to_string(),
-                watched: "No".to_string(),
-                length: "N/A".to_string(),
-                series: name.clone(),
-                season: "N/A".to_string(),
-                episode_number: "N/A".to_string(),
+pub fn get_episode_detail(id: i32) -> Result<EpisodeDetail, Box<dyn std::error::Error>> {
+    // Fetch details from the database for episode
+    let conn = DB_CONN.lock().unwrap();
+    let conn = conn.as_ref().expect("Database connection is not initialized");
+
+    let mut stmt = conn.prepare(
+        "SELECT episode.name as title, 
+                COALESCE(CAST(episode.year AS TEXT), '') as year, 
+                CASE WHEN episode.watched THEN 'true' ELSE 'false' END as watched, 
+                COALESCE(CAST(episode.length AS TEXT), '') as length, 
+                series.id as series_id,
+                COALESCE(series.name, '') as series_name, 
+                season.id as season_id,
+                COALESCE(CAST(season.number AS TEXT), '') as season_number, 
+                COALESCE(CAST(episode.episode_number AS TEXT), '') as episode_number
+            FROM episode
+            LEFT JOIN season ON season.id = episode.season_id AND season.series_id = episode.series_id
+            LEFT JOIN series ON series.id = episode.series_id
+            WHERE episode.id = ?1"
+    )?;
+    let mut rows = stmt.query(params![id])?;
+
+    if let Some(row) = rows.next()? {
+        let series = if let Some(series_id) = row.get::<_, Option<i32>>(4)? {
+            Some(Series {
+                id: series_id,
+                name: row.get(5)?,
             })
-        }
-        Entry::Episode { id, .. } => {
-            // Fetch details from the database for episode
-            let conn = Connection::open("videos.db")?;
-            let mut stmt = conn.prepare(
-                "SELECT episode.name as title, 
-                        COALESCE(CAST(episode.year AS TEXT), '') as year, 
-                        CASE WHEN episode.watched THEN 'true' ELSE 'false' END as watched, 
-                        COALESCE(CAST(episode.length AS TEXT), '') as length, 
-                        COALESCE(series.name, '') as series, 
-                        COALESCE(CAST(season.number AS TEXT), '') as season, 
-                        COALESCE(CAST(episode.episode_number AS TEXT), '') as episode_number
-                 FROM episode
-                 LEFT JOIN season ON season.id = episode.season_id
-                 LEFT JOIN series ON series.id = episode.series_id
-                 WHERE episode.id = ?1"
-            )?;
-            let mut rows = stmt.query(params![id])?;
+        } else {
+            None
+        };
 
-            if let Some(row) = rows.next()? {
-                Ok(EntryDetails {
-                    title: row.get(0)?,
-                    year: row.get(1)?,
-                    watched: row.get(2)?,
-                    length: row.get(3)?,
-                    series: row.get(4)?,
-                    season: row.get(5)?,
-                    episode_number: row.get(6)?,
-                })
-            } else {
-                Err("Episode not found".into())
-            }
-        }
+        let season = if let Some(season_id) = row.get::<_, Option<i32>>(6)? {
+            Some(Season {
+                id: season_id,
+                series: series.clone().expect("Season must have a series"),
+                number: row.get(7)?,
+            })
+        } else {
+            None
+        };
+
+        Ok(EpisodeDetail {
+            title: row.get(0)?,
+            year: row.get(1)?,
+            watched: row.get(2)?,
+            length: row.get(3)?,
+            series,
+            season,
+            episode_number: row.get(8)?,
+        })
+    } else {
+        Err("Episode not found".into())
     }
 }
 
-pub fn update_entry_details(entry: &Entry, details: &EntryDetails) -> Result<(), Box<dyn std::error::Error>> {
-    let conn = Connection::open("videos.db")?;
-    match entry {
-        Entry::Series { id, .. } => {
-            conn.execute(
-                "UPDATE series SET name = ?1 WHERE id = ?2",
-                params![details.title, id],
-            )?;
-        }
-        Entry::Episode { id, .. } => {
-            conn.execute(
-                "UPDATE episode SET name = ?1, year = ?2, watched = ?3, length = ?4, series_id = (SELECT id FROM series WHERE name = ?5), season_id = (SELECT id FROM season WHERE number = ?6), episode_number = ?7 WHERE id = ?8",
-                params![details.title, details.year, details.watched == "true", details.length, details.series, details.season, details.episode_number, id],
-            )?;
-        }
-    }
+pub fn update_episode_detail(id: i32, details: &EpisodeDetail) -> Result<(), Box<dyn std::error::Error>> {
+    let conn = DB_CONN.lock().unwrap();
+    let conn = conn.as_ref().expect("Database connection is not initialized");
+
+    conn.execute(
+        "UPDATE episode SET name = ?1, year = ?2, watched = ?3, length = ?4, series_id = ?5, season_id = ?6, episode_number = ?7 WHERE id = ?8",
+        params![
+            details.title,
+            details.year,
+            details.watched == "true",
+            details.length,
+            details.series.as_ref().map(|s| &s.id),
+            details.season.as_ref().map(|s| &s.id),
+            details.episode_number,
+            id
+        ],
+    )?;
     Ok(())
 }
 
-pub fn toggle_watched_status(entry: &Entry) -> Result<(), Box<dyn std::error::Error>> {
-    let conn = Connection::open("videos.db")?;
-    match entry {
-        Entry::Episode { id, .. } => {
-            conn.execute(
-                "UPDATE episode SET watched = NOT watched WHERE id = ?1",
-                params![id],
-            )?;
-        }
-        _ => {}
-    }
+pub fn toggle_watched_status(id: i32) -> Result<(), Box<dyn std::error::Error>> {
+    let conn = DB_CONN.lock().unwrap();
+    let conn = conn.as_ref().expect("Database connection is not initialized");
+
+    conn.execute(
+        "UPDATE episode SET watched = NOT watched WHERE id = ?1",
+        params![id],
+    )?;
+
     Ok(())
+}
+
+pub fn get_all_series() -> Result<Vec<Series>> {
+    let conn = DB_CONN.lock().unwrap();
+    let conn = conn.as_ref().expect("Database connection is not initialized");
+
+    let mut series = Vec::new();
+
+    let mut stmt = conn.prepare("SELECT id, name FROM series")?;
+    let series_iter = stmt.query_map([], |row| {
+        Ok(Series {
+            id: row.get(0)?,
+            name: row.get(1)?,
+        })
+    })?;
+
+    for s in series_iter {
+        series.push(s?);
+    }
+
+    Ok(series)
 }
