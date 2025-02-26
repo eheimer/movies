@@ -231,3 +231,15 @@ pub fn get_all_series() -> Result<Vec<Series>> {
 
     Ok(series)
 }
+
+pub fn create_series(name: &str) -> Result<i32> {
+    let conn = DB_CONN.lock().unwrap();
+    let conn = conn.as_ref().expect("Database connection is not initialized");
+
+    conn.execute(
+        "INSERT INTO series (name) VALUES (?1)",
+        params![name],
+    )?;
+
+    Ok(conn.last_insert_rowid() as i32)
+}

@@ -78,6 +78,7 @@ pub fn draw_screen(
     edit_field: usize,
     edit_cursor_pos: usize,
     series: &Vec<Series>,
+    new_series: &String,
 ) -> io::Result<()> {
     clear_screen()?;
     draw_header(mode, filter)?;
@@ -114,7 +115,7 @@ pub fn draw_screen(
         }
         draw_detail_window(&entries[current_item], &mode, edit_details, edit_field, edit_cursor_pos)?;
         if let Mode::SeriesSelect | Mode::SeriesCreate = mode {
-            draw_series_window(&mode, &series)?;
+            draw_series_window(&mode, &series, &new_series)?;
         }
     }
 
@@ -182,7 +183,7 @@ fn draw_detail_window(entry: &Entry, mode: &Mode, edit_details: &EpisodeDetail, 
     Ok(())
 }
 
-fn draw_series_window(mode: &Mode, series: &Vec<Series>) -> io::Result<()> {
+fn draw_series_window(mode: &Mode, series: &Vec<Series>, new_series: &String) -> io::Result<()> {
     let start_col = COL1_WIDTH + 2;
     let start_row = HEADER_SIZE + DETAIL_HEIGHT;
     let sidebar_width = get_sidebar_width()?;
@@ -194,24 +195,26 @@ fn draw_series_window(mode: &Mode, series: &Vec<Series>) -> io::Result<()> {
     let mut series_window_height = (series.len() + 2).min(max_height).max(4); // Minimum height is 4
 
     if let Mode::SeriesCreate = mode {
-        series_window_height = 4;  // all we need internal is a single line (plus header)
-    } else {
-        hide_cursor()?;
+        series_window_height = 4;
     }
 
     let series_window_start_col = start_col + ((sidebar_width - series_window_width) / 2);
 
     draw_window(series_window_start_col, start_row, series_window_width, series_window_height, matches!(mode, Mode::SeriesCreate))?;
 
-    // write the header
-    print_at(series_window_start_col + 1, start_row + 1, &format!("{}", "Choose a series or [+] to create".with(Color::Black).on(Color::White)))?;
-
-    // loop through the series and print each one out starting at start_row + 2
-    for (i, series) in series.iter().enumerate() {
-        let formatted_text = format!("[{}] {}", i + 1, truncate_string(&series.name, SERIES_WIDTH));
-        print_at(series_window_start_col + 1, start_row + 2 + i, &formatted_text)?;
+    // write the contents
+    if let Mode::SeriesCreate = mode {
+        show_cursor()?;
+        print_at(series_window_start_col + 1, start_row + 1, &format!("{}", "Type the series name and press [ENTER]:".with(Color::Black).on(Color::White)))?;
+        print_at(series_window_start_col + 1, start_row + 2, &format!("{}", new_series))?;
+    } else {
+        hide_cursor()?;
+        print_at(series_window_start_col + 1, start_row + 1, &format!("{}", "Choose a series or [+] to create".with(Color::Black).on(Color::White)))?;
+        for (i, series) in series.iter().enumerate() {
+            let formatted_text = format!("[{}] {}", i + 1, truncate_string(&series.name, SERIES_WIDTH));
+            print_at(series_window_start_col + 1, start_row + 2 + i, &formatted_text)?;
+        }
     }
-
     Ok(())
 }
 

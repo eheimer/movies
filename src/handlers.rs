@@ -1,4 +1,4 @@
-use crossterm::event::{self, Event, KeyCode, KeyEvent};
+use crossterm::event::{self, KeyCode};
 use std::path::Path;
 use std::sync::mpsc::Sender;
 use std::thread;
@@ -8,6 +8,7 @@ use std::io;
 use crate::database;
 use crate::display;
 use crate::dto::EpisodeDetail;
+use crate::dto::Series;
 use display::get_max_displayed_items;
 use crate::util::{Entry, Mode, run_video_player};
 use crate::config::Config;
@@ -93,6 +94,7 @@ pub fn handle_edit_mode(
             *redraw = true;
         }
         KeyCode::Char('r') if modifiers.contains(event::KeyModifiers::CONTROL) => {
+            *edit_cursor_pos = 0;
             *mode = Mode::SeriesSelect;
             *redraw = true;
         }
@@ -405,20 +407,96 @@ pub fn handle_series_select_mode(
 
 pub fn handle_series_create_mode(
     code: KeyCode,
+    modifiers: event::KeyModifiers,
     mode: &mut Mode,
     redraw: &mut bool,
+    new_series: &mut String,
+    edit_cursor_pos: &mut usize,
+    series: &mut Vec<Series>,
 ) {
     match code {
         KeyCode::Enter => {
             // save the new series to the database
+            database::create_series(new_series).expect("Failed to create series");
             // reload the series list
+            *series = database::get_all_series().expect("Failed to get series");
             // return to series select mode
             *mode = Mode::SeriesSelect;
             *redraw = true;
         }
         KeyCode::Esc => {
             // Return to series select mode
+            *new_series = String::new();
+            *edit_cursor_pos = 0;
             *mode = Mode::SeriesSelect;
+            *redraw = true;
+        }
+        KeyCode::Left if modifiers.contains(event::KeyModifiers::CONTROL) => {
+            // jump back in the current field by words (separated by spaces)
+            if *edit_cursor_pos > 0 {
+                let mut i = *edit_cursor_pos - 1;
+                while i > 0 && new_series.chars().nth(i - 1).unwrap() == ' ' {
+                    i -= 1;
+                }
+                while i > 0 && new_series.chars().nth(i - 1).unwrap() != ' ' {
+                    i -= 1;
+                }
+                *edit_cursor_pos = i;
+                *redraw = true;
+            }
+        }
+        KeyCode::Left => {
+            if *edit_cursor_pos > 0 {
+                *edit_cursor_pos -= 1;
+            }
+            *redraw = true;
+        }
+        KeyCode::Right if modifiers.contains(event::KeyModifiers::CONTROL) => {
+            // jump forward in the current field by words (separated by spaces)
+            if *edit_cursor_pos < new_series.len() {
+                let mut i = *edit_cursor_pos;
+                while i < new_series.len() && new_series.chars().nth(i).unwrap() != ' ' {
+                    i += 1;
+                }
+                while i < new_series.len() && new_series.chars().nth(i).unwrap() == ' ' {
+                    i += 1;
+                }
+                *edit_cursor_pos = i;
+                *redraw = true;
+            }
+        }
+        KeyCode::Right => {
+            if *edit_cursor_pos < new_series.len() {
+                *edit_cursor_pos += 1;
+            }
+            *redraw = true;
+        }
+        KeyCode::Home => {
+            *edit_cursor_pos = 0;
+            *redraw = true;
+        }
+        KeyCode::End => {
+            *edit_cursor_pos = new_series.len();
+            *redraw = true;
+        }
+        KeyCode::Backspace => {
+            // removes the character BEFORE the edit_cursor_pos as long as edit_cursor_pos is > 0, otherwise it does nothing
+            if *edit_cursor_pos > 0 {
+                new_series.remove(*edit_cursor_pos - 1);
+                *edit_cursor_pos -= 1;
+                *redraw = true;
+            }
+        }
+        KeyCode::Delete => {
+            // removes the character AT the edit_cursor_pos as long as edit_cursor_pos is < the length of the field, otherwise it does nothing
+            if *edit_cursor_pos < new_series.len() {
+                new_series.remove(*edit_cursor_pos);
+                *redraw = true;
+            }
+        }
+        KeyCode::Char(c) => {
+            new_series.insert(*edit_cursor_pos, c);
+            *edit_cursor_pos += 1;
             *redraw = true;
         }
         _ => {}

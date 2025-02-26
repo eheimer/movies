@@ -39,6 +39,7 @@ fn main_loop(mut entries: Vec<Entry>, config: Config) -> io::Result<()> {
             episode_number: String::new(),
     };
     let mut series = database::get_all_series().expect("Failed to get series");
+    let mut new_series = String::new();
 
     // Create a channel to communicate between the thread and the main loop
     let (tx, rx): (Sender<()>, Receiver<()>) = mpsc::channel();
@@ -88,7 +89,7 @@ fn main_loop(mut entries: Vec<Entry>, config: Config) -> io::Result<()> {
                 }
             }
 
-            draw_screen(&filtered_entries, current_item, &mut first_entry, &search, &config, &mode, &entry_path, &edit_details, edit_field, edit_cursor_pos, &series)?;
+            draw_screen(&filtered_entries, current_item, &mut first_entry, &search, &config, &mode, &entry_path, &edit_details, edit_field, edit_cursor_pos, &series, &new_series)?;
             redraw = false;
         }
 
@@ -117,7 +118,7 @@ fn main_loop(mut entries: Vec<Entry>, config: Config) -> io::Result<()> {
                         handlers::handle_series_select_mode(code, &mut mode, &mut redraw);
                     }
                     Mode::SeriesCreate => {
-                        handlers::handle_series_create_mode(code, &mut mode, &mut redraw);
+                        handlers::handle_series_create_mode(code, modifiers, &mut mode, &mut redraw, &mut new_series, &mut edit_cursor_pos, &mut series);
                     }
                 }
             }
