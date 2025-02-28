@@ -9,8 +9,12 @@ lazy_static! {
 }
 
 fn initialize_db_connection(db_path: &str) {
-    let conn = Connection::open(db_path).expect("Failed to initialize database");
     let mut db_conn = DB_CONN.lock().unwrap();
+    if db_conn.is_some() {
+        // Close the existing connection if it exists
+        db_conn.take();
+    }
+    let conn = Connection::open(db_path).expect("Failed to initialize database");
     *db_conn = Some(conn);
 }
 
@@ -90,7 +94,7 @@ pub fn get_entries() -> Result<Vec<Entry>> {
     let mut entries = Vec::new();
 
     // Retrieve series
-    let mut stmt = conn.prepare("SELECT id, name FROM series")?;
+    let mut stmt = conn.prepare("SELECT id, name FROM series ORDER BY name")?;
     let series_iter = stmt.query_map([], |row| {
         Ok(Entry::Series {
             id: row.get(0)?,
@@ -106,7 +110,7 @@ pub fn get_entries() -> Result<Vec<Entry>> {
     let mut stmt = conn.prepare(
         "SELECT id, name, location, 
               COALESCE(CAST(episode.episode_number AS TEXT), '') as episode_number 
-         FROM episode WHERE series_id IS NULL")?;
+         FROM episode WHERE series_id IS NULL ORDER BY episode_number, name")?;
     let episode_iter = stmt.query_map([], |row| {
         Ok(Entry::Episode {
             id: row.get(0)?,
@@ -129,7 +133,8 @@ pub fn get_episode_detail(id: i32) -> Result<EpisodeDetail, Box<dyn std::error::
     let conn = conn.as_ref().expect("Database connection is not initialized");
 
     let mut stmt = conn.prepare(
-        "SELECT episode.name as title, 
+        "SELECT 
+                episode.name as title, 
                 COALESCE(CAST(episode.year AS TEXT), '') as year, 
                 CASE WHEN episode.watched THEN 'true' ELSE 'false' END as watched, 
                 COALESCE(CAST(episode.length AS TEXT), '') as length, 
@@ -232,14 +237,31 @@ pub fn get_all_series() -> Result<Vec<Series>> {
     Ok(series)
 }
 
-pub fn create_series(name: &str) -> Result<i32> {
-    let conn = DB_CONN.lock().unwrap();
-    let conn = conn.as_ref().expect("Database connection is not initialized");
+pub fn create_series_and_assign(name: &str, episode_id: i32) -> Result<EpisodeDetail> {
+    { // Create a new scope to release the lock after the transaction
+        let conn = DB_CONN.lock().unwrap();
+        let conn = conn.as_ref().expect("Database connection is not initialized");
+        conn.execute(
+            "INSERT INTO series (name) VALUES (?1)",
+            params![name],
+        )?;
+        let series_id = conn.last_insert_rowid() as i32;
+        conn.execute(
+            "UPDATE episode SET series_id = ?1 WHERE id = ?2",
+            params![series_id, episode_id],
+        )?;
+    }
+    Ok(get_episode_detail(episode_id).expect("Failed to get episode details"))
+}
 
-    conn.execute(
-        "INSERT INTO series (name) VALUES (?1)",
-        params![name],
-    )?;
-
-    Ok(conn.last_insert_rowid() as i32)
+pub fn assign_series(series_id: i32, episode_id: i32) -> Result<EpisodeDetail> {
+    { // Create a new scope to release the lock after the transaction
+        let conn = DB_CONN.lock().unwrap();
+        let conn = conn.as_ref().expect("Database connection is not initialized");
+        conn.execute(
+            "UPDATE episode SET series_id = ?1 WHERE id = ?2",
+            params![series_id, episode_id],
+        )?;
+    }
+    Ok(get_episode_detail(episode_id).expect("Failed to get episode details"))
 }

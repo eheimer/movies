@@ -39,12 +39,23 @@ fn main_loop(mut entries: Vec<Entry>, config: Config) -> io::Result<()> {
             episode_number: String::new(),
     };
     let mut series = database::get_all_series().expect("Failed to get series");
+    let mut series_selection: Option<usize> = None;
     let mut new_series = String::new();
+    let mut selected_entry_id: Option<i32>= None;
 
     // Create a channel to communicate between the thread and the main loop
     let (tx, rx): (Sender<()>, Receiver<()>) = mpsc::channel();
 
+    
+    //if entries is empty, we will automatically load the config path
+    // set entry_path to the config value, then change mode to Entry
+    if entries.is_empty() {
+            entry_path = config.path.clone();
+            mode = Mode::Entry;
+    }
+
     loop {
+        
         if redraw {
             // Split the search string into terms
             let search_terms: Vec<String> = search.to_lowercase().split_whitespace().map(String::from).collect();
@@ -63,17 +74,17 @@ fn main_loop(mut entries: Vec<Entry>, config: Config) -> io::Result<()> {
                 .collect();
 
             // Sort the filtered entries by name
-            filtered_entries.sort_by(|a, b| {
-                let name_a = match a {
-                    Entry::Series { name, .. } => name,
-                    Entry::Episode { episode_number, .. } => &pad_string_as_number(episode_number,2),
-                };
-                let name_b = match b {
-                    Entry::Series { name, .. } => name,
-                    Entry::Episode { episode_number, .. } => &pad_string_as_number(episode_number,2),
-                };
-                name_a.cmp(name_b)
-            });
+            // filtered_entries.sort_by(|a, b| {
+            //     let name_a = match a {
+            //         Entry::Series { name, .. } => name,
+            //         Entry::Episode { episode_number, .. } => &pad_string_as_number(episode_number,2),
+            //     };
+            //     let name_b = match b {
+            //         Entry::Series { name, .. } => name,
+            //         Entry::Episode { episode_number, .. } => &pad_string_as_number(episode_number,2),
+            //     };
+            //     name_a.cmp(name_b)
+            // });
 
             // Ensure current_item is within bounds
             if current_item >= filtered_entries.len() {
@@ -82,14 +93,19 @@ fn main_loop(mut entries: Vec<Entry>, config: Config) -> io::Result<()> {
 
             //if we're in Browse mode, we need to populate edit_details before calling draw_screen
             if let Mode::Browse = mode {
-                if filtered_entries.len() > 0 {
+                if !filtered_entries.is_empty() {
                     if let Entry::Episode { id, .. } = &filtered_entries[current_item] {
-                        edit_details = database::get_episode_detail(*id).expect("Failed to get entry details");
+                        selected_entry_id = Some(*id);
+                        if let Some(id) = selected_entry_id {
+                            edit_details = database::get_episode_detail(id).expect("Failed to get entry details");
+                        }
+                    } else {
+                        selected_entry_id = None;
                     }
                 }
             }
 
-            draw_screen(&filtered_entries, current_item, &mut first_entry, &search, &config, &mode, &entry_path, &edit_details, edit_field, edit_cursor_pos, &series, &new_series)?;
+            draw_screen(&filtered_entries, current_item, &mut first_entry, &search, &config, &mode, &entry_path, &edit_details, edit_field, edit_cursor_pos, &series, &mut series_selection, &new_series)?;
             redraw = false;
         }
 
@@ -115,10 +131,22 @@ fn main_loop(mut entries: Vec<Entry>, config: Config) -> io::Result<()> {
                         }
                     }
                     Mode::SeriesSelect => {
-                        handlers::handle_series_select_mode(code, &mut mode, &mut redraw);
+                        if let Some(id) = selected_entry_id {
+                            handlers::handle_series_select_mode(code, &mut series_selection, &mut mode, &mut redraw, &mut series, id, &mut edit_details, &mut entries, &mut filtered_entries);
+                        } else {
+                            // selected entry is a series, change mode back to browse
+                            mode = Mode::Browse;
+                            redraw = true;
+                        }
                     }
                     Mode::SeriesCreate => {
-                        handlers::handle_series_create_mode(code, modifiers, &mut mode, &mut redraw, &mut new_series, &mut edit_cursor_pos, &mut series);
+                        if let Some(id) = selected_entry_id {
+                            handlers::handle_series_create_mode(code, modifiers, &mut mode, &mut redraw, &mut new_series, &mut edit_cursor_pos, &mut series, id, &mut edit_details, &mut entries, &mut filtered_entries);
+                        } else {
+                            // selected entry is a series, change mode back to browse
+                            mode = Mode::Browse;
+                            redraw = true;
+                        }
                     }
                 }
             }

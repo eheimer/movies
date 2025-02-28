@@ -43,19 +43,18 @@ pub fn string_to_fg_color_or_default(color: &str) -> Color {
 fn draw_header(mode: &Mode, filter: &String) -> io::Result<()> {
     let instructions: Vec<&str> = match mode {
         Mode::Browse => vec![
-            "[UP]/[DOWN] navigate list, [ENTER] play video, [ESC] exit",
-            "type to filter list, [CTRL][E] edit details, [CTRL][W] toggle watched",
+            "type to filter, [\u{2191}]/[\u{2193}] navigate, [ENTER] play, [ESC] exit",
+            "[F2] edit, [F3] toggle watched, [F4] series selection",
         ],
         Mode::Edit => vec![
-            "[UP]/[DOWN] change field, [ESC] cancel, [CTRL][E] save changes",
-            "[CTRL][R] choose series"
+            "[\u{2191}]/[\u{2193}] change field, [ESC] cancel, [F2] save changes",
         ],
-        Mode::Entry => vec!["Enter a file path to scan, [ESC] exit"],
+        Mode::Entry => vec!["Enter a file path to scan, [ESC] cancel"],
         Mode::SeriesSelect => vec![
-            "[UP]/[DOWN] navigate list, [ENTER] assign current, [ESC] exit",
+            "[\u{2191}]/[\u{2193}] navigate, [ENTER] select, [ESC] cancel",
             "[+] create a new series, [CTRL][-] deselect series",
         ],
-        Mode::SeriesCreate => vec!["Type in a series name, [ENTER] save, [ESC] cancel"],
+        Mode::SeriesCreate => vec!["Type a series name, [ENTER] save, [ESC] cancel"],
     };
     //loop through the instructions and print them in the header
     for (i, instructions) in instructions.iter().enumerate() {
@@ -78,6 +77,7 @@ pub fn draw_screen(
     edit_field: usize,
     edit_cursor_pos: usize,
     series: &Vec<Series>,
+    series_selection: &mut Option<usize>,
     new_series: &String,
 ) -> io::Result<()> {
     clear_screen()?;
@@ -115,7 +115,7 @@ pub fn draw_screen(
         }
         draw_detail_window(&entries[current_item], &mode, edit_details, edit_field, edit_cursor_pos)?;
         if let Mode::SeriesSelect | Mode::SeriesCreate = mode {
-            draw_series_window(&mode, &series, &new_series)?;
+            draw_series_window(&mode, &series, &new_series, series_selection, config)?;
         }
     }
 
@@ -183,7 +183,7 @@ fn draw_detail_window(entry: &Entry, mode: &Mode, edit_details: &EpisodeDetail, 
     Ok(())
 }
 
-fn draw_series_window(mode: &Mode, series: &Vec<Series>, new_series: &String) -> io::Result<()> {
+fn draw_series_window(mode: &Mode, series: &Vec<Series>, new_series: &String, series_selection: &mut Option<usize>, config: &Config) -> io::Result<()> {
     let start_col = COL1_WIDTH + 2;
     let start_row = HEADER_SIZE + DETAIL_HEIGHT;
     let sidebar_width = get_sidebar_width()?;
@@ -192,10 +192,20 @@ fn draw_series_window(mode: &Mode, series: &Vec<Series>, new_series: &String) ->
     // Calculate the available height for the terminal
     let (_, terminal_height) = get_terminal_size()?;
     let max_height = terminal_height.saturating_sub(start_row + 2); // Adjust for borders
-    let mut series_window_height = (series.len() + 2).min(max_height).max(4); // Minimum height is 4
+    let mut series_window_height = (series.len() + 3).min(max_height).max(4); // Minimum height is 4
 
     if let Mode::SeriesCreate = mode {
         series_window_height = 4;
+        *series_selection = None;
+    } else {
+        //if series_selection is out of bounds, make it in-bounds, if it is None, set it to 0
+        if let Some(selection) = series_selection {
+            if *selection >= series.len() {
+                *series_selection = series.len().checked_sub(1);
+            }
+        } else {
+            *series_selection = Some(0);
+        }
     }
 
     let series_window_start_col = start_col + ((sidebar_width - series_window_width) / 2);
@@ -211,7 +221,12 @@ fn draw_series_window(mode: &Mode, series: &Vec<Series>, new_series: &String) ->
         hide_cursor()?;
         print_at(series_window_start_col + 1, start_row + 1, &format!("{}", "Choose a series or [+] to create".with(Color::Black).on(Color::White)))?;
         for (i, series) in series.iter().enumerate() {
-            let formatted_text = format!("[{}] {}", i + 1, truncate_string(&series.name, SERIES_WIDTH));
+            let display_text = format!("[{}] {}", i + 1, truncate_string(&series.name, SERIES_WIDTH));
+            let formatted_text = if Some(i) == *series_selection {
+                format!("{}", display_text.with(string_to_fg_color_or_default(&config.current_fg)).on(string_to_bg_color_or_default(&config.current_bg)))
+            } else {
+                display_text
+            };
             print_at(series_window_start_col + 1, start_row + 2 + i, &formatted_text)?;
         }
     }

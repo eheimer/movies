@@ -80,7 +80,7 @@ pub fn handle_edit_mode(
     redraw: &mut bool,
 ) {
     match code {
-        KeyCode::Char('e') if modifiers.contains(event::KeyModifiers::CONTROL) => {
+        KeyCode::F(2) => {
             // we can only be here if the current entry is an Episode
             let episode_id = match &filtered_entries[current_item] {
                 Entry::Episode { id, .. } => *id,
@@ -91,11 +91,6 @@ pub fn handle_edit_mode(
             *filtered_entries = entries.clone();
             *mode = Mode::Browse;
             *edit_cursor_pos = 0;
-            *redraw = true;
-        }
-        KeyCode::Char('r') if modifiers.contains(event::KeyModifiers::CONTROL) => {
-            *edit_cursor_pos = 0;
-            *mode = Mode::SeriesSelect;
             *redraw = true;
         }
         KeyCode::Up => {
@@ -288,7 +283,7 @@ pub fn handle_browse_mode(
                 *redraw = true;
             }
         }
-        KeyCode::Char('e') if modifiers.contains(event::KeyModifiers::CONTROL) => {
+        KeyCode::F(2) => {
             // Enter edit mode only if the current entry is an Episode
             if let Entry::Episode { .. } = filtered_entries[*current_item] {
                 *mode = Mode::Edit;
@@ -300,7 +295,7 @@ pub fn handle_browse_mode(
                 *redraw = true;
             }
         }
-        KeyCode::Char('w') if modifiers.contains(event::KeyModifiers::CONTROL) => {
+        KeyCode::F(3) => {
             // Toggle the watched status of the selected entry
             if let Entry::Episode { .. } = filtered_entries[*current_item] {
                 let episode_id = match &filtered_entries[*current_item] {
@@ -312,6 +307,11 @@ pub fn handle_browse_mode(
                 *filtered_entries = entries.clone();
                 *redraw = true;
             }
+        }
+        KeyCode::F(4) =>{
+            // enter series select mode
+            *mode = Mode::SeriesSelect;
+            *redraw = true;
         }
         KeyCode::Up => {
             if *current_item > 0 {
@@ -387,18 +387,46 @@ pub fn handle_browse_mode(
 
 pub fn handle_series_select_mode(
     code: KeyCode,
+    series_selection: &mut Option<usize>,
     mode: &mut Mode,
     redraw: &mut bool,
+    series: &mut Vec<Series>,
+    episode_id: i32,
+    episode_detail: &mut EpisodeDetail,
+    entries: &mut Vec<Entry>,
+    filtered_entries: &mut Vec<Entry>,
 ) {
     match code {
+        KeyCode::Up => {
+            *series_selection =
+                series_selection.map(|s| s.saturating_sub(1)).or(Some(0));
+            *redraw = true;
+        }
+        KeyCode::Down => {
+            *series_selection =
+                series_selection.map(|s| s.saturating_add(1)).or(Some(0));
+            *redraw = true;
+        }
+        KeyCode::Enter => {
+            // save the series id to the episode, then return to browse mode
+            let series_id = series[series_selection.unwrap()].id;
+            *episode_detail = database::assign_series(series_id, episode_id).expect("Failed to assign series");
+            // Reload entries from the database
+            *entries = database::get_entries().expect("Failed to get entries");
+            *filtered_entries = entries.clone();
+            *mode = Mode::Browse;
+            *redraw = true;
+        }
         KeyCode::Char('+') => {
             // Create a new series
+            *series_selection = None;
             *mode = Mode::SeriesCreate;
             *redraw = true;
         }
         KeyCode::Esc => {
-            // Return to video detail edit mode
-            *mode = Mode::Edit;
+            *series_selection = None;
+            // Return to browse mode
+            *mode = Mode::Browse;
             *redraw = true;
         }
         _ => {}
@@ -413,15 +441,21 @@ pub fn handle_series_create_mode(
     new_series: &mut String,
     edit_cursor_pos: &mut usize,
     series: &mut Vec<Series>,
+    episode_id: i32,
+    episode_detail: &mut EpisodeDetail,
+    entries: &mut Vec<Entry>,
+    filtered_entries: &mut Vec<Entry>,
 ) {
     match code {
         KeyCode::Enter => {
             // save the new series to the database
-            database::create_series(new_series).expect("Failed to create series");
+            *episode_detail = database::create_series_and_assign(new_series, episode_id ).expect("Failed to create series");
             // reload the series list
             *series = database::get_all_series().expect("Failed to get series");
-            // return to series select mode
-            *mode = Mode::SeriesSelect;
+            // Reload entries from the database
+            *entries = database::get_entries().expect("Failed to get entries");
+            *filtered_entries = entries.clone();
+            *mode = Mode::Browse;
             *redraw = true;
         }
         KeyCode::Esc => {
