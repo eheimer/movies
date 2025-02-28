@@ -127,6 +127,33 @@ pub fn get_entries() -> Result<Vec<Entry>> {
     Ok(entries)
 }
 
+pub fn get_entries_for_series(series_id: i32) -> Result<Vec<Entry>> {
+    let conn = DB_CONN.lock().unwrap();
+    let conn = conn.as_ref().expect("Database connection is not initialized");
+
+    let mut entries = Vec::new();
+
+    // Retrieve episodes that are part of the series
+    let mut stmt = conn.prepare(
+        "SELECT id, name, location, 
+              COALESCE(CAST(episode.episode_number AS TEXT), '') as episode_number 
+         FROM episode WHERE series_id = ?1 ORDER BY episode_number, name")?;
+    let episode_iter = stmt.query_map(params![series_id], |row| {
+        Ok(Entry::Episode {
+            id: row.get(0)?,
+            name: row.get(1)?,
+            location: row.get(2)?,
+            episode_number: row.get(3)?,
+        })
+    })?;
+
+    for episode in episode_iter {
+        entries.push(episode?);
+    }
+
+    Ok(entries)
+}
+
 pub fn get_episode_detail(id: i32) -> Result<EpisodeDetail, Box<dyn std::error::Error>> {
     // Fetch details from the database for episode
     let conn = DB_CONN.lock().unwrap();

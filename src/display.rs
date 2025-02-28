@@ -5,7 +5,7 @@ use crate::config::Config;
 use crate::util::{Entry,Mode, truncate_string};
 use crate::terminal::{clear_screen,clear_line,get_terminal_size,print_at,hide_cursor,show_cursor,move_cursor};
 
-const HEADER_SIZE: usize = 4;
+const HEADER_SIZE: usize = 5;
 const FOOTER_SIZE: usize = 0;
 const COL1_WIDTH: usize = 45;
 const MIN_COL2_WIDTH: usize = 20;
@@ -40,12 +40,21 @@ pub fn string_to_fg_color_or_default(color: &str) -> Color {
     string_to_color(color).unwrap_or(Color::Black)
 }
 
-fn draw_header(mode: &Mode, filter: &String) -> io::Result<()> {
+fn draw_header(mode: &Mode, filter: &String, browse_series: bool) -> io::Result<()> {
     let instructions: Vec<&str> = match mode {
-        Mode::Browse => vec![
-            "type to filter, [\u{2191}]/[\u{2193}] navigate, [ENTER] play, [ESC] exit",
-            "[F2] edit, [F3] toggle watched, [F4] series selection",
-        ],
+        Mode::Browse =>  
+            if browse_series {
+                vec![
+                    "type to filter, [\u{2191}]/[\u{2193}] navigate, [ENTER] show episodes, [ESC] exit",
+                    "[F5] reload entries"
+                ]
+            } else {
+                vec![
+                    "type to filter, [\u{2191}]/[\u{2193}] navigate, [ENTER] play, [ESC] exit",
+                    "[F2] edit, [F3] toggle watched, [F4] series selection",
+                    "[F5] reload entries",
+                ]
+            },
         Mode::Edit => vec![
             "[\u{2191}]/[\u{2193}] change field, [ESC] cancel, [F2] save changes",
         ],
@@ -61,7 +70,7 @@ fn draw_header(mode: &Mode, filter: &String) -> io::Result<()> {
         print_at(1,i, &instructions.with(Color::Black).on(Color::White))?;
     }
 
-    print_at(0,2, &format!("filter: {}", filter))?;
+    print_at(0,3, &format!("filter: {}", filter))?;
     Ok(())
 }
 
@@ -81,7 +90,11 @@ pub fn draw_screen(
     new_series: &String,
 ) -> io::Result<()> {
     clear_screen()?;
-    draw_header(mode, filter)?;
+
+    //browse_series is true if the mode is browse and the current item in entries is a series
+    let browse_series = matches!(mode, Mode::Browse) && matches!(entries.get(current_item), Some(Entry::Series { .. }));
+
+    draw_header(mode, filter, browse_series)?;
     
     if entries.is_empty() {
         print_at(0,HEADER_SIZE, 

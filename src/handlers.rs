@@ -313,6 +313,12 @@ pub fn handle_browse_mode(
             *mode = Mode::SeriesSelect;
             *redraw = true;
         }
+        KeyCode::F(5) =>{
+            // reload the entries back to default
+            *entries = database::get_entries().expect("Failed to get entries");
+            *filtered_entries = entries.clone();
+            *redraw = true;
+        }
         KeyCode::Up => {
             if *current_item > 0 {
                 *current_item -= 1;
@@ -347,24 +353,32 @@ pub fn handle_browse_mode(
             *redraw = true;
         }
         KeyCode::Enter => {
-            if playing_file.is_none() {
-                let selected = *current_item;
-                let selected_entry = &filtered_entries[selected];
-                let file_path = match selected_entry {
-                    Entry::Episode { location, .. } => location,
-                    _ => return Ok(true),
-                };
-                let mut player_process = Some(run_video_player(&config, Path::new(file_path))?);
-                *playing_file = Some(file_path.clone());
+            let selected = *current_item;
+            let selected_entry = &filtered_entries[selected].clone();
+            match selected_entry {
+                Entry::Series { id, .. } => {
+                    // If a series is selected, reload the entries with the series filter
+                    *entries = database::get_entries_for_series(*id).expect("Failed to get entries for series");
+                    *filtered_entries = entries.clone();
+                    *mode = Mode::Browse;
+                    *redraw = true;
+                }
+                Entry::Episode { location, .. } => {
+                    // If an episode is selected, play the video
+                    if playing_file.is_none() { // only play one video at a time
+                        let mut player_process = Some(run_video_player(&config, Path::new(location))?);
+                        *playing_file = Some(location.to_string());
 
-                // Spawn a thread to wait for the process to finish
-                let tx = tx.clone();
-                thread::spawn(move || {
-                    if let Some(mut process) = player_process.take() {
-                        process.wait().ok();
-                        tx.send(()).ok();
+                        // Spawn a thread to wait for the process to finish
+                        let tx = tx.clone();
+                        thread::spawn(move || {
+                            if let Some(mut process) = player_process.take() {
+                                process.wait().ok();
+                                tx.send(()).ok();
+                            }
+                        });
                     }
-                });
+                }
             }
             *redraw = true;
         }
