@@ -51,7 +51,7 @@ fn draw_header(mode: &Mode, filter: &String, browse_series: bool) -> io::Result<
             } else {
                 vec![
                     "type to filter, [\u{2191}]/[\u{2193}] navigate, [ENTER] play, [ESC] exit",
-                    "[F2] edit, [F3] toggle watched, [F4] series selection",
+                    "[F2] edit, [F3] toggle watched, [F4] assign to series",
                     "[F5] reload entries",
                 ]
             },

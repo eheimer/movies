@@ -87,7 +87,12 @@ pub fn handle_edit_mode(
                 _ => 0,
             };
             let _ = database::update_episode_detail(episode_id, edit_details);
-            *entries = database::get_entries().expect("Failed to get entries");
+            // Reload entries based on whether the episode is part of a series or not
+            if let Some(series) = &edit_details.series {
+                *entries = database::get_entries_for_series(series.id).expect("Failed to get entries for series");
+            } else {
+                *entries = database::get_entries().expect("Failed to get entries");
+            }
             *filtered_entries = entries.clone();
             *mode = Mode::Browse;
             *edit_cursor_pos = 0;
