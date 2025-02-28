@@ -126,7 +126,9 @@ pub fn draw_screen(
             print_at(0, i - *first_entry + HEADER_SIZE, &formatted_text)?;
 
         }
-        draw_detail_window(&entries[current_item], &mode, edit_details, edit_field, edit_cursor_pos)?;
+        if !browse_series {
+            draw_detail_window(&entries[current_item], &mode, edit_details, edit_field, edit_cursor_pos)?;
+        }
         if let Mode::SeriesSelect | Mode::SeriesCreate = mode {
             draw_series_window(&mode, &series, &new_series, series_selection, config)?;
         }
