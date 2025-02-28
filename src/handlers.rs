@@ -107,7 +107,7 @@ pub fn handle_edit_mode(
             if *edit_field == 4 {
                 *edit_field = 3;
             }
-            if *edit_field == 6 || *edit_field == 7 {
+            if *edit_field == 6 {
                 *edit_field = 5;
             }
             *edit_cursor_pos = 0;
@@ -121,8 +121,8 @@ pub fn handle_edit_mode(
             if *edit_field == 4 {
                 *edit_field = 5;
             }
-            if *edit_field == 6 || *edit_field == 7 {
-                *edit_field = 8;
+            if *edit_field == 6 {
+                *edit_field = 7;
             }
             *edit_cursor_pos = 0;
             *redraw = true;
@@ -249,17 +249,56 @@ pub fn handle_edit_mode(
             *edit_cursor_pos = 0;
             *redraw = true;
         }
+        KeyCode::Char('+') if *edit_field == 7 || *edit_field == 8 => {
+            match *edit_field {
+                //7 => edit_details.season += 1,
+                8 => {
+                    if let Ok(mut episode_number) = edit_details.episode_number.parse::<i32>() {
+                        episode_number += 1;
+                        edit_details.episode_number = episode_number.to_string();
+                    } else {
+                        edit_details.episode_number = "0".to_string();
+                    }
+                }
+                _ => {}
+            }
+            *redraw = true;
+        }
+        KeyCode::Char('-') if *edit_field == 7 || *edit_field == 8 => {
+            match *edit_field {
+                // 7 => {
+                //     if edit_details.season > 0 {
+                //         edit_details.season -= 1;
+                //     }
+                // }
+                8 => {
+                    if let Ok(mut episode_number) = edit_details.episode_number.parse::<i32>() {
+                        if episode_number > 0 {
+                            episode_number -= 1;
+                            edit_details.episode_number = episode_number.to_string();
+                        }
+                    } else {
+                        edit_details.episode_number = "0".to_string();
+                    }
+                }
+                _ => {}
+            }
+            *redraw = true;
+        }
         KeyCode::Char(c) => {
+            let mut allow_edit = true;
             match *edit_field {
                 2 => edit_details.title.insert(*edit_cursor_pos, c),
                 3 => edit_details.year.insert(*edit_cursor_pos, c),
                 4 => edit_details.watched.insert(*edit_cursor_pos, c),
                 5 => edit_details.length.insert(*edit_cursor_pos, c),
-                8 => edit_details.episode_number.insert(*edit_cursor_pos, c),
-                _ => {}
+                //8 => edit_details.episode_number.insert(*edit_cursor_pos, c),
+                _ => { allow_edit = false;}
             }
-            *edit_cursor_pos += 1;
-            *redraw = true;
+            if allow_edit {
+                *edit_cursor_pos += 1;
+                *redraw = true;
+            }
         }
         _ => {}
     }

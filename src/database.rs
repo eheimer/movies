@@ -56,6 +56,39 @@ pub fn initialize_database(db_path: &str) -> Result<()> {
         )",
         [],
     )?;
+    conn.execute(
+        "UPDATE episode SET season_id = NULL WHERE series_id IS NULL",
+        [],
+    )?;
+    conn.execute(
+        "UPDATE episode 
+         SET season_id = NULL 
+         WHERE season_id IS NOT NULL 
+         AND (SELECT series_id FROM season WHERE id = episode.season_id) != episode.series_id",
+        [],
+    )?;
+    conn.execute(
+        "UPDATE episode SET episode_number = NULL WHERE season_id IS NULL",
+        [],
+    )?;
+    conn.execute(
+        "DELETE FROM season 
+         WHERE series_id IN (
+             SELECT id FROM series 
+             WHERE id NOT IN (SELECT DISTINCT series_id FROM episode WHERE series_id IS NOT NULL)
+         )",
+        [],
+    )?;
+    conn.execute(
+        "DELETE FROM series 
+         WHERE id NOT IN (SELECT DISTINCT series_id FROM episode WHERE series_id IS NOT NULL)",
+        [],
+    )?;
+    conn.execute(
+        "DELETE FROM season 
+         WHERE id NOT IN (SELECT DISTINCT season_id FROM episode WHERE season_id IS NOT NULL)",
+        [],
+    )?;
     Ok(())
 }
 
