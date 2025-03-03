@@ -5,14 +5,16 @@ mod util;
 mod dto;
 mod terminal;
 mod handlers;
+mod episode_field;
 
 use std::panic;
 use config::{Config, read_config};
 use database::{get_entries, initialize_database};
 use dto::EpisodeDetail;
 use display::draw_screen;
+use episode_field::EpisodeField;
 use terminal::{initialize_terminal, restore_terminal};
-use util::{Entry, Mode, pad_string_as_number};
+use util::{Entry, Mode};
 use std::io;
 use std::sync::mpsc::{self, Sender, Receiver};
 use std::time::Duration;
@@ -27,7 +29,7 @@ fn main_loop(mut entries: Vec<Entry>, config: Config) -> io::Result<()> {
     let mut mode = Mode::Browse;
     let mut entry_path = String::new();
     let mut first_entry = 0;
-    let mut edit_field = 2;
+    let mut edit_field = EpisodeField::Title;
     let mut edit_cursor_pos: usize = 0;
     let mut edit_details = EpisodeDetail {
             title: String::new(),

@@ -1,7 +1,9 @@
 use crossterm::style::{Color, Stylize};
 use std::io;
+use std::convert::From;
 use crate::dto::{EpisodeDetail,Series};
 use crate::config::Config;
+use crate::episode_field::EpisodeField;
 use crate::util::{Entry,Mode, truncate_string};
 use crate::terminal::{clear_screen,clear_line,get_terminal_size,print_at,hide_cursor,show_cursor,move_cursor};
 
@@ -83,7 +85,7 @@ pub fn draw_screen(
     mode: &Mode,
     entry_path: &String,
     edit_details: &EpisodeDetail,
-    edit_field: usize,
+    edit_field: EpisodeField,
     edit_cursor_pos: usize,
     series: &Vec<Series>,
     series_selection: &mut Option<usize>,
@@ -137,7 +139,7 @@ pub fn draw_screen(
     Ok(())
 }
 
-fn draw_detail_window(entry: &Entry, mode: &Mode, edit_details: &EpisodeDetail, edit_field: usize, edit_cursor_pos: usize) -> io::Result<()> {
+fn draw_detail_window(entry: &Entry, mode: &Mode, edit_details: &EpisodeDetail, edit_field: EpisodeField, edit_cursor_pos: usize) -> io::Result<()> {
     let start_col: usize = COL1_WIDTH + 2;
     let start_row = HEADER_SIZE;
     let sidebar_width = get_sidebar_width()?;
@@ -160,31 +162,30 @@ fn draw_detail_window(entry: &Entry, mode: &Mode, edit_details: &EpisodeDetail, 
     let path = location.rsplitn(2, '/').nth(1).unwrap_or("");
     let filename = location.rsplitn(2, '/').next().unwrap_or("");
 
-    let detail_lines = vec![
-        format!("Path: {}", path),
-        format!("Filename: {}", filename),
-        format!("Title: {}", edit_details.title),
-        format!("Year: {}", edit_details.year),
-        format!("Watched: {}", edit_details.watched),
-        format!("Length: {}", edit_details.length),
-        format!("Series: {}", edit_details.series.as_ref().map_or(String::new(), |s| s.name.clone())),
-        format!("Season: {}", edit_details.season.as_ref().map_or(String::new(), |s| s.number.to_string())),
-        format!("Ep #: {}", edit_details.episode_number),
-    ];
+
+    let mut detail_lines = Vec::new();
+
+    for i in 0..=8 {
+        let field = EpisodeField::from(i);
+        let value = if i == 0 {
+            path
+        } else if i == 1 {
+            filename
+        } else if field.get_field_value(edit_details).is_empty() {
+            ""
+        } else {
+            field.get_field_value(edit_details)
+        };
+        detail_lines.push(format!("{}: {}", field.display_name(), value));        
+    }
 
     let mut edit_cursor_min: usize = 0;
+    if edit_mode && edit_field.is_editable() {
+        edit_cursor_min = edit_field.display_name().len() + 2;
+    }
 
     for (i, line) in detail_lines.iter().enumerate() {
-        if edit_mode && i == edit_field {
-            let field_length = match edit_field {
-                2 => edit_details.title.len(),
-                3 => edit_details.year.len(),
-                4 => edit_details.watched.len(),
-                5 => edit_details.length.len(),
-                8 => edit_details.episode_number.len(),
-                _ => 0,
-            };
-            edit_cursor_min = line.len() - field_length;
+        if edit_mode && edit_field.is_editable() {
             print_at(start_col + 1, start_row + 1 + i, &format!("{}", truncate_string(line, sidebar_width - 4)))?;
         } else {
             print_at(start_col + 1, start_row + 1 + i, &format!("{}", truncate_string(line, sidebar_width - 2)))?;
@@ -192,7 +193,7 @@ fn draw_detail_window(entry: &Entry, mode: &Mode, edit_details: &EpisodeDetail, 
     }
     // Put the cursor at the end of the current edit_field line
     if edit_mode {
-        move_cursor(start_col + 1 + edit_cursor_min + edit_cursor_pos, start_row + 1 + edit_field)?;
+        move_cursor(start_col + 1 + edit_cursor_min + edit_cursor_pos, start_row + 1 + usize::from(edit_field))?;
     }
 
     Ok(())

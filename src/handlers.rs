@@ -9,6 +9,7 @@ use crate::database;
 use crate::display;
 use crate::dto::EpisodeDetail;
 use crate::dto::Series;
+use crate::episode_field::EpisodeField;
 use display::get_max_displayed_items;
 use crate::util::{Entry, Mode, run_video_player};
 use crate::config::Config;
@@ -75,7 +76,7 @@ pub fn handle_edit_mode(
     edit_details: &mut EpisodeDetail,
     entries: &mut Vec<Entry>,
     mode: &mut Mode,
-    edit_field: &mut usize,
+    edit_field: &mut EpisodeField,
     edit_cursor_pos: &mut usize,
     redraw: &mut bool,
 ) {
@@ -99,44 +100,32 @@ pub fn handle_edit_mode(
             *redraw = true;
         }
         KeyCode::Up => {
-            if *edit_field == 2 {
-                *edit_field = 8;
-            } else {
-                *edit_field -= 1;
-            }
-            if *edit_field == 4 {
-                *edit_field = 3;
-            }
-            if *edit_field == 6 {
-                *edit_field = 5;
+            loop {
+                let mut field_value: usize = (*edit_field).into();
+                field_value = if field_value == 0 { 8 } else { field_value - 1 };
+                *edit_field = EpisodeField::from(field_value);
+                if edit_field.is_editable() {
+                    break;
+                }
             }
             *edit_cursor_pos = 0;
             *redraw = true;
         }
         KeyCode::Down => {
-            *edit_field = (*edit_field + 1) % 9;
-            if *edit_field < 2 {
-                *edit_field = 2;
-            }
-            if *edit_field == 4 {
-                *edit_field = 5;
-            }
-            if *edit_field == 6 {
-                *edit_field = 7;
+            loop {
+                let mut field_value: usize = (*edit_field).into();
+                field_value = (field_value + 1) % 9;
+                *edit_field = EpisodeField::from(field_value);
+                if edit_field.is_editable() {
+                    break;
+                }
             }
             *edit_cursor_pos = 0;
             *redraw = true;
         }
         KeyCode::Left if modifiers.contains(event::KeyModifiers::CONTROL) => {
             // jump back in the current field by words (separated by spaces)
-            let field = match *edit_field {
-                2 => &edit_details.title,
-                3 => &edit_details.year,
-                4 => &edit_details.watched,
-                5 => &edit_details.length,
-                8 => &edit_details.episode_number,
-                _ => &String::new(),
-            };
+            let field = edit_field.get_field_value(edit_details);
             if *edit_cursor_pos > 0 {
                 let mut i = *edit_cursor_pos - 1;
                 while i > 0 && field.chars().nth(i - 1).unwrap() == ' ' {
@@ -157,14 +146,7 @@ pub fn handle_edit_mode(
         }
         KeyCode::Right if modifiers.contains(event::KeyModifiers::CONTROL) => {
             // jump forward in the current field by words (separated by spaces)
-            let field = match *edit_field {
-                2 => &edit_details.title,
-                3 => &edit_details.year,
-                4 => &edit_details.watched,
-                5 => &edit_details.length,
-                8 => &edit_details.episode_number,
-                _ => &String::new(),
-            };
+            let field = edit_field.get_field_value(edit_details);
             if *edit_cursor_pos < field.len() {
                 let mut i = *edit_cursor_pos;
                 while i < field.len() && field.chars().nth(i).unwrap() != ' ' {
@@ -178,14 +160,7 @@ pub fn handle_edit_mode(
             }
         }
         KeyCode::Right => {
-            let field_length = match *edit_field {
-                2 => edit_details.title.len(),
-                3 => edit_details.year.len(),
-                4 => edit_details.watched.len(),
-                5 => edit_details.length.len(),
-                8 => edit_details.episode_number.len(),
-                _ => 0,
-            };
+            let field_length = edit_field.get_field_value(&edit_details).len();
             if *edit_cursor_pos < field_length {
                 *edit_cursor_pos += 1;
             }
@@ -196,14 +171,7 @@ pub fn handle_edit_mode(
             *redraw = true;
         }
         KeyCode::End => {
-            let field_length = match *edit_field {
-                2 => edit_details.title.len(),
-                3 => edit_details.year.len(),
-                4 => edit_details.watched.len(),
-                5 => edit_details.length.len(),
-                8 => edit_details.episode_number.len(),
-                _ => 0,
-            };
+            let field_length = edit_field.get_field_value(&edit_details).len();
             *edit_cursor_pos = field_length;
             *redraw = true;
         }
@@ -211,11 +179,11 @@ pub fn handle_edit_mode(
             // removes the character BEFORE the edit_cursor_pos as long as edit_cursor_pos is > 0, otherwise it does nothing
             if *edit_cursor_pos > 0 {
                 match *edit_field {
-                    2 => { edit_details.title.remove(*edit_cursor_pos - 1); }
-                    3 => { edit_details.year.remove(*edit_cursor_pos - 1); }
-                    4 => { edit_details.watched.remove(*edit_cursor_pos - 1); }
-                    5 => { edit_details.length.remove(*edit_cursor_pos - 1); }
-                    8 => { edit_details.episode_number.remove(*edit_cursor_pos - 1); }
+                    EpisodeField::Title => { edit_details.title.remove(*edit_cursor_pos - 1); }
+                    EpisodeField::Year => { edit_details.year.remove(*edit_cursor_pos - 1); }
+                    EpisodeField::Watched => { edit_details.watched.remove(*edit_cursor_pos - 1); }
+                    EpisodeField::Length => { edit_details.length.remove(*edit_cursor_pos - 1); }
+                    EpisodeField::EpisodeNumber => { edit_details.episode_number.remove(*edit_cursor_pos - 1); }
                     _ => {}
                 }
                 *edit_cursor_pos -= 1;
@@ -224,21 +192,14 @@ pub fn handle_edit_mode(
         }
         KeyCode::Delete => {
             // removes the character AT the edit_cursor_pos as long as edit_cursor_pos is < the length of the field, otherwise it does nothing
-            let field_length = match *edit_field {
-                2 => edit_details.title.len(),
-                3 => edit_details.year.len(),
-                4 => edit_details.watched.len(),
-                5 => edit_details.length.len(),
-                8 => edit_details.episode_number.len(),
-                _ => 0,
-            };
+            let field_length = edit_field.get_field_value(edit_details).len();
             if *edit_cursor_pos < field_length {
                 match *edit_field {
-                    2 => { edit_details.title.remove(*edit_cursor_pos); }
-                    3 => { edit_details.year.remove(*edit_cursor_pos); }
-                    4 => { edit_details.watched.remove(*edit_cursor_pos); }
-                    5 => { edit_details.length.remove(*edit_cursor_pos); }
-                    8 => { edit_details.episode_number.remove(*edit_cursor_pos); }
+                    EpisodeField::Title => { edit_details.title.remove(*edit_cursor_pos); }
+                    EpisodeField::Year => { edit_details.year.remove(*edit_cursor_pos); }
+                    EpisodeField::Watched => { edit_details.watched.remove(*edit_cursor_pos); }
+                    EpisodeField::Length => { edit_details.length.remove(*edit_cursor_pos); }
+                    EpisodeField::EpisodeNumber => { edit_details.episode_number.remove(*edit_cursor_pos); }
                     _ => {}
                 }
                 *redraw = true;
@@ -249,51 +210,35 @@ pub fn handle_edit_mode(
             *edit_cursor_pos = 0;
             *redraw = true;
         }
-        KeyCode::Char('+') if *edit_field == 7 || *edit_field == 8 => {
-            match *edit_field {
-                //7 => edit_details.season += 1,
-                8 => {
-                    if let Ok(mut episode_number) = edit_details.episode_number.parse::<i32>() {
-                        episode_number += 1;
-                        edit_details.episode_number = episode_number.to_string();
-                    } else {
-                        edit_details.episode_number = "0".to_string();
-                    }
-                }
-                _ => {}
+        KeyCode::Char('+') if *edit_field == EpisodeField::EpisodeNumber => {
+            if let Ok(mut episode_number) = edit_details.episode_number.parse::<i32>() {
+                episode_number += 1;
+                edit_details.episode_number = episode_number.to_string();
+            } else {
+                edit_details.episode_number = "0".to_string();
             }
             *redraw = true;
         }
-        KeyCode::Char('-') if *edit_field == 7 || *edit_field == 8 => {
-            match *edit_field {
-                // 7 => {
-                //     if edit_details.season > 0 {
-                //         edit_details.season -= 1;
-                //     }
-                // }
-                8 => {
-                    if let Ok(mut episode_number) = edit_details.episode_number.parse::<i32>() {
-                        if episode_number > 0 {
-                            episode_number -= 1;
-                            edit_details.episode_number = episode_number.to_string();
-                        }
-                    } else {
-                        edit_details.episode_number = "0".to_string();
-                    }
+        KeyCode::Char('-') if *edit_field == EpisodeField::EpisodeNumber => {
+            if let Ok(mut episode_number) = edit_details.episode_number.parse::<i32>() {
+                if episode_number > 0 {
+                    episode_number -= 1;
+                    edit_details.episode_number = episode_number.to_string();
                 }
-                _ => {}
+            } else {
+                edit_details.episode_number = "0".to_string();
             }
             *redraw = true;
         }
         KeyCode::Char(c) => {
             let mut allow_edit = true;
             match *edit_field {
-                2 => edit_details.title.insert(*edit_cursor_pos, c),
-                3 => edit_details.year.insert(*edit_cursor_pos, c),
-                4 => edit_details.watched.insert(*edit_cursor_pos, c),
-                5 => edit_details.length.insert(*edit_cursor_pos, c),
-                //8 => edit_details.episode_number.insert(*edit_cursor_pos, c),
-                _ => { allow_edit = false;}
+                EpisodeField::Title => edit_details.title.insert(*edit_cursor_pos, c),
+                EpisodeField::Year => edit_details.year.insert(*edit_cursor_pos, c),
+                EpisodeField::Watched => edit_details.watched.insert(*edit_cursor_pos, c),
+                EpisodeField::Length => edit_details.length.insert(*edit_cursor_pos, c),
+                EpisodeField::EpisodeNumber => edit_details.episode_number.insert(*edit_cursor_pos, c),
+                _ => { allow_edit = false; }
             }
             if allow_edit {
                 *edit_cursor_pos += 1;
