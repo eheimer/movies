@@ -99,6 +99,8 @@ pub fn handle_edit_mode(
             } else {
                 *entries = database::get_entries().expect("Failed to get entries");
             }
+            // let's set edit_field back to the first field
+            *edit_field = EpisodeField::Title;
             *filtered_entries = entries.clone();
             *mode = Mode::Browse;
             *edit_cursor_pos = 0;
@@ -110,6 +112,16 @@ pub fn handle_edit_mode(
                 field_value = if field_value == 0 { 8 } else { field_value - 1 };
                 *edit_field = EpisodeField::from(field_value);
                 if edit_field.is_editable() {
+                    //special handling for season field
+                    // if the series is not selected, then season should not be editable
+                    if *edit_field == EpisodeField::Season && edit_details.series.is_none() {
+                        continue;
+                    }
+                    //special handling for episode number field
+                    // if the season is not selected, then episode number should not be editable
+                    if *edit_field == EpisodeField::EpisodeNumber && season_number.is_none() {
+                        continue;
+                    }
                     break;
                 }
             }
@@ -122,6 +134,16 @@ pub fn handle_edit_mode(
                 field_value = (field_value + 1) % 9;
                 *edit_field = EpisodeField::from(field_value);
                 if edit_field.is_editable() {
+                    //special handling for season field
+                    // if the series is not selected, then season should not be editable
+                    if *edit_field == EpisodeField::Season && edit_details.series.is_none() {
+                        continue;
+                    }
+                    //special handling for episode number field
+                    // if the season is not selected, then episode number should not be editable
+                    if *edit_field == EpisodeField::EpisodeNumber && season_number.is_none() {
+                        continue;
+                    }
                     break;
                 }
             }
@@ -211,6 +233,7 @@ pub fn handle_edit_mode(
             }
         }
         KeyCode::Esc => {
+            *edit_field = EpisodeField::Title;
             *mode = Mode::Browse;
             *edit_cursor_pos = 0;
             *redraw = true;
