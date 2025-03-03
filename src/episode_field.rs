@@ -59,17 +59,29 @@ impl EpisodeField {
 }
 
 impl EpisodeField {
-    pub fn get_field_value<'a>(self, details: &'a EpisodeDetail) -> &'a str {
+    pub fn get_field_value(self, details: &EpisodeDetail) -> String {
         match self {
-            EpisodeField::Path => "", // Assuming Path is not part of EpisodeDetail
-            EpisodeField::Filename => "", // Assuming Filename is not part of EpisodeDetail
-            EpisodeField::Title => &details.title,
-            EpisodeField::Year => &details.year,
-            EpisodeField::Watched => &details.watched,
-            EpisodeField::Length => &details.length,
-            EpisodeField::Series => "", // Assuming Series is not a simple string field
-            EpisodeField::Season => "", // Assuming Season is not a simple string field
-            EpisodeField::EpisodeNumber => &details.episode_number,
+            EpisodeField::Path => String::new(), // Assuming Path is not part of EpisodeDetail
+            EpisodeField::Filename => String::new(), // Assuming Filename is not part of EpisodeDetail
+            EpisodeField::Title => details.title.clone(),
+            EpisodeField::Year => details.year.clone(),
+            EpisodeField::Watched => details.watched.clone(),
+            EpisodeField::Length => details.length.clone(),
+            EpisodeField::Series => {
+                if let Some(series) = &details.series {
+                    series.name.clone()
+                } else {
+                    String::new()
+                }
+            },
+            EpisodeField::Season => {
+                if let Some(season) = &details.season {
+                  season.number.to_string()
+                } else {
+                    String::new()
+                }
+            }, // Assuming Season is not a simple string field
+            EpisodeField::EpisodeNumber => details.episode_number.clone(),
         }
     }
 }

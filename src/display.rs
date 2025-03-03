@@ -90,6 +90,7 @@ pub fn draw_screen(
     series: &Vec<Series>,
     series_selection: &mut Option<usize>,
     new_series: &String,
+    season_number: Option<usize>,
 ) -> io::Result<()> {
     clear_screen()?;
 
@@ -129,7 +130,7 @@ pub fn draw_screen(
 
         }
         if !browse_series {
-            draw_detail_window(&entries[current_item], &mode, edit_details, edit_field, edit_cursor_pos)?;
+            draw_detail_window(&entries[current_item], &mode, edit_details, edit_field, edit_cursor_pos, season_number)?;
         }
         if let Mode::SeriesSelect | Mode::SeriesCreate = mode {
             draw_series_window(&mode, &series, &new_series, series_selection, config)?;
@@ -139,7 +140,7 @@ pub fn draw_screen(
     Ok(())
 }
 
-fn draw_detail_window(entry: &Entry, mode: &Mode, edit_details: &EpisodeDetail, edit_field: EpisodeField, edit_cursor_pos: usize) -> io::Result<()> {
+fn draw_detail_window(entry: &Entry, mode: &Mode, edit_details: &EpisodeDetail, edit_field: EpisodeField, edit_cursor_pos: usize, season_number: Option<usize>) -> io::Result<()> {
     let start_col: usize = COL1_WIDTH + 2;
     let start_row = HEADER_SIZE;
     let sidebar_width = get_sidebar_width()?;
@@ -167,14 +168,30 @@ fn draw_detail_window(entry: &Entry, mode: &Mode, edit_details: &EpisodeDetail, 
 
     for i in 0..=8 {
         let field = EpisodeField::from(i);
-        let value = if i == 0 {
-            path
-        } else if i == 1 {
-            filename
-        } else if field.get_field_value(edit_details).is_empty() {
-            ""
+        let value: String = if field == EpisodeField::Path {
+            path.to_string()
+        } else if field == EpisodeField::Filename {
+            filename.to_string()
+        } else if field == EpisodeField::Season {
+            if edit_mode {
+                match season_number {
+                    Some(num) => num.to_string(),
+                    None => String::new(),
+                }
+            } else {
+                if let Some(season) = &edit_details.season {
+                    season.number.to_string()
+                } else {
+                    String::new()
+                }
+            }
         } else {
-            field.get_field_value(edit_details)
+            let field_value = field.get_field_value(edit_details);
+            if field_value.is_empty() {
+                String::new()
+            } else {
+                field_value
+            }
         };
         detail_lines.push(format!("{}: {}", field.display_name(), value));        
     }

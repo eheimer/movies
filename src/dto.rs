@@ -11,13 +11,12 @@ pub struct EpisodeDetail{
 
 #[derive(Clone)]
 pub struct Series {
-    pub id: i32,
+    pub id: usize,
     pub name: String,
 }
 
 #[derive(Clone)]
 pub struct Season {
-    pub id: i32,
-    pub series: Series,
-    pub number: i32,
+    pub id: usize,
+    pub number: usize,
 }

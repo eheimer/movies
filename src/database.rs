@@ -160,7 +160,7 @@ pub fn get_entries() -> Result<Vec<Entry>> {
     Ok(entries)
 }
 
-pub fn get_entries_for_series(series_id: i32) -> Result<Vec<Entry>> {
+pub fn get_entries_for_series(series_id: usize) -> Result<Vec<Entry>> {
     let conn = DB_CONN.lock().unwrap();
     let conn = conn.as_ref().expect("Database connection is not initialized");
 
@@ -187,7 +187,7 @@ pub fn get_entries_for_series(series_id: i32) -> Result<Vec<Entry>> {
     Ok(entries)
 }
 
-pub fn get_episode_detail(id: i32) -> Result<EpisodeDetail, Box<dyn std::error::Error>> {
+pub fn get_episode_detail(id: usize) -> Result<EpisodeDetail, Box<dyn std::error::Error>> {
     // Fetch details from the database for episode
     let conn = DB_CONN.lock().unwrap();
     let conn = conn.as_ref().expect("Database connection is not initialized");
@@ -201,7 +201,7 @@ pub fn get_episode_detail(id: i32) -> Result<EpisodeDetail, Box<dyn std::error::
                 series.id as series_id,
                 COALESCE(series.name, '') as series_name, 
                 season.id as season_id,
-                COALESCE(CAST(season.number AS TEXT), '') as season_number, 
+                COALESCE(season.number, '') as season_number, 
                 COALESCE(CAST(episode.episode_number AS TEXT), '') as episode_number
             FROM episode
             LEFT JOIN season ON season.id = episode.season_id AND season.series_id = episode.series_id
@@ -211,7 +211,7 @@ pub fn get_episode_detail(id: i32) -> Result<EpisodeDetail, Box<dyn std::error::
     let mut rows = stmt.query(params![id])?;
 
     if let Some(row) = rows.next()? {
-        let series = if let Some(series_id) = row.get::<_, Option<i32>>(4)? {
+        let series = if let Some(series_id) = row.get::<_, Option<usize>>(4)? {
             Some(Series {
                 id: series_id,
                 name: row.get(5)?,
@@ -220,10 +220,9 @@ pub fn get_episode_detail(id: i32) -> Result<EpisodeDetail, Box<dyn std::error::
             None
         };
 
-        let season = if let Some(season_id) = row.get::<_, Option<i32>>(6)? {
+        let season = if let Some(season_id) = row.get::<_, Option<usize>>(6)? {
             Some(Season {
                 id: season_id,
-                series: series.clone().expect("Season must have a series"),
                 number: row.get(7)?,
             })
         } else {
@@ -244,7 +243,7 @@ pub fn get_episode_detail(id: i32) -> Result<EpisodeDetail, Box<dyn std::error::
     }
 }
 
-pub fn update_episode_detail(id: i32, details: &EpisodeDetail) -> Result<(), Box<dyn std::error::Error>> {
+pub fn update_episode_detail(id: usize, details: &EpisodeDetail) -> Result<(), Box<dyn std::error::Error>> {
     let conn = DB_CONN.lock().unwrap();
     let conn = conn.as_ref().expect("Database connection is not initialized");
 
@@ -264,7 +263,7 @@ pub fn update_episode_detail(id: i32, details: &EpisodeDetail) -> Result<(), Box
     Ok(())
 }
 
-pub fn toggle_watched_status(id: i32) -> Result<(), Box<dyn std::error::Error>> {
+pub fn toggle_watched_status(id: usize) -> Result<(), Box<dyn std::error::Error>> {
     let conn = DB_CONN.lock().unwrap();
     let conn = conn.as_ref().expect("Database connection is not initialized");
 
@@ -297,7 +296,7 @@ pub fn get_all_series() -> Result<Vec<Series>> {
     Ok(series)
 }
 
-pub fn create_series_and_assign(name: &str, episode_id: i32) -> Result<EpisodeDetail> {
+pub fn create_series_and_assign(name: &str, episode_id: usize) -> Result<EpisodeDetail> {
     { // Create a new scope to release the lock after the transaction
         let conn = DB_CONN.lock().unwrap();
         let conn = conn.as_ref().expect("Database connection is not initialized");
@@ -314,7 +313,7 @@ pub fn create_series_and_assign(name: &str, episode_id: i32) -> Result<EpisodeDe
     Ok(get_episode_detail(episode_id).expect("Failed to get episode details"))
 }
 
-pub fn assign_series(series_id: i32, episode_id: i32) -> Result<EpisodeDetail> {
+pub fn assign_series(series_id: usize, episode_id: usize) -> Result<EpisodeDetail> {
     { // Create a new scope to release the lock after the transaction
         let conn = DB_CONN.lock().unwrap();
         let conn = conn.as_ref().expect("Database connection is not initialized");
@@ -324,4 +323,49 @@ pub fn assign_series(series_id: i32, episode_id: i32) -> Result<EpisodeDetail> {
         )?;
     }
     Ok(get_episode_detail(episode_id).expect("Failed to get episode details"))
+}
+
+// can_create_season is a helper function to determine if a season can be created for the series
+// it takes a series_id and a season_number (int) and returns a boolean
+// special rules: 
+//  if the series does not exist, return false
+//  if the season_number is 1 or 0, return true
+//  if the season_number is greater than 1, check if the previous season exists
+//  if the previous season exists, return true
+//  otherwise, return false
+pub fn can_create_season(series_id: Option<usize>, season_number: usize) -> Result<bool> {
+    let conn = DB_CONN.lock().unwrap();
+    let conn = conn.as_ref().expect("Database connection is not initialized");
+
+    if series_id.is_none() {
+        return Ok(false);
+    }
+
+    if season_number <= 1 {
+        return Ok(true);
+    }
+
+    let mut stmt = conn.prepare("SELECT 1 FROM season WHERE series_id = ?1 AND number = ?2")?;
+    let exists: bool = stmt.query_row(params![series_id, season_number - 1], |row| row.get(0))?;
+    Ok(exists)
+}
+
+// create_season_and_assign is a function to create a new season for a series and assign an episode to it
+// it takes a series_id, season_number, and episode_id
+// it returns the season_id of the newly created season
+// it is private and only called from the update_episode_detail function
+pub fn create_season_and_assign(series_id: usize, season_number: usize, episode_id: usize) -> Result<usize> {
+    let conn = DB_CONN.lock().unwrap();
+    let conn = conn.as_ref().expect("Database connection is not initialized");
+
+    conn.execute(
+        "INSERT INTO season (series_id, number) VALUES (?1, ?2)",
+        params![series_id, season_number],
+    )?;
+    let season_id = conn.last_insert_rowid() as usize;
+    conn.execute(
+        "UPDATE episode SET season_id = ?1 WHERE id = ?2",
+        params![season_id, episode_id],
+    )?;
+    Ok(season_id)
 }

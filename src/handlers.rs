@@ -74,6 +74,7 @@ pub fn handle_edit_mode(
     current_item: usize,
     filtered_entries: &mut Vec<Entry>,
     edit_details: &mut EpisodeDetail,
+    season_number: &mut Option<usize>,
     entries: &mut Vec<Entry>,
     mode: &mut Mode,
     edit_field: &mut EpisodeField,
@@ -90,6 +91,10 @@ pub fn handle_edit_mode(
             let _ = database::update_episode_detail(episode_id, edit_details);
             // Reload entries based on whether the episode is part of a series or not
             if let Some(series) = &edit_details.series {
+                // if season_number is not None, call database.create_season_and_assign
+                if let Some(season_number) = season_number {
+                    let _ = database::create_season_and_assign(series.id, *season_number, episode_id).expect("Failed to create season and assign");
+                }
                 *entries = database::get_entries_for_series(series.id).expect("Failed to get entries for series");
             } else {
                 *entries = database::get_entries().expect("Failed to get entries");
@@ -219,6 +224,22 @@ pub fn handle_edit_mode(
             }
             *redraw = true;
         }
+        KeyCode::Char('+') if *edit_field == EpisodeField::Season => {
+            // database::can_create_season returns a boolean indicating whether a season can be created
+            // we need to increment seaons_number first, then pass it to the function
+            // if the function returns false, we need to set season_number back to its original value
+            let original_season_number = *season_number;
+            if season_number.is_none() {
+                *season_number = Some(0);
+            } else {
+                *season_number = Some(season_number.unwrap() + 1 as usize);
+            }
+            if !database::can_create_season(edit_details.series.as_ref().map(|s| s.id), season_number.unwrap()).unwrap_or(false) {
+                *season_number = original_season_number;
+            }
+            
+            *redraw = true;
+        }
         KeyCode::Char('-') if *edit_field == EpisodeField::EpisodeNumber => {
             if let Ok(mut episode_number) = edit_details.episode_number.parse::<i32>() {
                 if episode_number > 0 {
@@ -227,6 +248,16 @@ pub fn handle_edit_mode(
                 }
             } else {
                 edit_details.episode_number = "0".to_string();
+            }
+            *redraw = true;
+        }
+        KeyCode::Char('-') if *edit_field == EpisodeField::Season => {
+            // the decrement will always be valid, so we don't need to check
+            // but it must be >= 0, and if it was None, then it should be set to 0
+            if season_number.is_none() {
+                *season_number = Some(0);
+            } else {
+                *season_number = Some(season_number.unwrap().saturating_sub(1));
             }
             *redraw = true;
         }
@@ -260,6 +291,7 @@ pub fn handle_browse_mode(
     playing_file: &mut Option<String>,
     mode: &mut Mode,
     edit_details: &mut EpisodeDetail,
+    season_number: &mut Option<usize>,
     redraw: &mut bool,
     config: &Config,
     tx: &Sender<()>,
@@ -281,6 +313,10 @@ pub fn handle_browse_mode(
                     _ => 0,
                 };
                 *edit_details = database::get_episode_detail(episode_id).expect("Failed to get entry details");
+                *season_number = match &edit_details.season {
+                    Some(season) => Some(season.number),
+                    None => None,
+                };
                 *redraw = true;
             }
         }
@@ -394,7 +430,7 @@ pub fn handle_series_select_mode(
     mode: &mut Mode,
     redraw: &mut bool,
     series: &mut Vec<Series>,
-    episode_id: i32,
+    episode_id: usize,
     episode_detail: &mut EpisodeDetail,
     entries: &mut Vec<Entry>,
     filtered_entries: &mut Vec<Entry>,
@@ -444,7 +480,7 @@ pub fn handle_series_create_mode(
     new_series: &mut String,
     edit_cursor_pos: &mut usize,
     series: &mut Vec<Series>,
-    episode_id: i32,
+    episode_id: usize,
     episode_detail: &mut EpisodeDetail,
     entries: &mut Vec<Entry>,
     filtered_entries: &mut Vec<Entry>,

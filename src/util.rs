@@ -5,8 +5,8 @@ use crate::config::Config;
 
 #[derive(Debug, Clone)]
 pub enum Entry {
-  Series { id: i32, name: String},
-  Episode { id: i32, name: String, location: String, episode_number: String},
+  Series { id: usize, name: String},
+  Episode { id: usize, name: String, location: String, episode_number: String},
 }
 
 pub enum Mode {
@@ -17,6 +17,8 @@ pub enum Mode {
     SeriesCreate, // create a new series
 }
 
+//TODO: this might need to be moved to database.rs or at least
+// utilized by the get_all_entries function for sorting the episodes
 pub fn pad_string_as_number(s: &str, width: usize) -> String {
     let mut padded = String::new();
     for _ in 0..width.saturating_sub(s.len()) {
