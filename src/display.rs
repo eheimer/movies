@@ -42,20 +42,25 @@ pub fn string_to_fg_color_or_default(color: &str) -> Color {
     string_to_color(color).unwrap_or(Color::Black)
 }
 
-fn draw_header(mode: &Mode, filter: &String, browse_series: bool) -> io::Result<()> {
+fn draw_header(mode: &Mode, filter: &String, series_selected: bool, series_filter_active: bool) -> io::Result<()> {
     let instructions: Vec<&str> = match mode {
         Mode::Browse =>  
-            if browse_series {
+            if series_selected {
                 vec![
                     "type to filter, [\u{2191}]/[\u{2193}] navigate, [ENTER] show episodes, [ESC] exit",
-                    "[F5] reload entries"
                 ]
             } else {
-                vec![
-                    "type to filter, [\u{2191}]/[\u{2193}] navigate, [ENTER] play, [ESC] exit",
-                    "[F2] edit, [F3] toggle watched, [F4] assign to series",
-                    "[F5] reload entries",
-                ]
+                if series_filter_active {
+                    vec![
+                        "type to filter, [\u{2191}]/[\u{2193}] navigate, [ENTER] play, [ESC] back",
+                        "[F2] edit, [F3] toggle watched, [F4] assign to series",
+                    ]
+                } else {
+                    vec![
+                        "type to filter, [\u{2191}]/[\u{2193}] navigate, [ENTER] play, [ESC] exit",
+                        "[F2] edit, [F3] toggle watched, [F4] assign to series",
+                    ]
+                }
             },
         Mode::Edit => vec![
             "[\u{2191}]/[\u{2193}] change field, [ESC] cancel, [F2] save changes",
@@ -95,9 +100,12 @@ pub fn draw_screen(
     clear_screen()?;
 
     //browse_series is true if the mode is browse and the current item in entries is a series
-    let browse_series = matches!(mode, Mode::Browse) && matches!(entries.get(current_item), Some(Entry::Series { .. }));
+    let series_selected = matches!(mode, Mode::Browse) && matches!(entries.get(current_item), Some(Entry::Series { .. }));
 
-    draw_header(mode, filter, browse_series)?;
+    //series_filter is true if the mode is browse and the current item in entries is an episode and the series field is not empty
+    let series_filter_active = matches!(mode, Mode::Browse) && matches!(entries.get(current_item), Some(Entry::Episode { .. })) && edit_details.series.is_some();
+
+    draw_header(mode, filter, series_selected, series_filter_active)?;
     
     if entries.is_empty() {
         print_at(0,HEADER_SIZE, 
@@ -129,7 +137,7 @@ pub fn draw_screen(
             print_at(0, i - *first_entry + HEADER_SIZE, &formatted_text)?;
 
         }
-        if !browse_series {
+        if !series_selected {
             draw_detail_window(&entries[current_item], &mode, edit_details, edit_field, edit_cursor_pos, season_number)?;
         }
         if let Mode::SeriesSelect | Mode::SeriesCreate = mode {

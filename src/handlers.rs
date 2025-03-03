@@ -338,12 +338,6 @@ pub fn handle_browse_mode(
             *mode = Mode::SeriesSelect;
             *redraw = true;
         }
-        KeyCode::F(5) =>{
-            // reload the entries back to default
-            *entries = database::get_entries().expect("Failed to get entries");
-            *filtered_entries = entries.clone();
-            *redraw = true;
-        }
         KeyCode::Up => {
             if *current_item > 0 {
                 *current_item -= 1;
@@ -383,9 +377,9 @@ pub fn handle_browse_mode(
             match selected_entry {
                 Entry::Series { id, .. } => {
                     // If a series is selected, reload the entries with the series filter
+                    *current_item = 0;
                     *entries = database::get_entries_for_series(*id).expect("Failed to get entries for series");
                     *filtered_entries = entries.clone();
-                    *mode = Mode::Browse;
                     *redraw = true;
                 }
                 Entry::Episode { location, .. } => {
@@ -405,6 +399,13 @@ pub fn handle_browse_mode(
                     }
                 }
             }
+            *redraw = true;
+        }
+        KeyCode::Esc if matches!(filtered_entries[*current_item], Entry::Episode { .. }) && edit_details.series.is_some() => {
+            *current_item = 0;
+            search.clear();
+            *entries = database::get_entries().expect("Failed to get entries");
+            *filtered_entries = entries.clone();
             *redraw = true;
         }
         KeyCode::Esc => return Ok(false),
