@@ -93,9 +93,11 @@ pub fn handle_edit_mode(
             if let Some(series) = &edit_details.series {
                 // if season_number is not None, call database.create_season_and_assign
                 if let Some(season_number) = season_number {
-                    let _ = database::create_season_and_assign(series.id, *season_number, episode_id).expect("Failed to create season and assign");
+                    let season_id = database::create_season_and_assign(series.id, *season_number, episode_id).expect("Failed to create season and assign");
+                    *entries = database::get_entries_for_season(season_id).expect("Failed to get entries for season");
+                } else {
+                    *entries = database::get_entries_for_series(series.id).expect("Failed to get entries for series");
                 }
-                *entries = database::get_entries_for_series(series.id).expect("Failed to get entries for series");
             } else {
                 *entries = database::get_entries().expect("Failed to get entries");
             }
