@@ -42,12 +42,16 @@ pub fn string_to_fg_color_or_default(color: &str) -> Color {
     string_to_color(color).unwrap_or(Color::Black)
 }
 
-fn draw_header(mode: &Mode, filter: &String, series_selected: bool, series_filter_active: bool) -> io::Result<()> {
+fn draw_header(mode: &Mode, filter: &String, series_selected: bool, season_selected: bool, series_filter_active: bool) -> io::Result<()> {
     let instructions: Vec<&str> = match mode {
         Mode::Browse =>  
             if series_selected {
                 vec![
                     "type to filter, [\u{2191}]/[\u{2193}] navigate, [ENTER] show episodes, [ESC] exit",
+                ]
+            } else if season_selected {
+                vec![
+                    "type to filter, [\u{2191}]/[\u{2193}] navigate, [ENTER] show episodes, [ESC] back",
                 ]
             } else {
                 if series_filter_active {
@@ -101,11 +105,12 @@ pub fn draw_screen(
 
     //browse_series is true if the mode is browse and the current item in entries is a series
     let series_selected = matches!(mode, Mode::Browse) && matches!(entries.get(current_item), Some(Entry::Series { .. }));
+    let season_selected = matches!(mode, Mode::Browse) && matches!(entries.get(current_item), Some(Entry::Season { .. }));
 
     //series_filter is true if the mode is browse and the current item in entries is an episode and the series field is not empty
     let series_filter_active = matches!(mode, Mode::Browse) && matches!(entries.get(current_item), Some(Entry::Episode { .. })) && edit_details.series.is_some();
 
-    draw_header(mode, filter, series_selected, series_filter_active)?;
+    draw_header(mode, filter, series_selected, season_selected, series_filter_active)?;
     
     if entries.is_empty() {
         print_at(0,HEADER_SIZE, 
@@ -128,6 +133,7 @@ pub fn draw_screen(
             let display_text = match entry {
                 Entry::Series { name, .. } => format!("[{}]", truncate_string(name,COL1_WIDTH)).with(Color::Blue),
                 Entry::Episode { name, .. } => truncate_string(name,COL1_WIDTH).clone().stylize(),
+                Entry::Season { number, .. } => format!("Season {}", number).stylize(),
             };
 
             let mut formatted_text = format!("{}", display_text);
@@ -137,7 +143,7 @@ pub fn draw_screen(
             print_at(0, i - *first_entry + HEADER_SIZE, &formatted_text)?;
 
         }
-        if !series_selected {
+        if !series_selected && !season_selected {
             draw_detail_window(&entries[current_item], &mode, edit_details, edit_field, edit_cursor_pos, season_number)?;
         }
         if let Mode::SeriesSelect | Mode::SeriesCreate = mode {

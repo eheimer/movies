@@ -5,8 +5,9 @@ use crate::config::Config;
 
 #[derive(Debug, Clone)]
 pub enum Entry {
-  Series { id: usize, name: String},
-  Episode { id: usize, name: String, location: String, episode_number: String},
+  Series { series_id: usize, name: String},
+  Season { season_id: usize, number: usize, series_id: usize},
+  Episode { episode_id: usize, name: String, location: String, episode_number: String},
 }
 
 pub enum Mode {

@@ -130,7 +130,7 @@ pub fn get_entries() -> Result<Vec<Entry>> {
     let mut stmt = conn.prepare("SELECT id, name FROM series ORDER BY name")?;
     let series_iter = stmt.query_map([], |row| {
         Ok(Entry::Series {
-            id: row.get(0)?,
+            series_id: row.get(0)?,
             name: row.get(1)?,
         })
     })?;
@@ -146,7 +146,7 @@ pub fn get_entries() -> Result<Vec<Entry>> {
          FROM episode WHERE series_id IS NULL ORDER BY episode_number, name")?;
     let episode_iter = stmt.query_map([], |row| {
         Ok(Entry::Episode {
-            id: row.get(0)?,
+            episode_id: row.get(0)?,
             name: row.get(1)?,
             location: row.get(2)?,
             episode_number: row.get(3)?,
@@ -166,14 +166,55 @@ pub fn get_entries_for_series(series_id: usize) -> Result<Vec<Entry>> {
 
     let mut entries = Vec::new();
 
-    // Retrieve episodes that are part of the series
+    // Retrieve seasons for the selected series
+    let mut stmt = conn.prepare("SELECT id, number FROM season WHERE series_id = ?1 ORDER BY number")?;
+    let season_iter = stmt.query_map(params![series_id], |row| {
+        Ok(Entry::Season {
+            season_id: row.get(0)?,
+            number: row.get(1)?,
+            series_id,
+        })
+    })?;
+
+    for season in season_iter {
+        entries.push(season?);
+    }
+
+    // Retrieve episodes that are part of the series but not part of a season
     let mut stmt = conn.prepare(
         "SELECT id, name, location, 
               COALESCE(CAST(episode.episode_number AS TEXT), '') as episode_number 
-         FROM episode WHERE series_id = ?1 ORDER BY episode_number, name")?;
+         FROM episode WHERE series_id = ?1 AND season_id IS NULL ORDER BY episode_number, name")?;
     let episode_iter = stmt.query_map(params![series_id], |row| {
         Ok(Entry::Episode {
-            id: row.get(0)?,
+            episode_id: row.get(0)?,
+            name: row.get(1)?,
+            location: row.get(2)?,
+            episode_number: row.get(3)?,
+        })
+    })?;
+
+    for episode in episode_iter {
+        entries.push(episode?);
+    }
+
+    Ok(entries)
+}
+
+pub fn get_entries_for_season(season_id: usize) -> Result<Vec<Entry>> {
+    let conn = DB_CONN.lock().unwrap();
+    let conn = conn.as_ref().expect("Database connection is not initialized");
+
+    let mut entries = Vec::new();
+
+    // Retrieve episodes that are part of the season
+    let mut stmt = conn.prepare(
+        "SELECT id, name, location, 
+              COALESCE(CAST(episode.episode_number AS TEXT), '') as episode_number 
+         FROM episode WHERE season_id = ?1 ORDER BY episode_number, name")?;
+    let episode_iter = stmt.query_map(params![season_id], |row| {
+        Ok(Entry::Episode {
+            episode_id: row.get(0)?,
             name: row.get(1)?,
             location: row.get(2)?,
             episode_number: row.get(3)?,
@@ -358,14 +399,27 @@ pub fn create_season_and_assign(series_id: usize, season_number: usize, episode_
     let conn = DB_CONN.lock().unwrap();
     let conn = conn.as_ref().expect("Database connection is not initialized");
 
-    conn.execute(
-        "INSERT INTO season (series_id, number) VALUES (?1, ?2)",
-        params![series_id, season_number],
-    )?;
-    let season_id = conn.last_insert_rowid() as usize;
-    conn.execute(
-        "UPDATE episode SET season_id = ?1 WHERE id = ?2",
-        params![season_id, episode_id],
-    )?;
-    Ok(season_id)
+    //first, try to retrieve an existing season based on the series_id and season_number
+    let mut stmt = conn.prepare("SELECT id FROM season WHERE series_id = ?1 AND number = ?2")?;
+    let season_id: Option<usize> = stmt.query_row(params![series_id, season_number], |row| row.get(0)).ok();
+
+    if let Some(season_id) = season_id {
+        conn.execute(
+            "UPDATE episode SET season_id = ?1 WHERE id = ?2",
+            params![season_id, episode_id],
+        )?;
+        return Ok(season_id);
+    } else {
+        //if the season does not exist, create it
+        conn.execute(
+            "INSERT INTO season (series_id, number) VALUES (?1, ?2)",
+            params![series_id, season_number],
+        )?;
+        let season_id = conn.last_insert_rowid() as usize;
+        conn.execute(
+            "UPDATE episode SET season_id = ?1 WHERE id = ?2",
+            params![season_id, episode_id],
+        )?;
+        Ok(season_id)
+    }
 }

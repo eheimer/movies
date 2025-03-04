@@ -85,7 +85,7 @@ pub fn handle_edit_mode(
         KeyCode::F(2) => {
             // we can only be here if the current entry is an Episode
             let episode_id = match &filtered_entries[current_item] {
-                Entry::Episode { id, .. } => *id,
+                Entry::Episode { episode_id, .. } => *episode_id,
                 _ => 0,
             };
             let _ = database::update_episode_detail(episode_id, edit_details);
@@ -332,7 +332,7 @@ pub fn handle_browse_mode(
             if let Entry::Episode { .. } = filtered_entries[*current_item] {
                 *mode = Mode::Edit;
                 let episode_id = match &filtered_entries[*current_item] {
-                    Entry::Episode { id, .. } => *id,
+                    Entry::Episode { episode_id, .. } => *episode_id,
                     _ => 0,
                 };
                 *edit_details = database::get_episode_detail(episode_id).expect("Failed to get entry details");
@@ -347,7 +347,7 @@ pub fn handle_browse_mode(
             // Toggle the watched status of the selected entry
             if let Entry::Episode { .. } = filtered_entries[*current_item] {
                 let episode_id = match &filtered_entries[*current_item] {
-                    Entry::Episode { id, .. } => *id,
+                    Entry::Episode { episode_id, .. } => *episode_id,
                     _ => 0,
                 };
                 database::toggle_watched_status(episode_id).expect("Failed to toggle watched status");
@@ -398,10 +398,10 @@ pub fn handle_browse_mode(
             let selected = *current_item;
             let selected_entry = &filtered_entries[selected].clone();
             match selected_entry {
-                Entry::Series { id, .. } => {
+                Entry::Series { series_id, .. } => {
                     // If a series is selected, reload the entries with the series filter
                     *current_item = 0;
-                    *entries = database::get_entries_for_series(*id).expect("Failed to get entries for series");
+                    *entries = database::get_entries_for_series(*series_id).expect("Failed to get entries for series");
                     *filtered_entries = entries.clone();
                     *redraw = true;
                 }
@@ -421,10 +421,25 @@ pub fn handle_browse_mode(
                         });
                     }
                 }
+                Entry::Season { season_id, .. } => {
+                    // If a season is selected, reload the entries with the season filter
+                    *current_item = 0;
+                    *entries = database::get_entries_for_season(*season_id).expect("Failed to get entries for season");
+                    *filtered_entries = entries.clone();
+                    *redraw = true;
+                }
             }
             *redraw = true;
         }
-        KeyCode::Esc if matches!(filtered_entries[*current_item], Entry::Episode { .. }) && edit_details.series.is_some() => {
+        KeyCode::Esc if matches!(filtered_entries[*current_item], Entry::Episode { .. }) && edit_details.season.is_some() => {
+            //go back to the season view
+            *current_item = 0;
+            search.clear();
+            *entries = database::get_entries_for_series(edit_details.series.as_ref().unwrap().id).expect("Failed to get entries for series");
+            *filtered_entries = entries.clone();
+            *redraw = true;
+        }
+        KeyCode::Esc if matches!(filtered_entries[*current_item], Entry::Season { .. }) || matches!(filtered_entries[*current_item], Entry::Episode { .. }) && edit_details.series.is_some() => {
             *current_item = 0;
             search.clear();
             *entries = database::get_entries().expect("Failed to get entries");

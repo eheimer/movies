@@ -69,6 +69,7 @@ fn main_loop(mut entries: Vec<Entry>, config: Config) -> io::Result<()> {
                     let name = match entry {
                         Entry::Series { name, .. } => name,
                         Entry::Episode { name, .. } => name,
+                        Entry::Season { number, ..} => &format!("Season {}", number),
                     };
                     let name_lowercase = name.to_lowercase();
                     search_terms.iter().all(|term| name_lowercase.contains(term))
@@ -84,8 +85,8 @@ fn main_loop(mut entries: Vec<Entry>, config: Config) -> io::Result<()> {
             //if we're in Browse mode, we need to populate edit_details before calling draw_screen
             if let Mode::Browse = mode {
                 if !filtered_entries.is_empty() {
-                    if let Entry::Episode { id, .. } = &filtered_entries[current_item] {
-                        selected_entry_id = Some(*id);
+                    if let Entry::Episode { episode_id, .. } = &filtered_entries[current_item] {
+                        selected_entry_id = Some(*episode_id);
                         if let Some(id) = selected_entry_id {
                             edit_details = database::get_episode_detail(id).expect("Failed to get entry details");
                         }
