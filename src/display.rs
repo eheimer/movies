@@ -103,6 +103,8 @@ pub fn draw_screen(
 ) -> io::Result<()> {
     clear_screen()?;
 
+    hide_cursor()?;
+
     //browse_series is true if the mode is browse and the current item in entries is a series
     let series_selected = matches!(mode, Mode::Browse) && matches!(entries.get(current_item), Some(Entry::Series { .. }));
     let season_selected = matches!(mode, Mode::Browse) && matches!(entries.get(current_item), Some(Entry::Season { .. }));
@@ -133,7 +135,7 @@ pub fn draw_screen(
             let display_text = match entry {
                 Entry::Series { name, .. } => format!("[{}]", truncate_string(name,COL1_WIDTH)).with(Color::Blue),
                 Entry::Episode { name, .. } => truncate_string(name,COL1_WIDTH).clone().stylize(),
-                Entry::Season { number, .. } => format!("Season {}", number).stylize(),
+                Entry::Season { number, .. } => format!("Season {}", number).with(Color::Blue),
             };
 
             let mut formatted_text = format!("{}", display_text);
@@ -163,8 +165,6 @@ fn draw_detail_window(entry: &Entry, mode: &Mode, edit_details: &EpisodeDetail, 
     // Show or hide the cursor based on edit_mode
     if edit_mode {
         show_cursor()?;
-    } else {
-        hide_cursor()?;
     }
 
     draw_window(start_col, start_row, sidebar_width, DETAIL_HEIGHT, edit_mode)?;
@@ -265,7 +265,6 @@ fn draw_series_window(mode: &Mode, series: &Vec<Series>, new_series: &String, se
         print_at(series_window_start_col + 1, start_row + 1, &format!("{}", "Type the series name and press [ENTER]:".with(Color::Black).on(Color::White)))?;
         print_at(series_window_start_col + 1, start_row + 2, &format!("{}", new_series))?;
     } else {
-        hide_cursor()?;
         print_at(series_window_start_col + 1, start_row + 1, &format!("{}", "Choose a series or [+] to create".with(Color::Black).on(Color::White)))?;
         for (i, series) in series.iter().enumerate() {
             let display_text = format!("[{}] {}", i + 1, truncate_string(&series.name, SERIES_WIDTH));

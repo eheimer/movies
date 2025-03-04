@@ -184,7 +184,7 @@ pub fn get_entries_for_series(series_id: usize) -> Result<Vec<Entry>> {
     let mut stmt = conn.prepare(
         "SELECT id, name, location, 
               COALESCE(CAST(episode.episode_number AS TEXT), '') as episode_number 
-         FROM episode WHERE series_id = ?1 AND season_id IS NULL ORDER BY episode_number, name")?;
+         FROM episode WHERE series_id = ?1 AND season_id IS NULL ORDER BY year, name")?;
     let episode_iter = stmt.query_map(params![series_id], |row| {
         Ok(Entry::Episode {
             episode_id: row.get(0)?,
