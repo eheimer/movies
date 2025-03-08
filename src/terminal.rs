@@ -1,11 +1,11 @@
-use std::io::{self, stdout, Write};
 use crossterm::{
-    execute,
-    terminal::{self, Clear, ClearType, size},
     cursor,
     event::{DisableMouseCapture, EnableMouseCapture},
+    execute,
+    terminal::{self, size, Clear, ClearType},
     ExecutableCommand,
 };
+use std::io::{self, stdout, Write};
 
 pub fn initialize_terminal() -> io::Result<()> {
     let mut stdout = stdout();
@@ -73,4 +73,3 @@ pub fn flush_stdout() -> io::Result<()> {
     stdout.flush()?;
     Ok(())
 }
-

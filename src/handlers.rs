@@ -1,18 +1,18 @@
 use crossterm::event::{self, KeyCode};
+use std::io;
 use std::path::Path;
 use std::sync::mpsc::Sender;
 use std::thread;
 use walkdir::WalkDir;
-use std::io;
 
+use crate::config::Config;
 use crate::database;
 use crate::display;
 use crate::dto::EpisodeDetail;
 use crate::dto::Series;
 use crate::episode_field::EpisodeField;
+use crate::util::{run_video_player, Entry, Mode};
 use display::get_max_displayed_items;
-use crate::util::{Entry, Mode, run_video_player};
-use crate::config::Config;
 
 pub fn handle_entry_mode(
     code: KeyCode,
@@ -32,16 +32,23 @@ pub fn handle_entry_mode(
                 .filter_map(|e| e.ok())
                 .filter(|e| e.file_type().is_file())
                 .filter(|e| {
-                    e.path().extension()
+                    e.path()
+                        .extension()
                         .and_then(|ext| ext.to_str())
-                        .map_or(false, |ext| config.video_extensions.contains(&ext.to_lowercase()))
+                        .map_or(false, |ext| {
+                            config.video_extensions.contains(&ext.to_lowercase())
+                        })
                 })
                 .map(|e| e.into_path())
                 .collect();
-            display::load_videos(&entry_path, new_entries.len()).expect("Failed to load videos");
+            display::load_videos(entry_path, new_entries.len()).expect("Failed to load videos");
             for entry in &new_entries {
                 let location = entry.to_string_lossy().to_string();
-                let name = entry.file_name().unwrap_or_default().to_string_lossy().to_string();
+                let name = entry
+                    .file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .to_string();
 
                 database::import_episode(&location, &name).expect("Failed to import episode");
             }
@@ -93,10 +100,14 @@ pub fn handle_edit_mode(
             if let Some(series) = &edit_details.series {
                 // if season_number is not None, call database.create_season_and_assign
                 if let Some(season_number) = season_number {
-                    let season_id = database::create_season_and_assign(series.id, *season_number, episode_id).expect("Failed to create season and assign");
-                    *entries = database::get_entries_for_season(season_id).expect("Failed to get entries for season");
+                    let season_id =
+                        database::create_season_and_assign(series.id, *season_number, episode_id)
+                            .expect("Failed to create season and assign");
+                    *entries = database::get_entries_for_season(season_id)
+                        .expect("Failed to get entries for season");
                 } else {
-                    *entries = database::get_entries_for_series(series.id).expect("Failed to get entries for series");
+                    *entries = database::get_entries_for_series(series.id)
+                        .expect("Failed to get entries for series");
                 }
             } else {
                 *entries = database::get_entries().expect("Failed to get entries");
@@ -189,7 +200,7 @@ pub fn handle_edit_mode(
             }
         }
         KeyCode::Right => {
-            let field_length = edit_field.get_field_value(&edit_details).len();
+            let field_length = edit_field.get_field_value(edit_details).len();
             if *edit_cursor_pos < field_length {
                 *edit_cursor_pos += 1;
             }
@@ -200,7 +211,7 @@ pub fn handle_edit_mode(
             *redraw = true;
         }
         KeyCode::End => {
-            let field_length = edit_field.get_field_value(&edit_details).len();
+            let field_length = edit_field.get_field_value(edit_details).len();
             *edit_cursor_pos = field_length;
             *redraw = true;
         }
@@ -208,11 +219,21 @@ pub fn handle_edit_mode(
             // removes the character BEFORE the edit_cursor_pos as long as edit_cursor_pos is > 0, otherwise it does nothing
             if *edit_cursor_pos > 0 {
                 match *edit_field {
-                    EpisodeField::Title => { edit_details.title.remove(*edit_cursor_pos - 1); }
-                    EpisodeField::Year => { edit_details.year.remove(*edit_cursor_pos - 1); }
-                    EpisodeField::Watched => { edit_details.watched.remove(*edit_cursor_pos - 1); }
-                    EpisodeField::Length => { edit_details.length.remove(*edit_cursor_pos - 1); }
-                    EpisodeField::EpisodeNumber => { edit_details.episode_number.remove(*edit_cursor_pos - 1); }
+                    EpisodeField::Title => {
+                        edit_details.title.remove(*edit_cursor_pos - 1);
+                    }
+                    EpisodeField::Year => {
+                        edit_details.year.remove(*edit_cursor_pos - 1);
+                    }
+                    EpisodeField::Watched => {
+                        edit_details.watched.remove(*edit_cursor_pos - 1);
+                    }
+                    EpisodeField::Length => {
+                        edit_details.length.remove(*edit_cursor_pos - 1);
+                    }
+                    EpisodeField::EpisodeNumber => {
+                        edit_details.episode_number.remove(*edit_cursor_pos - 1);
+                    }
                     _ => {}
                 }
                 *edit_cursor_pos -= 1;
@@ -224,11 +245,21 @@ pub fn handle_edit_mode(
             let field_length = edit_field.get_field_value(edit_details).len();
             if *edit_cursor_pos < field_length {
                 match *edit_field {
-                    EpisodeField::Title => { edit_details.title.remove(*edit_cursor_pos); }
-                    EpisodeField::Year => { edit_details.year.remove(*edit_cursor_pos); }
-                    EpisodeField::Watched => { edit_details.watched.remove(*edit_cursor_pos); }
-                    EpisodeField::Length => { edit_details.length.remove(*edit_cursor_pos); }
-                    EpisodeField::EpisodeNumber => { edit_details.episode_number.remove(*edit_cursor_pos); }
+                    EpisodeField::Title => {
+                        edit_details.title.remove(*edit_cursor_pos);
+                    }
+                    EpisodeField::Year => {
+                        edit_details.year.remove(*edit_cursor_pos);
+                    }
+                    EpisodeField::Watched => {
+                        edit_details.watched.remove(*edit_cursor_pos);
+                    }
+                    EpisodeField::Length => {
+                        edit_details.length.remove(*edit_cursor_pos);
+                    }
+                    EpisodeField::EpisodeNumber => {
+                        edit_details.episode_number.remove(*edit_cursor_pos);
+                    }
                     _ => {}
                 }
                 *redraw = true;
@@ -257,12 +288,17 @@ pub fn handle_edit_mode(
             if season_number.is_none() {
                 *season_number = Some(0);
             } else {
-                *season_number = Some(season_number.unwrap() + 1 as usize);
+                *season_number = Some(season_number.unwrap() + 1_usize);
             }
-            if !database::can_create_season(edit_details.series.as_ref().map(|s| s.id), season_number.unwrap()).unwrap_or(false) {
+            if !database::can_create_season(
+                edit_details.series.as_ref().map(|s| s.id),
+                season_number.unwrap(),
+            )
+            .unwrap_or(false)
+            {
                 *season_number = original_season_number;
             }
-            
+
             *redraw = true;
         }
         KeyCode::Char('-') if *edit_field == EpisodeField::EpisodeNumber => {
@@ -293,8 +329,12 @@ pub fn handle_edit_mode(
                 EpisodeField::Year => edit_details.year.insert(*edit_cursor_pos, c),
                 EpisodeField::Watched => edit_details.watched.insert(*edit_cursor_pos, c),
                 EpisodeField::Length => edit_details.length.insert(*edit_cursor_pos, c),
-                EpisodeField::EpisodeNumber => edit_details.episode_number.insert(*edit_cursor_pos, c),
-                _ => { allow_edit = false; }
+                EpisodeField::EpisodeNumber => {
+                    edit_details.episode_number.insert(*edit_cursor_pos, c)
+                }
+                _ => {
+                    allow_edit = false;
+                }
             }
             if allow_edit {
                 *edit_cursor_pos += 1;
@@ -323,7 +363,7 @@ pub fn handle_browse_mode(
 ) -> io::Result<bool> {
     match code {
         KeyCode::Char('l') if modifiers.contains(event::KeyModifiers::CONTROL) => {
-            if entries.len() == 0 {
+            if entries.is_empty() {
                 *mode = Mode::Entry;
                 search.clear();
                 *redraw = true;
@@ -337,11 +377,9 @@ pub fn handle_browse_mode(
                     Entry::Episode { episode_id, .. } => *episode_id,
                     _ => 0,
                 };
-                *edit_details = database::get_episode_detail(episode_id).expect("Failed to get entry details");
-                *season_number = match &edit_details.season {
-                    Some(season) => Some(season.number),
-                    None => None,
-                };
+                *edit_details =
+                    database::get_episode_detail(episode_id).expect("Failed to get entry details");
+                *season_number = edit_details.season.as_ref().map(|season| season.number);
                 *redraw = true;
             }
         }
@@ -352,13 +390,14 @@ pub fn handle_browse_mode(
                     Entry::Episode { episode_id, .. } => *episode_id,
                     _ => 0,
                 };
-                database::toggle_watched_status(episode_id).expect("Failed to toggle watched status");
+                database::toggle_watched_status(episode_id)
+                    .expect("Failed to toggle watched status");
                 *entries = database::get_entries().expect("Failed to get entries");
                 *filtered_entries = entries.clone();
                 *redraw = true;
             }
         }
-        KeyCode::F(4) =>{
+        KeyCode::F(4) => {
             // enter series select mode
             *mode = Mode::SeriesSelect;
             *redraw = true;
@@ -403,14 +442,17 @@ pub fn handle_browse_mode(
                 Entry::Series { series_id, .. } => {
                     // If a series is selected, reload the entries with the series filter
                     *current_item = 0;
-                    *entries = database::get_entries_for_series(*series_id).expect("Failed to get entries for series");
+                    *entries = database::get_entries_for_series(*series_id)
+                        .expect("Failed to get entries for series");
                     *filtered_entries = entries.clone();
                     *redraw = true;
                 }
                 Entry::Episode { location, .. } => {
                     // If an episode is selected, play the video
-                    if playing_file.is_none() { // only play one video at a time
-                        let mut player_process = Some(run_video_player(&config, Path::new(location))?);
+                    if playing_file.is_none() {
+                        // only play one video at a time
+                        let mut player_process =
+                            Some(run_video_player(config, Path::new(location))?);
                         *playing_file = Some(location.to_string());
 
                         // Spawn a thread to wait for the process to finish
@@ -426,22 +468,31 @@ pub fn handle_browse_mode(
                 Entry::Season { season_id, .. } => {
                     // If a season is selected, reload the entries with the season filter
                     *current_item = 0;
-                    *entries = database::get_entries_for_season(*season_id).expect("Failed to get entries for season");
+                    *entries = database::get_entries_for_season(*season_id)
+                        .expect("Failed to get entries for season");
                     *filtered_entries = entries.clone();
                     *redraw = true;
                 }
             }
             *redraw = true;
         }
-        KeyCode::Esc if matches!(filtered_entries[*current_item], Entry::Episode { .. }) && edit_details.season.is_some() => {
+        KeyCode::Esc
+            if matches!(filtered_entries[*current_item], Entry::Episode { .. })
+                && edit_details.season.is_some() =>
+        {
             //go back to the season view
             *current_item = 0;
             search.clear();
-            *entries = database::get_entries_for_series(edit_details.series.as_ref().unwrap().id).expect("Failed to get entries for series");
+            *entries = database::get_entries_for_series(edit_details.series.as_ref().unwrap().id)
+                .expect("Failed to get entries for series");
             *filtered_entries = entries.clone();
             *redraw = true;
         }
-        KeyCode::Esc if matches!(filtered_entries[*current_item], Entry::Season { .. }) || matches!(filtered_entries[*current_item], Entry::Episode { .. }) && edit_details.series.is_some() => {
+        KeyCode::Esc
+            if matches!(filtered_entries[*current_item], Entry::Season { .. })
+                || matches!(filtered_entries[*current_item], Entry::Episode { .. })
+                    && edit_details.series.is_some() =>
+        {
             *current_item = 0;
             search.clear();
             *entries = database::get_entries().expect("Failed to get entries");
@@ -478,19 +529,18 @@ pub fn handle_series_select_mode(
 ) {
     match code {
         KeyCode::Up => {
-            *series_selection =
-                series_selection.map(|s| s.saturating_sub(1)).or(Some(0));
+            *series_selection = series_selection.map(|s| s.saturating_sub(1)).or(Some(0));
             *redraw = true;
         }
         KeyCode::Down => {
-            *series_selection =
-                series_selection.map(|s| s.saturating_add(1)).or(Some(0));
+            *series_selection = series_selection.map(|s| s.saturating_add(1)).or(Some(0));
             *redraw = true;
         }
         KeyCode::Enter => {
             // save the series id to the episode, then return to browse mode
             let series_id = series[series_selection.unwrap()].id;
-            *episode_detail = database::assign_series(series_id, episode_id).expect("Failed to assign series");
+            *episode_detail =
+                database::assign_series(series_id, episode_id).expect("Failed to assign series");
             // Reload entries from the database
             *entries = database::get_entries().expect("Failed to get entries");
             *filtered_entries = entries.clone();
@@ -529,7 +579,8 @@ pub fn handle_series_create_mode(
     match code {
         KeyCode::Enter => {
             // save the new series to the database
-            *episode_detail = database::create_series_and_assign(new_series, episode_id ).expect("Failed to create series");
+            *episode_detail = database::create_series_and_assign(new_series, episode_id)
+                .expect("Failed to create series");
             // reload the series list
             *series = database::get_all_series().expect("Failed to get series");
             // Reload entries from the database

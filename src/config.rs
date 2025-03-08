@@ -17,7 +17,15 @@ impl Default for Config {
             path: ".".to_string(),
             current_fg: "Black".to_string(),
             current_bg: "White".to_string(),
-            video_extensions: vec!["mp4".to_string(), "mkv".to_string(), "avi".to_string(), "mov".to_string(), "flv".to_string(), "wmv".to_string(), "webm".to_string()],
+            video_extensions: vec![
+                "mp4".to_string(),
+                "mkv".to_string(),
+                "avi".to_string(),
+                "mov".to_string(),
+                "flv".to_string(),
+                "wmv".to_string(),
+                "webm".to_string(),
+            ],
             video_player: "/usr/bin/vlc".to_string(),
         }
     }

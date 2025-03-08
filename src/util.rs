@@ -1,19 +1,31 @@
-use std::process::{Command, Child, Stdio};
-use std::path::Path;
-use std::io;
 use crate::config::Config;
+use std::io;
+use std::path::Path;
+use std::process::{Child, Command, Stdio};
 
 #[derive(Debug, Clone)]
 pub enum Entry {
-  Series { series_id: usize, name: String},
-  Season { season_id: usize, number: usize, series_id: usize},
-  Episode { episode_id: usize, name: String, location: String, episode_number: String},
+    Series {
+        series_id: usize,
+        name: String,
+    },
+    Season {
+        season_id: usize,
+        number: usize,
+        series_id: usize,
+    },
+    Episode {
+        episode_id: usize,
+        name: String,
+        location: String,
+        episode_number: String,
+    },
 }
 
 pub enum Mode {
-    Browse, // video browse
-    Edit, // video details edit
-    Entry, // initial load from disk
+    Browse,       // video browse
+    Edit,         // video details edit
+    Entry,        // initial load from disk
     SeriesSelect, // series selection
     SeriesCreate, // create a new series
 }

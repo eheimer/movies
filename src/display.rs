@@ -1,11 +1,13 @@
-use crossterm::style::{Color, Stylize};
-use std::io;
-use std::convert::From;
-use crate::dto::{EpisodeDetail,Series};
 use crate::config::Config;
+use crate::dto::{EpisodeDetail, Series};
 use crate::episode_field::EpisodeField;
-use crate::util::{Entry,Mode, truncate_string};
-use crate::terminal::{clear_screen,clear_line,get_terminal_size,print_at,hide_cursor,show_cursor,move_cursor};
+use crate::terminal::{
+    clear_line, clear_screen, get_terminal_size, hide_cursor, move_cursor, print_at, show_cursor,
+};
+use crate::util::{truncate_string, Entry, Mode};
+use crossterm::style::{Color, Stylize};
+use std::convert::From;
+use std::io;
 
 const HEADER_SIZE: usize = 5;
 const FOOTER_SIZE: usize = 0;
@@ -16,7 +18,7 @@ const SERIES_WIDTH: usize = 40;
 
 fn get_sidebar_width() -> io::Result<usize> {
     let (cols, _) = get_terminal_size()?;
-    let sidebar_width = (cols as usize).saturating_sub(COL1_WIDTH + 2);
+    let sidebar_width = cols.saturating_sub(COL1_WIDTH + 2);
     Ok(sidebar_width.max(MIN_COL2_WIDTH))
 }
 
@@ -42,9 +44,15 @@ pub fn string_to_fg_color_or_default(color: &str) -> Color {
     string_to_color(color).unwrap_or(Color::Black)
 }
 
-fn draw_header(mode: &Mode, filter: &String, series_selected: bool, season_selected: bool, series_filter_active: bool) -> io::Result<()> {
+fn draw_header(
+    mode: &Mode,
+    filter: &String,
+    series_selected: bool,
+    season_selected: bool,
+    series_filter_active: bool,
+) -> io::Result<()> {
     let instructions: Vec<&str> = match mode {
-        Mode::Browse =>  
+        Mode::Browse => {
             if series_selected {
                 vec![
                     "type to filter, [\u{2191}]/[\u{2193}] navigate, [ENTER] show episodes, [ESC] exit",
@@ -53,22 +61,19 @@ fn draw_header(mode: &Mode, filter: &String, series_selected: bool, season_selec
                 vec![
                     "type to filter, [\u{2191}]/[\u{2193}] navigate, [ENTER] show episodes, [ESC] back",
                 ]
+            } else if series_filter_active {
+                vec![
+                    "type to filter, [\u{2191}]/[\u{2193}] navigate, [ENTER] play, [ESC] back",
+                    "[F2] edit, [F3] toggle watched, [F4] assign to series",
+                ]
             } else {
-                if series_filter_active {
-                    vec![
-                        "type to filter, [\u{2191}]/[\u{2193}] navigate, [ENTER] play, [ESC] back",
-                        "[F2] edit, [F3] toggle watched, [F4] assign to series",
-                    ]
-                } else {
-                    vec![
-                        "type to filter, [\u{2191}]/[\u{2193}] navigate, [ENTER] play, [ESC] exit",
-                        "[F2] edit, [F3] toggle watched, [F4] assign to series",
-                    ]
-                }
-            },
-        Mode::Edit => vec![
-            "[\u{2191}]/[\u{2193}] change field, [ESC] cancel, [F2] save changes",
-        ],
+                vec![
+                    "type to filter, [\u{2191}]/[\u{2193}] navigate, [ENTER] play, [ESC] exit",
+                    "[F2] edit, [F3] toggle watched, [F4] assign to series",
+                ]
+            }
+        }
+        Mode::Edit => vec!["[\u{2191}]/[\u{2193}] change field, [ESC] cancel, [F2] save changes"],
         Mode::Entry => vec!["Enter a file path to scan, [ESC] cancel"],
         Mode::SeriesSelect => vec![
             "[\u{2191}]/[\u{2193}] navigate, [ENTER] select, [ESC] cancel",
@@ -78,10 +83,10 @@ fn draw_header(mode: &Mode, filter: &String, series_selected: bool, season_selec
     };
     //loop through the instructions and print them in the header
     for (i, instructions) in instructions.iter().enumerate() {
-        print_at(1,i, &instructions.with(Color::Black).on(Color::White))?;
+        print_at(1, i, &instructions.with(Color::Black).on(Color::White))?;
     }
 
-    print_at(0,3, &format!("filter: {}", filter))?;
+    print_at(0, 3, &format!("filter: {}", filter))?;
     Ok(())
 }
 
@@ -106,19 +111,40 @@ pub fn draw_screen(
     hide_cursor()?;
 
     //browse_series is true if the mode is browse and the current item in entries is a series
-    let series_selected = matches!(mode, Mode::Browse) && matches!(entries.get(current_item), Some(Entry::Series { .. }));
-    let season_selected = matches!(mode, Mode::Browse) && matches!(entries.get(current_item), Some(Entry::Season { .. }));
+    let series_selected = matches!(mode, Mode::Browse)
+        && matches!(entries.get(current_item), Some(Entry::Series { .. }));
+    let season_selected = matches!(mode, Mode::Browse)
+        && matches!(entries.get(current_item), Some(Entry::Season { .. }));
 
     //series_filter is true if the mode is browse and the current item in entries is an episode and the series field is not empty
-    let series_filter_active = matches!(mode, Mode::Browse) && matches!(entries.get(current_item), Some(Entry::Episode { .. })) && edit_details.series.is_some();
+    let series_filter_active = matches!(mode, Mode::Browse)
+        && matches!(entries.get(current_item), Some(Entry::Episode { .. }))
+        && edit_details.series.is_some();
 
-    draw_header(mode, filter, series_selected, season_selected, series_filter_active)?;
-    
+    draw_header(
+        mode,
+        filter,
+        series_selected,
+        season_selected,
+        series_filter_active,
+    )?;
+
     if entries.is_empty() {
-        print_at(0,HEADER_SIZE, 
-            &format!("{}", "No videos found. Adjust your filter or press CTRL-L to scan the file system".italic()))?;
+        print_at(
+            0,
+            HEADER_SIZE,
+            &format!(
+                "{}",
+                "No videos found. Adjust your filter or press CTRL-L to scan the file system"
+                    .italic()
+            ),
+        )?;
         if let Mode::Entry = mode {
-            print_at(0,HEADER_SIZE + 1, &format!("Enter a file path to scan: {}", entry_path))?;
+            print_at(
+                0,
+                HEADER_SIZE + 1,
+                &format!("Enter a file path to scan: {}", entry_path),
+            )?;
         }
     } else {
         let max_lines = get_max_displayed_items()?;
@@ -130,33 +156,57 @@ pub fn draw_screen(
             *first_entry = current_item - max_lines as usize + 1;
         }
 
-        for (i, entry) in entries.iter().enumerate().skip(*first_entry).take(max_lines as usize) {
-
+        for (i, entry) in entries
+            .iter()
+            .enumerate()
+            .skip(*first_entry)
+            .take(max_lines as usize)
+        {
             let display_text = match entry {
-                Entry::Series { name, .. } => format!("[{}]", truncate_string(name,COL1_WIDTH)).with(Color::Blue),
-                Entry::Episode { name, .. } => truncate_string(name,COL1_WIDTH).clone().stylize(),
+                Entry::Series { name, .. } => {
+                    format!("[{}]", truncate_string(name, COL1_WIDTH)).with(Color::Blue)
+                }
+                Entry::Episode { name, .. } => truncate_string(name, COL1_WIDTH).clone().stylize(),
                 Entry::Season { number, .. } => format!("Season {}", number).with(Color::Blue),
             };
 
             let mut formatted_text = format!("{}", display_text);
             if i == current_item {
-                formatted_text = format!("{}", display_text.with(string_to_fg_color_or_default(&config.current_fg)).on(string_to_bg_color_or_default(&config.current_bg)));
+                formatted_text = format!(
+                    "{}",
+                    display_text
+                        .with(string_to_fg_color_or_default(&config.current_fg))
+                        .on(string_to_bg_color_or_default(&config.current_bg))
+                );
             }
             print_at(0, i - *first_entry + HEADER_SIZE, &formatted_text)?;
-
         }
         if !series_selected && !season_selected {
-            draw_detail_window(&entries[current_item], &mode, edit_details, edit_field, edit_cursor_pos, season_number)?;
+            draw_detail_window(
+                &entries[current_item],
+                mode,
+                edit_details,
+                edit_field,
+                edit_cursor_pos,
+                season_number,
+            )?;
         }
         if let Mode::SeriesSelect | Mode::SeriesCreate = mode {
-            draw_series_window(&mode, &series, &new_series, series_selection, config)?;
+            draw_series_window(mode, series, new_series, series_selection, config)?;
         }
     }
 
     Ok(())
 }
 
-fn draw_detail_window(entry: &Entry, mode: &Mode, edit_details: &EpisodeDetail, edit_field: EpisodeField, edit_cursor_pos: usize, season_number: Option<usize>) -> io::Result<()> {
+fn draw_detail_window(
+    entry: &Entry,
+    mode: &Mode,
+    edit_details: &EpisodeDetail,
+    edit_field: EpisodeField,
+    edit_cursor_pos: usize,
+    season_number: Option<usize>,
+) -> io::Result<()> {
     let start_col: usize = COL1_WIDTH + 2;
     let start_row = HEADER_SIZE;
     let sidebar_width = get_sidebar_width()?;
@@ -167,16 +217,21 @@ fn draw_detail_window(entry: &Entry, mode: &Mode, edit_details: &EpisodeDetail, 
         show_cursor()?;
     }
 
-    draw_window(start_col, start_row, sidebar_width, DETAIL_HEIGHT, edit_mode)?;
+    draw_window(
+        start_col,
+        start_row,
+        sidebar_width,
+        DETAIL_HEIGHT,
+        edit_mode,
+    )?;
 
     // Extract path and filename from location
     let location = match entry {
         Entry::Episode { location, .. } => location,
         _ => "",
     };
-    let path = location.rsplitn(2, '/').nth(1).unwrap_or("");
-    let filename = location.rsplitn(2, '/').next().unwrap_or("");
-
+    let path = location.rsplit_once('/').map(|x| x.0).unwrap_or("");
+    let filename = location.rsplit('/').next().unwrap_or("");
 
     let mut detail_lines = Vec::new();
 
@@ -192,12 +247,10 @@ fn draw_detail_window(entry: &Entry, mode: &Mode, edit_details: &EpisodeDetail, 
                     Some(num) => num.to_string(),
                     None => String::new(),
                 }
+            } else if let Some(season) = &edit_details.season {
+                season.number.to_string()
             } else {
-                if let Some(season) = &edit_details.season {
-                    season.number.to_string()
-                } else {
-                    String::new()
-                }
+                String::new()
             }
         } else {
             let field_value = field.get_field_value(edit_details);
@@ -207,7 +260,7 @@ fn draw_detail_window(entry: &Entry, mode: &Mode, edit_details: &EpisodeDetail, 
                 field_value
             }
         };
-        detail_lines.push(format!("{}: {}", field.display_name(), value));        
+        detail_lines.push(format!("{}: {}", field.display_name(), value));
     }
 
     let mut edit_cursor_min: usize = 0;
@@ -217,20 +270,37 @@ fn draw_detail_window(entry: &Entry, mode: &Mode, edit_details: &EpisodeDetail, 
 
     for (i, line) in detail_lines.iter().enumerate() {
         if edit_mode && edit_field.is_editable() {
-            print_at(start_col + 1, start_row + 1 + i, &format!("{}", truncate_string(line, sidebar_width - 4)))?;
+            print_at(
+                start_col + 1,
+                start_row + 1 + i,
+                &truncate_string(line, sidebar_width - 4).to_string(),
+            )?;
         } else {
-            print_at(start_col + 1, start_row + 1 + i, &format!("{}", truncate_string(line, sidebar_width - 2)))?;
+            print_at(
+                start_col + 1,
+                start_row + 1 + i,
+                &truncate_string(line, sidebar_width - 2).to_string(),
+            )?;
         }
     }
     // Put the cursor at the end of the current edit_field line
     if edit_mode {
-        move_cursor(start_col + 1 + edit_cursor_min + edit_cursor_pos, start_row + 1 + usize::from(edit_field))?;
+        move_cursor(
+            start_col + 1 + edit_cursor_min + edit_cursor_pos,
+            start_row + 1 + usize::from(edit_field),
+        )?;
     }
 
     Ok(())
 }
 
-fn draw_series_window(mode: &Mode, series: &Vec<Series>, new_series: &String, series_selection: &mut Option<usize>, config: &Config) -> io::Result<()> {
+fn draw_series_window(
+    mode: &Mode,
+    series: &Vec<Series>,
+    new_series: &String,
+    series_selection: &mut Option<usize>,
+    config: &Config,
+) -> io::Result<()> {
     let start_col = COL1_WIDTH + 2;
     let start_row = HEADER_SIZE + DETAIL_HEIGHT;
     let sidebar_width = get_sidebar_width()?;
@@ -257,29 +327,76 @@ fn draw_series_window(mode: &Mode, series: &Vec<Series>, new_series: &String, se
 
     let series_window_start_col = start_col + ((sidebar_width - series_window_width) / 2);
 
-    draw_window(series_window_start_col, start_row, series_window_width, series_window_height, matches!(mode, Mode::SeriesCreate))?;
+    draw_window(
+        series_window_start_col,
+        start_row,
+        series_window_width,
+        series_window_height,
+        matches!(mode, Mode::SeriesCreate),
+    )?;
 
     // write the contents
     if let Mode::SeriesCreate = mode {
         show_cursor()?;
-        print_at(series_window_start_col + 1, start_row + 1, &format!("{}", "Type the series name and press [ENTER]:".with(Color::Black).on(Color::White)))?;
-        print_at(series_window_start_col + 1, start_row + 2, &format!("{}", new_series))?;
+        print_at(
+            series_window_start_col + 1,
+            start_row + 1,
+            &format!(
+                "{}",
+                "Type the series name and press [ENTER]:"
+                    .with(Color::Black)
+                    .on(Color::White)
+            ),
+        )?;
+        print_at(
+            series_window_start_col + 1,
+            start_row + 2,
+            &new_series.to_string(),
+        )?;
     } else {
-        print_at(series_window_start_col + 1, start_row + 1, &format!("{}", "Choose a series or [+] to create".with(Color::Black).on(Color::White)))?;
+        print_at(
+            series_window_start_col + 1,
+            start_row + 1,
+            &format!(
+                "{}",
+                "Choose a series or [+] to create"
+                    .with(Color::Black)
+                    .on(Color::White)
+            ),
+        )?;
         for (i, series) in series.iter().enumerate() {
-            let display_text = format!("[{}] {}", i + 1, truncate_string(&series.name, SERIES_WIDTH));
+            let display_text = format!(
+                "[{}] {}",
+                i + 1,
+                truncate_string(&series.name, SERIES_WIDTH)
+            );
             let formatted_text = if Some(i) == *series_selection {
-                format!("{}", display_text.with(string_to_fg_color_or_default(&config.current_fg)).on(string_to_bg_color_or_default(&config.current_bg)))
+                format!(
+                    "{}",
+                    display_text
+                        .with(string_to_fg_color_or_default(&config.current_fg))
+                        .on(string_to_bg_color_or_default(&config.current_bg))
+                )
             } else {
                 display_text
             };
-            print_at(series_window_start_col + 1, start_row + 2 + i, &formatted_text)?;
+            print_at(
+                series_window_start_col + 1,
+                start_row + 2 + i,
+                &formatted_text,
+            )?;
         }
     }
     Ok(())
 }
 
-fn draw_window(left: usize, top: usize, width: usize, height: usize, thick: bool) -> io::Result<()> {
+fn draw_window(
+    left: usize,
+    top: usize,
+    width: usize,
+    height: usize,
+    thick: bool,
+) -> io::Result<()> {
     // Choose border characters based on the thickness
     let (top_left, top_right, bottom_left, bottom_right, horizontal, vertical) = if thick {
         ('╔', '╗', '╚', '╝', '═', '║')
@@ -288,7 +405,7 @@ fn draw_window(left: usize, top: usize, width: usize, height: usize, thick: bool
     };
 
     // Draw top border
-    print_at(left,top, &top_left)?;
+    print_at(left, top, &top_left)?;
     for _ in 1..width - 1 {
         print!("{}", horizontal);
     }
@@ -296,12 +413,12 @@ fn draw_window(left: usize, top: usize, width: usize, height: usize, thick: bool
 
     // Draw side borders
     for row in (top + 1)..(top + height - 1) {
-        print_at(left,row,&vertical)?;
-        print_at(left+width-1,row, &vertical)?;
+        print_at(left, row, &vertical)?;
+        print_at(left + width - 1, row, &vertical)?;
     }
 
     // Draw bottom border
-    print_at(left,top + height - 1, &bottom_left)?;
+    print_at(left, top + height - 1, &bottom_left)?;
     for _ in 1..width - 1 {
         print!("{}", horizontal);
     }
@@ -318,6 +435,6 @@ pub fn load_videos(path: &str, count: usize) -> io::Result<()> {
 
 pub fn get_max_displayed_items() -> io::Result<usize> {
     let (_, rows) = get_terminal_size()?;
-    let max_lines = (rows  - HEADER_SIZE - FOOTER_SIZE - 1) as usize; // Adjust for header and footer lines
+    let max_lines = rows - HEADER_SIZE - FOOTER_SIZE - 1; // Adjust for header and footer lines
     Ok(max_lines)
 }

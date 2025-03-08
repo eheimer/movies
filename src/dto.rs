@@ -1,5 +1,5 @@
 #[derive(Clone)]
-pub struct EpisodeDetail{
+pub struct EpisodeDetail {
     pub title: String,
     pub year: String,
     pub watched: String,

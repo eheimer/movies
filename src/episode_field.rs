@@ -52,7 +52,11 @@ impl From<EpisodeField> for usize {
 impl EpisodeField {
     pub fn is_editable(self) -> bool {
         match self {
-            EpisodeField::Path | EpisodeField::Filename | EpisodeField::Watched | EpisodeField::Length | EpisodeField::Series => false,
+            EpisodeField::Path
+            | EpisodeField::Filename
+            | EpisodeField::Watched
+            | EpisodeField::Length
+            | EpisodeField::Series => false,
             _ => true,
         }
     }
@@ -73,14 +77,14 @@ impl EpisodeField {
                 } else {
                     String::new()
                 }
-            },
+            }
             EpisodeField::Season => {
                 if let Some(season) = &details.season {
-                  season.number.to_string()
+                    season.number.to_string()
                 } else {
                     String::new()
                 }
-            }, // Assuming Season is not a simple string field
+            } // Assuming Season is not a simple string field
             EpisodeField::EpisodeNumber => details.episode_number.clone(),
         }
     }
