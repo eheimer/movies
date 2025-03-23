@@ -12,6 +12,7 @@ This is a terminal-based video file browser written in Rust. It allows users to 
 - Play videos using a configurable video player
 - Uses `crossterm` for a terminal-based UI
 - Configurable via a `config.json` file
+- Scan additional directories for video files
 
 ## Dependencies
 
