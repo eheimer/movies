@@ -26,8 +26,10 @@ pub fn handle_entry_mode(
     match code {
         KeyCode::Enter => {
             // Scan the entered path for video files and insert them into the database
-            let path = Path::new(&entry_path);
-            let new_entries: Vec<_> = WalkDir::new(path)
+            let path = Path::new(&entry_path)
+                .canonicalize()
+                .unwrap_or_else(|_| Path::new(&entry_path).to_path_buf());
+            let new_entries: Vec<_> = WalkDir::new(&path)
                 .into_iter()
                 .filter_map(|e| e.ok())
                 .filter(|e| e.file_type().is_file())
@@ -60,6 +62,9 @@ pub fn handle_entry_mode(
             *redraw = true;
         }
         KeyCode::Esc => {
+            // reload entries from the database
+            *entries = database::get_entries().expect("Failed to get entries");
+            *filtered_entries = entries.clone();
             *mode = Mode::Browse;
             *redraw = true;
         }
@@ -363,11 +368,12 @@ pub fn handle_browse_mode(
 ) -> io::Result<bool> {
     match code {
         KeyCode::Char('l') if modifiers.contains(event::KeyModifiers::CONTROL) => {
-            if entries.is_empty() {
-                *mode = Mode::Entry;
-                search.clear();
-                *redraw = true;
-            }
+            // clear entries and filtered entries
+            *entries = Vec::new();
+            *filtered_entries = Vec::new();
+            *mode = Mode::Entry;
+            search.clear();
+            *redraw = true;
         }
         KeyCode::F(2) => {
             // Enter edit mode only if the current entry is an Episode

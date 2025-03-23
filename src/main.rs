@@ -51,8 +51,8 @@ fn main_loop(mut entries: Vec<Entry>, config: Config) -> io::Result<()> {
 
     //if entries is empty, we will automatically load the config path
     // set entry_path to the config value, then change mode to Entry
+    entry_path = config.path.clone();
     if entries.is_empty() {
-        entry_path = config.path.clone();
         mode = Mode::Entry;
     }
 

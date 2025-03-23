@@ -56,20 +56,22 @@ fn draw_header(
             if series_selected {
                 vec![
                     "type to filter, [\u{2191}]/[\u{2193}] navigate, [ENTER] show episodes, [ESC] exit",
+                    "[CTRL][L] rescan"
                 ]
             } else if season_selected {
                 vec![
                     "type to filter, [\u{2191}]/[\u{2193}] navigate, [ENTER] show episodes, [ESC] back",
+                    "[CTRL][L] rescan"
                 ]
             } else if series_filter_active {
                 vec![
                     "type to filter, [\u{2191}]/[\u{2193}] navigate, [ENTER] play, [ESC] back",
-                    "[F2] edit, [F3] toggle watched, [F4] assign to series",
+                    "[F2] edit, [F3] toggle watched, [F4] assign to series, [CTRL][L] rescan",
                 ]
             } else {
                 vec![
                     "type to filter, [\u{2191}]/[\u{2193}] navigate, [ENTER] play, [ESC] exit",
-                    "[F2] edit, [F3] toggle watched, [F4] assign to series",
+                    "[F2] edit, [F3] toggle watched, [F4] assign to series, [CTRL][L] rescan",
                 ]
             }
         }
@@ -130,15 +132,6 @@ pub fn draw_screen(
     )?;
 
     if entries.is_empty() {
-        print_at(
-            0,
-            HEADER_SIZE,
-            &format!(
-                "{}",
-                "No videos found. Adjust your filter or press CTRL-L to scan the file system"
-                    .italic()
-            ),
-        )?;
         if let Mode::Entry = mode {
             print_at(
                 0,
