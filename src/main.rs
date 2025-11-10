@@ -4,6 +4,7 @@ mod display;
 mod dto;
 mod episode_field;
 mod handlers;
+mod path_resolver;
 mod terminal;
 mod util;
 
@@ -13,6 +14,7 @@ use database::{get_entries, initialize_database};
 use display::draw_screen;
 use dto::EpisodeDetail;
 use episode_field::EpisodeField;
+use path_resolver::PathResolver;
 use std::io;
 use std::panic;
 use std::sync::mpsc::{self, Receiver, Sender};
@@ -20,7 +22,7 @@ use std::time::Duration;
 use terminal::{initialize_terminal, restore_terminal};
 use util::{Entry, Mode};
 
-fn main_loop(mut entries: Vec<Entry>, config: Config) -> io::Result<()> {
+fn main_loop(mut entries: Vec<Entry>, config: Config, resolver: PathResolver) -> io::Result<()> {
     let mut current_item = 0;
     let mut redraw = true;
     let mut search: String = String::new();
@@ -51,7 +53,10 @@ fn main_loop(mut entries: Vec<Entry>, config: Config) -> io::Result<()> {
 
     //if entries is empty, we will automatically load the config path
     // set entry_path to the config value, then change mode to Entry
-    entry_path = config.path.clone();
+    // Resolve the config path to an absolute path using the PathResolver
+    entry_path = config.get_resolved_path(&resolver)
+        .to_string_lossy()
+        .to_string();
     if entries.is_empty() {
         mode = Mode::Entry;
     }
@@ -147,6 +152,7 @@ fn main_loop(mut entries: Vec<Entry>, config: Config) -> io::Result<()> {
                             &mut mode,
                             &mut redraw,
                             &config,
+                            &resolver,
                         );
                     }
                     Mode::Edit => {
@@ -179,6 +185,7 @@ fn main_loop(mut entries: Vec<Entry>, config: Config) -> io::Result<()> {
                             &mut season_number,
                             &mut redraw,
                             &config,
+                            &resolver,
                             &tx,
                         )? {
                             break Ok(());
@@ -239,12 +246,19 @@ fn main() -> io::Result<()> {
     let config_path = "config.json";
     let config = read_config(config_path);
 
-    initialize_database("videos.db").expect("Failed to initialize database");
+    // Initialize PathResolver with configurable root directory from config
+    let resolver = PathResolver::new(config.root_dir.as_deref())
+        .expect("Failed to initialize path resolver");
+
+    // Use the database path from PathResolver (always in executable directory)
+    let db_path = resolver.get_database_path();
+    initialize_database(db_path.to_str().expect("Invalid database path"))
+        .expect("Failed to initialize database");
 
     let entries = get_entries().expect("Failed to get entries");
 
     initialize_terminal()?;
-    let result = main_loop(entries, config);
+    let result = main_loop(entries, config, resolver);
     restore_terminal()?;
     result
 }

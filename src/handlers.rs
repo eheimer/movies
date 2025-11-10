@@ -11,6 +11,7 @@ use crate::display;
 use crate::dto::EpisodeDetail;
 use crate::dto::Series;
 use crate::episode_field::EpisodeField;
+use crate::path_resolver::PathResolver;
 use crate::util::{run_video_player, Entry, Mode};
 use display::get_max_displayed_items;
 
@@ -22,6 +23,7 @@ pub fn handle_entry_mode(
     mode: &mut Mode,
     redraw: &mut bool,
     config: &Config,
+    resolver: &PathResolver,
 ) {
     match code {
         KeyCode::Enter => {
@@ -44,6 +46,10 @@ pub fn handle_entry_mode(
                 .map(|e| e.into_path())
                 .collect();
             display::load_videos(entry_path, new_entries.len()).expect("Failed to load videos");
+            
+            let mut imported_count = 0;
+            let mut skipped_count = 0;
+            
             for entry in &new_entries {
                 let location = entry.to_string_lossy().to_string();
                 let name = entry
@@ -52,7 +58,18 @@ pub fn handle_entry_mode(
                     .to_string_lossy()
                     .to_string();
 
-                database::import_episode(&location, &name).expect("Failed to import episode");
+                // Use import_episode_relative with error handling for files outside root
+                match database::import_episode_relative(&location, &name, resolver) {
+                    Ok(_) => imported_count += 1,
+                    Err(e) => {
+                        eprintln!("Warning: Skipping file outside configured root directory: {} - {}", location, e);
+                        skipped_count += 1;
+                    }
+                }
+            }
+            
+            if skipped_count > 0 {
+                eprintln!("Imported {} files, skipped {} files outside configured root directory", imported_count, skipped_count);
             }
 
             // Reload entries from the database
@@ -364,6 +381,7 @@ pub fn handle_browse_mode(
     season_number: &mut Option<usize>,
     redraw: &mut bool,
     config: &Config,
+    resolver: &PathResolver,
     tx: &Sender<()>,
 ) -> io::Result<bool> {
     match code {
@@ -453,22 +471,30 @@ pub fn handle_browse_mode(
                     *filtered_entries = entries.clone();
                     *redraw = true;
                 }
-                Entry::Episode { location, .. } => {
+                Entry::Episode { location, episode_id, .. } => {
                     // If an episode is selected, play the video
                     if playing_file.is_none() {
-                        // only play one video at a time
-                        let mut player_process =
-                            Some(run_video_player(config, Path::new(location))?);
-                        *playing_file = Some(location.to_string());
+                        // Resolve relative path to absolute path for video playback
+                        match database::get_episode_absolute_location(*episode_id, resolver) {
+                            Ok(absolute_location) => {
+                                // only play one video at a time
+                                let mut player_process =
+                                    Some(run_video_player(config, Path::new(&absolute_location))?);
+                                *playing_file = Some(location.to_string());
 
-                        // Spawn a thread to wait for the process to finish
-                        let tx = tx.clone();
-                        thread::spawn(move || {
-                            if let Some(mut process) = player_process.take() {
-                                process.wait().ok();
-                                tx.send(()).ok();
+                                // Spawn a thread to wait for the process to finish
+                                let tx = tx.clone();
+                                thread::spawn(move || {
+                                    if let Some(mut process) = player_process.take() {
+                                        process.wait().ok();
+                                        tx.send(()).ok();
+                                    }
+                                });
                             }
-                        });
+                            Err(e) => {
+                                eprintln!("Error resolving video path: {}", e);
+                            }
+                        }
                     }
                 }
                 Entry::Season { season_id, .. } => {

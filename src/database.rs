@@ -1,7 +1,9 @@
 use crate::dto::{EpisodeDetail, Season, Series};
+use crate::path_resolver::PathResolver;
 use crate::util::Entry;
 use lazy_static::lazy_static;
 use rusqlite::{params, Connection, Result};
+use std::path::Path;
 use std::sync::Mutex;
 
 lazy_static! {
@@ -123,6 +125,48 @@ pub fn import_episode(location: &str, name: &str) -> Result<()> {
     Ok(())
 }
 
+/// Import an episode with relative path storage
+/// 
+/// # Arguments
+/// * `absolute_location` - The absolute path to the video file
+/// * `name` - The name of the episode
+/// * `resolver` - PathResolver for converting to relative paths and validation
+/// 
+/// # Returns
+/// * `Result<(), Box<dyn std::error::Error>>` - Ok if successful, error otherwise
+pub fn import_episode_relative(
+    absolute_location: &str,
+    name: &str,
+    resolver: &PathResolver,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let absolute_path = Path::new(absolute_location);
+    
+    // Validate that the path is under the configured root directory
+    resolver.validate_path_under_root(absolute_path)?;
+    
+    // Convert absolute path to relative path
+    let relative_path = resolver.to_relative(absolute_path)?;
+    let relative_location = relative_path.to_str()
+        .ok_or("Failed to convert path to string")?;
+    
+    // Check if episode already exists with this relative path
+    if episode_exists(relative_location)? {
+        return Ok(());
+    }
+
+    let conn = DB_CONN.lock().unwrap();
+    let conn = conn
+        .as_ref()
+        .expect("Database connection is not initialized");
+
+    conn.execute(
+        "INSERT INTO episode (location, name, watched, length, series_id, season_id, episode_number, year)
+         VALUES (?1, ?2, false, 0, null, null, null, null)",
+        params![relative_location, name],
+    )?;
+    Ok(())
+}
+
 pub fn get_entries() -> Result<Vec<Entry>> {
     let conn = DB_CONN.lock().unwrap();
     let conn = conn
@@ -239,6 +283,35 @@ pub fn get_entries_for_season(season_id: usize) -> Result<Vec<Entry>> {
     }
 
     Ok(entries)
+}
+
+/// Get the absolute location of an episode by resolving its relative path
+/// 
+/// # Arguments
+/// * `episode_id` - The ID of the episode
+/// * `resolver` - PathResolver for converting relative paths to absolute
+/// 
+/// # Returns
+/// * `Result<String, Box<dyn std::error::Error>>` - Absolute path as string or error
+pub fn get_episode_absolute_location(
+    episode_id: usize,
+    resolver: &PathResolver,
+) -> Result<String, Box<dyn std::error::Error>> {
+    let conn = DB_CONN.lock().unwrap();
+    let conn = conn
+        .as_ref()
+        .expect("Database connection is not initialized");
+
+    let mut stmt = conn.prepare("SELECT location FROM episode WHERE id = ?1")?;
+    let relative_location: String = stmt.query_row(params![episode_id], |row| row.get(0))?;
+    
+    // Convert relative path to absolute path
+    let relative_path = Path::new(&relative_location);
+    let absolute_path = resolver.to_absolute(relative_path);
+    
+    absolute_path.to_str()
+        .ok_or("Failed to convert path to string".into())
+        .map(|s| s.to_string())
 }
 
 pub fn get_episode_detail(id: usize) -> Result<EpisodeDetail, Box<dyn std::error::Error>> {
