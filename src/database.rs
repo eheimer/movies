@@ -541,3 +541,79 @@ pub fn create_season_and_assign(
         Ok(season_id)
     }
 }
+
+/// Calculate the next available episode number for a series and optional season
+/// 
+/// This function finds the lowest positive integer starting from 1 that is not
+/// currently assigned to any episode within the same series and season combination.
+/// If there are gaps in the sequence (e.g., 1, 2, 4, 5), it returns the first gap (3).
+/// If all sequential numbers are taken, it returns max + 1.
+/// If no episodes exist, it returns 1.
+/// 
+/// # Arguments
+/// * `series_id` - The ID of the series
+/// * `season_number` - Optional season number to scope the query
+/// 
+/// # Returns
+/// * `Result<usize>` - The next available episode number or error
+pub fn get_next_available_episode_number(
+    series_id: usize,
+    season_number: Option<usize>,
+) -> Result<usize> {
+    let conn = DB_CONN.lock().unwrap();
+    let conn = conn
+        .as_ref()
+        .expect("Database connection is not initialized");
+
+    // Query episode numbers based on whether season_number is provided
+    let episode_numbers: Vec<usize> = if let Some(season_num) = season_number {
+        // Query episodes for specific season
+        let mut stmt = conn.prepare(
+            "SELECT CAST(episode_number AS INTEGER) as ep_num
+             FROM episode
+             WHERE series_id = ?1
+               AND season_id = (SELECT id FROM season WHERE series_id = ?1 AND number = ?2)
+               AND episode_number IS NOT NULL
+               AND episode_number != ''
+             ORDER BY ep_num"
+        )?;
+        
+        let rows = stmt.query_map(params![series_id, season_num], |row| {
+            row.get::<_, i64>(0).map(|n| n as usize)
+        })?;
+        
+        rows.filter_map(|r| r.ok()).collect()
+    } else {
+        // Query episodes without season (season_id IS NULL)
+        let mut stmt = conn.prepare(
+            "SELECT CAST(episode_number AS INTEGER) as ep_num
+             FROM episode
+             WHERE series_id = ?1
+               AND season_id IS NULL
+               AND episode_number IS NOT NULL
+               AND episode_number != ''
+             ORDER BY ep_num"
+        )?;
+        
+        let rows = stmt.query_map(params![series_id], |row| {
+            row.get::<_, i64>(0).map(|n| n as usize)
+        })?;
+        
+        rows.filter_map(|r| r.ok()).collect()
+    };
+
+    // Find the first gap in the sequence starting from 1
+    let mut expected = 1;
+    for &num in &episode_numbers {
+        if num == expected {
+            expected += 1;
+        } else if num > expected {
+            // Found a gap, return the first missing number
+            return Ok(expected);
+        }
+        // If num < expected, skip it (duplicate or out of order, shouldn't happen with ORDER BY)
+    }
+
+    // No gaps found, return the next sequential number
+    Ok(expected)
+}

@@ -194,6 +194,8 @@ fn main_loop(mut entries: Vec<Entry>, config: Config, resolver: PathResolver) ->
                             &tx,
                             &mut view_context,
                             &last_action,
+                            &mut edit_field,
+                            &mut edit_cursor_pos,
                         )? {
                             break Ok(());
                         }

@@ -406,6 +406,8 @@ pub fn handle_browse_mode(
     tx: &Sender<()>,
     view_context: &mut ViewContext,
     last_action: &Option<crate::util::LastAction>,
+    edit_field: &mut EpisodeField,
+    edit_cursor_pos: &mut usize,
 ) -> io::Result<bool> {
     match code {
         KeyCode::Char('l') if modifiers.contains(event::KeyModifiers::CONTROL) => {
@@ -427,6 +429,30 @@ pub fn handle_browse_mode(
                 *edit_details =
                     database::get_episode_detail(episode_id).expect("Failed to get entry details");
                 *season_number = edit_details.season.as_ref().map(|season| season.number);
+
+                // Auto-fill episode number if series is assigned but episode number is not
+                if edit_details.series.is_some()
+                    && (edit_details.episode_number.is_empty() || edit_details.episode_number == "0")
+                {
+                    // Calculate next available episode number
+                    let next_episode = database::get_next_available_episode_number(
+                        edit_details.series.as_ref().unwrap().id,
+                        *season_number,
+                    )
+                    .unwrap_or(1);
+
+                    // Pre-fill the episode number
+                    edit_details.episode_number = next_episode.to_string();
+
+                    // Set cursor to episode number field
+                    *edit_field = EpisodeField::EpisodeNumber;
+                    *edit_cursor_pos = edit_details.episode_number.len();
+                } else {
+                    // Normal behavior: start at first field
+                    *edit_field = EpisodeField::Title;
+                    *edit_cursor_pos = 0;
+                }
+
                 *redraw = true;
             }
         }
