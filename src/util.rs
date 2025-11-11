@@ -22,6 +22,13 @@ pub enum Entry {
     },
 }
 
+#[derive(Debug, Clone)]
+pub enum ViewContext {
+    TopLevel,
+    Series { series_id: usize },
+    Season { season_id: usize },
+}
+
 pub enum Mode {
     Browse,       // video browse
     Edit,         // video details edit

@@ -12,7 +12,7 @@ use crate::dto::EpisodeDetail;
 use crate::dto::Series;
 use crate::episode_field::EpisodeField;
 use crate::path_resolver::PathResolver;
-use crate::util::{run_video_player, Entry, Mode};
+use crate::util::{run_video_player, Entry, Mode, ViewContext};
 use display::get_max_displayed_items;
 
 pub fn handle_entry_mode(
@@ -383,6 +383,7 @@ pub fn handle_browse_mode(
     config: &Config,
     resolver: &PathResolver,
     tx: &Sender<()>,
+    view_context: &mut ViewContext,
 ) -> io::Result<bool> {
     match code {
         KeyCode::Char('l') if modifiers.contains(event::KeyModifiers::CONTROL) => {
@@ -416,7 +417,15 @@ pub fn handle_browse_mode(
                 };
                 database::toggle_watched_status(episode_id)
                     .expect("Failed to toggle watched status");
-                *entries = database::get_entries().expect("Failed to get entries");
+                
+                // Reload entries based on current view context
+                *entries = match view_context {
+                    ViewContext::TopLevel => database::get_entries().expect("Failed to get entries"),
+                    ViewContext::Series { series_id } => database::get_entries_for_series(*series_id)
+                        .expect("Failed to get entries for series"),
+                    ViewContext::Season { season_id } => database::get_entries_for_season(*season_id)
+                        .expect("Failed to get entries for season"),
+                };
                 *filtered_entries = entries.clone();
                 *redraw = true;
             }
@@ -469,6 +478,7 @@ pub fn handle_browse_mode(
                     *entries = database::get_entries_for_series(*series_id)
                         .expect("Failed to get entries for series");
                     *filtered_entries = entries.clone();
+                    *view_context = ViewContext::Series { series_id: *series_id };
                     *redraw = true;
                 }
                 Entry::Episode { location, episode_id, .. } => {
@@ -503,6 +513,7 @@ pub fn handle_browse_mode(
                     *entries = database::get_entries_for_season(*season_id)
                         .expect("Failed to get entries for season");
                     *filtered_entries = entries.clone();
+                    *view_context = ViewContext::Season { season_id: *season_id };
                     *redraw = true;
                 }
             }
@@ -515,9 +526,11 @@ pub fn handle_browse_mode(
             //go back to the season view
             *current_item = 0;
             search.clear();
-            *entries = database::get_entries_for_series(edit_details.series.as_ref().unwrap().id)
+            let series_id = edit_details.series.as_ref().unwrap().id;
+            *entries = database::get_entries_for_series(series_id)
                 .expect("Failed to get entries for series");
             *filtered_entries = entries.clone();
+            *view_context = ViewContext::Series { series_id };
             *redraw = true;
         }
         KeyCode::Esc
@@ -529,6 +542,7 @@ pub fn handle_browse_mode(
             search.clear();
             *entries = database::get_entries().expect("Failed to get entries");
             *filtered_entries = entries.clone();
+            *view_context = ViewContext::TopLevel;
             *redraw = true;
         }
         KeyCode::Esc => return Ok(false),

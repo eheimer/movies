@@ -20,7 +20,7 @@ use std::panic;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::time::Duration;
 use terminal::{initialize_terminal, restore_terminal};
-use util::{Entry, Mode};
+use util::{Entry, Mode, ViewContext};
 
 fn main_loop(mut entries: Vec<Entry>, config: Config, resolver: PathResolver) -> io::Result<()> {
     let mut current_item = 0;
@@ -47,6 +47,7 @@ fn main_loop(mut entries: Vec<Entry>, config: Config, resolver: PathResolver) ->
     let mut new_series = String::new();
     let mut selected_entry_id: Option<usize> = None;
     let mut season_number: Option<usize> = None;
+    let mut view_context = ViewContext::TopLevel;
 
     // Create a channel to communicate between the thread and the main loop
     let (tx, rx): (Sender<()>, Receiver<()>) = mpsc::channel();
@@ -187,6 +188,7 @@ fn main_loop(mut entries: Vec<Entry>, config: Config, resolver: PathResolver) ->
                             &config,
                             &resolver,
                             &tx,
+                            &mut view_context,
                         )? {
                             break Ok(());
                         }
