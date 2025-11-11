@@ -797,12 +797,22 @@ pub fn handle_series_create_mode(
     entries: &mut Vec<Entry>,
     filtered_entries: &mut Vec<Entry>,
     view_context: &ViewContext,
+    last_action: &mut Option<crate::util::LastAction>,
 ) {
     match code {
         KeyCode::Enter => {
             // save the new series to the database
             *episode_detail = database::create_series_and_assign(new_series, episode_id)
                 .expect("Failed to create series");
+
+            // Update last_action with the series assignment
+            if let Some(series) = &episode_detail.series {
+                *last_action = Some(crate::util::LastAction::SeriesAssignment {
+                    series_id: series.id,
+                    series_name: series.name.clone(),
+                });
+            }
+
             // reload the series list
             *series = database::get_all_series().expect("Failed to get series");
             // Reload entries based on current view context

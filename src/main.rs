@@ -252,6 +252,7 @@ fn main_loop(mut entries: Vec<Entry>, config: Config, resolver: PathResolver) ->
                                 &mut entries,
                                 &mut filtered_entries,
                                 &view_context,
+                                &mut last_action,
                             );
                         } else {
                             // selected entry is a series, change mode back to browse
