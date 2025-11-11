@@ -11,10 +11,20 @@ pub struct Config {
     pub path: String,
     pub current_fg: String,
     pub current_bg: String,
+    #[serde(default = "default_dirty_fg")]
     pub dirty_fg: String,
+    #[serde(default = "default_dirty_bg")]
     pub dirty_bg: String,
     pub video_extensions: Vec<String>,
     pub video_player: String,
+}
+
+fn default_dirty_fg() -> String {
+    "Black".to_string()
+}
+
+fn default_dirty_bg() -> String {
+    "White".to_string()
 }
 
 impl Default for Config {
@@ -56,7 +66,9 @@ impl Config {
 
 /// Read configuration from file
 /// This function reads the config without requiring a PathResolver,
-/// allowing the root_dir to be extracted and used to create the PathResolver
+/// allowing the root_dir to be extracted and used to create the PathResolver.
+/// If the config file has missing optional fields, they will be filled with defaults
+/// and the file will be updated.
 /// 
 /// # Arguments
 /// * `config_path` - Path to the config.json file
@@ -66,7 +78,31 @@ impl Config {
 pub fn read_config(config_path: &str) -> Config {
     if Path::new(config_path).exists() {
         match fs::read_to_string(config_path) {
-            Ok(content) => serde_json::from_str(&content).unwrap_or_default(),
+            Ok(content) => {
+                match serde_json::from_str::<Config>(&content) {
+                    Ok(config) => {
+                        // Write back the config to ensure any missing optional fields are added
+                        if let Ok(updated_json) = serde_json::to_string_pretty(&config) {
+                            // Only write if the content has changed
+                            if updated_json != content {
+                                if let Err(e) = fs::write(config_path, updated_json) {
+                                    eprintln!("Warning: Could not update config.json with default values: {}", e);
+                                }
+                            }
+                        }
+                        config
+                    }
+                    Err(e) => {
+                        eprintln!("Error: Could not parse config.json: {}. Using default values.", e);
+                        let default_config = Config::default();
+                        // Try to write the default config
+                        if let Ok(default_json) = serde_json::to_string_pretty(&default_config) {
+                            let _ = fs::write(config_path, default_json);
+                        }
+                        default_config
+                    }
+                }
+            }
             Err(_) => {
                 eprintln!("Error: Could not read the config.json file. Using default values.");
                 Config::default()

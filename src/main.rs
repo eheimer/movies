@@ -16,6 +16,7 @@ use dto::EpisodeDetail;
 use episode_field::EpisodeField;
 use path_resolver::PathResolver;
 use std::collections::HashSet;
+use std::env;
 use std::io;
 use std::panic;
 use std::sync::mpsc::{self, Receiver, Sender};
@@ -278,8 +279,12 @@ fn main() -> io::Result<()> {
         eprintln!("Application crashed: {:?}", info);
     }));
 
-    let config_path = "config.json";
-    let config = read_config(config_path);
+    // Get executable directory to locate config.json
+    let exe_path = env::current_exe().expect("Failed to get executable path");
+    let exe_dir = exe_path.parent().expect("Failed to get executable directory");
+    let config_path = exe_dir.join("config.json");
+    
+    let config = read_config(config_path.to_str().expect("Invalid config path"));
 
     // Initialize PathResolver with configurable root directory from config
     let resolver = PathResolver::new(config.root_dir.as_deref())
