@@ -523,9 +523,13 @@ pub fn handle_browse_mode(
             }
         }
         KeyCode::F(4) => {
-            // enter series select mode
-            *mode = Mode::SeriesSelect;
-            *redraw = true;
+            // Only allow series assignment for episodes without an existing series
+            if let Entry::Episode { .. } = filtered_entries[*current_item] {
+                if edit_details.series.is_none() {
+                    *mode = Mode::SeriesSelect;
+                    *redraw = true;
+                }
+            }
         }
         KeyCode::F(5) => {
             // Repeat last action

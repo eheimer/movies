@@ -53,8 +53,17 @@ fn draw_header(
     series_filter_active: bool,
     last_action_display: &str,
     is_dirty: bool,
+    selected_entry: Option<&Entry>,
+    edit_details: &EpisodeDetail,
 ) -> io::Result<()> {
     let show_f5 = !last_action_display.is_empty();
+    
+    // Determine if F4 should be shown
+    let show_f4 = if let Some(Entry::Episode { .. }) = selected_entry {
+        edit_details.series.is_none()
+    } else {
+        false
+    };
     
     let instructions: Vec<String> = match mode {
         Mode::Browse => {
@@ -69,7 +78,10 @@ fn draw_header(
                     "[CTRL][L] rescan".to_string()
                 ]
             } else if series_filter_active {
-                let mut line2 = "[F2] edit, [F3] toggle watched, [F4] assign to series".to_string();
+                let mut line2 = "[F2] edit, [F3] toggle watched".to_string();
+                if show_f4 {
+                    line2.push_str(", [F4] assign to series");
+                }
                 if show_f5 {
                     line2.push_str(", [F5] Repeat action");
                 }
@@ -79,7 +91,10 @@ fn draw_header(
                     line2,
                 ]
             } else {
-                let mut line2 = "[F2] edit, [F3] toggle watched, [F4] assign to series".to_string();
+                let mut line2 = "[F2] edit, [F3] toggle watched".to_string();
+                if show_f4 {
+                    line2.push_str(", [F4] assign to series");
+                }
                 if show_f5 {
                     line2.push_str(", [F5] Repeat action");
                 }
@@ -169,6 +184,9 @@ pub fn draw_screen(
     // Calculate is_dirty from dirty_fields
     let is_dirty = !dirty_fields.is_empty();
 
+    // Extract selected entry for draw_header
+    let selected_entry = entries.get(current_item);
+
     draw_header(
         mode,
         filter,
@@ -177,6 +195,8 @@ pub fn draw_screen(
         series_filter_active,
         &last_action_display,
         is_dirty,
+        selected_entry,
+        edit_details,
     )?;
 
     if entries.is_empty() {
