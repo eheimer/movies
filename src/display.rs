@@ -6,6 +6,7 @@ use crate::terminal::{
 };
 use crate::util::{can_repeat_action, truncate_string, Entry, LastAction, Mode};
 use crossterm::style::{Color, Stylize};
+use std::collections::HashSet;
 use std::convert::From;
 use std::io;
 
@@ -51,6 +52,7 @@ fn draw_header(
     season_selected: bool,
     series_filter_active: bool,
     last_action_display: &str,
+    is_dirty: bool,
 ) -> io::Result<()> {
     let show_f5 = !last_action_display.is_empty();
     
@@ -88,7 +90,13 @@ fn draw_header(
                 ]
             }
         }
-        Mode::Edit => vec!["[\u{2191}]/[\u{2193}] change field, [ESC] cancel, [F2] save changes".to_string()],
+        Mode::Edit => {
+            let mut instruction = "[\u{2191}]/[\u{2193}] change field, [ESC] cancel".to_string();
+            if is_dirty {
+                instruction.push_str(", [F2] save changes");
+            }
+            vec![instruction]
+        },
         Mode::Entry => vec!["Enter a file path to scan, [ESC] cancel".to_string()],
         Mode::SeriesSelect => vec![
             "[\u{2191}]/[\u{2193}] navigate, [ENTER] select, [ESC] cancel".to_string(),
@@ -125,6 +133,7 @@ pub fn draw_screen(
     new_series: &String,
     season_number: Option<usize>,
     last_action: &Option<LastAction>,
+    dirty_fields: &HashSet<EpisodeField>,
 ) -> io::Result<()> {
     clear_screen()?;
 
@@ -157,6 +166,9 @@ pub fn draw_screen(
         String::new()
     };
 
+    // Calculate is_dirty from dirty_fields
+    let is_dirty = !dirty_fields.is_empty();
+
     draw_header(
         mode,
         filter,
@@ -164,6 +176,7 @@ pub fn draw_screen(
         season_selected,
         series_filter_active,
         &last_action_display,
+        is_dirty,
     )?;
 
     if entries.is_empty() {
@@ -217,6 +230,8 @@ pub fn draw_screen(
                 edit_field,
                 edit_cursor_pos,
                 season_number,
+                dirty_fields,
+                config,
             )?;
         }
         if let Mode::SeriesSelect | Mode::SeriesCreate = mode {
@@ -234,6 +249,8 @@ fn draw_detail_window(
     edit_field: EpisodeField,
     edit_cursor_pos: usize,
     season_number: Option<usize>,
+    dirty_fields: &HashSet<EpisodeField>,
+    config: &Config,
 ) -> io::Result<()> {
     let start_col: usize = COL1_WIDTH + 2;
     let start_row = HEADER_SIZE;
@@ -261,7 +278,10 @@ fn draw_detail_window(
     let path = location.rsplit_once('/').map(|x| x.0).unwrap_or("");
     let filename = location.rsplit('/').next().unwrap_or("");
 
-    let mut detail_lines = Vec::new();
+    let mut edit_cursor_min: usize = 0;
+    if edit_mode && edit_field.is_editable() {
+        edit_cursor_min = edit_field.display_name().len() + 2;
+    }
 
     for i in 0..=8 {
         let field = EpisodeField::from(i);
@@ -288,26 +308,30 @@ fn draw_detail_window(
                 field_value
             }
         };
-        detail_lines.push(format!("{}: {}", field.display_name(), value));
-    }
 
-    let mut edit_cursor_min: usize = 0;
-    if edit_mode && edit_field.is_editable() {
-        edit_cursor_min = edit_field.display_name().len() + 2;
-    }
+        // Apply dirty colors to field name if in edit mode and field is dirty
+        let field_name_display = if edit_mode && dirty_fields.contains(&field) {
+            format!("{}:", field.display_name())
+                .with(string_to_fg_color_or_default(&config.dirty_fg))
+                .on(string_to_bg_color_or_default(&config.dirty_bg))
+                .to_string()
+        } else {
+            format!("{}:", field.display_name())
+        };
 
-    for (i, line) in detail_lines.iter().enumerate() {
+        let line = format!("{} {}", field_name_display, value);
+        
         if edit_mode && edit_field.is_editable() {
             print_at(
                 start_col + 1,
                 start_row + 1 + i,
-                &truncate_string(line, sidebar_width - 4).to_string(),
+                &truncate_string(&line, sidebar_width - 4).to_string(),
             )?;
         } else {
             print_at(
                 start_col + 1,
                 start_row + 1 + i,
-                &truncate_string(line, sidebar_width - 2).to_string(),
+                &truncate_string(&line, sidebar_width - 2).to_string(),
             )?;
         }
     }

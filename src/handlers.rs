@@ -1,4 +1,5 @@
 use crossterm::event::{self, KeyCode};
+use std::collections::HashSet;
 use std::io;
 use std::path::Path;
 use std::sync::mpsc::Sender;
@@ -97,6 +98,31 @@ pub fn handle_entry_mode(
     }
 }
 
+fn update_dirty_state(
+    field: EpisodeField,
+    current_details: &EpisodeDetail,
+    original_details: &EpisodeDetail,
+    dirty_fields: &mut HashSet<EpisodeField>,
+    season_number: &Option<usize>,
+) {
+    let current_value = field.get_field_value(current_details);
+    let original_value = field.get_field_value(original_details);
+
+    // Special handling for Season field
+    let is_dirty = if field == EpisodeField::Season {
+        let original_season = original_details.season.as_ref().map(|s| s.number);
+        season_number != &original_season
+    } else {
+        current_value != original_value
+    };
+
+    if is_dirty {
+        dirty_fields.insert(field);
+    } else {
+        dirty_fields.remove(&field);
+    }
+}
+
 pub fn handle_edit_mode(
     code: KeyCode,
     modifiers: event::KeyModifiers,
@@ -111,6 +137,8 @@ pub fn handle_edit_mode(
     redraw: &mut bool,
     view_context: &ViewContext,
     last_action: &mut Option<crate::util::LastAction>,
+    original_edit_details: &EpisodeDetail,
+    dirty_fields: &mut HashSet<EpisodeField>,
 ) {
     match code {
         KeyCode::F(2) => {
@@ -155,6 +183,8 @@ pub fn handle_edit_mode(
                     })
                 }
             };
+            // Clear dirty fields when saving
+            dirty_fields.clear();
             // let's set edit_field back to the first field
             *edit_field = EpisodeField::Title;
             *filtered_entries = entries.clone();
@@ -280,6 +310,7 @@ pub fn handle_edit_mode(
                     _ => {}
                 }
                 *edit_cursor_pos -= 1;
+                update_dirty_state(*edit_field, edit_details, original_edit_details, dirty_fields, season_number);
                 *redraw = true;
             }
         }
@@ -305,10 +336,13 @@ pub fn handle_edit_mode(
                     }
                     _ => {}
                 }
+                update_dirty_state(*edit_field, edit_details, original_edit_details, dirty_fields, season_number);
                 *redraw = true;
             }
         }
         KeyCode::Esc => {
+            // Clear dirty fields when canceling
+            dirty_fields.clear();
             *edit_field = EpisodeField::Title;
             *mode = Mode::Browse;
             *edit_cursor_pos = 0;
@@ -321,6 +355,7 @@ pub fn handle_edit_mode(
             } else {
                 edit_details.episode_number = "0".to_string();
             }
+            update_dirty_state(*edit_field, edit_details, original_edit_details, dirty_fields, season_number);
             *redraw = true;
         }
         KeyCode::Char('+') if *edit_field == EpisodeField::Season => {
@@ -341,7 +376,7 @@ pub fn handle_edit_mode(
             {
                 *season_number = original_season_number;
             }
-
+            update_dirty_state(*edit_field, edit_details, original_edit_details, dirty_fields, season_number);
             *redraw = true;
         }
         KeyCode::Char('-') if *edit_field == EpisodeField::EpisodeNumber => {
@@ -353,6 +388,7 @@ pub fn handle_edit_mode(
             } else {
                 edit_details.episode_number = "0".to_string();
             }
+            update_dirty_state(*edit_field, edit_details, original_edit_details, dirty_fields, season_number);
             *redraw = true;
         }
         KeyCode::Char('-') if *edit_field == EpisodeField::Season => {
@@ -363,6 +399,7 @@ pub fn handle_edit_mode(
             } else {
                 *season_number = Some(season_number.unwrap().saturating_sub(1));
             }
+            update_dirty_state(*edit_field, edit_details, original_edit_details, dirty_fields, season_number);
             *redraw = true;
         }
         KeyCode::Char(c) => {
@@ -381,6 +418,7 @@ pub fn handle_edit_mode(
             }
             if allow_edit {
                 *edit_cursor_pos += 1;
+                update_dirty_state(*edit_field, edit_details, original_edit_details, dirty_fields, season_number);
                 *redraw = true;
             }
         }
@@ -408,6 +446,8 @@ pub fn handle_browse_mode(
     last_action: &Option<crate::util::LastAction>,
     edit_field: &mut EpisodeField,
     edit_cursor_pos: &mut usize,
+    original_edit_details: &mut Option<EpisodeDetail>,
+    dirty_fields: &mut HashSet<EpisodeField>,
 ) -> io::Result<bool> {
     match code {
         KeyCode::Char('l') if modifiers.contains(event::KeyModifiers::CONTROL) => {
@@ -429,6 +469,10 @@ pub fn handle_browse_mode(
                 *edit_details =
                     database::get_episode_detail(episode_id).expect("Failed to get entry details");
                 *season_number = edit_details.season.as_ref().map(|season| season.number);
+
+                // Initialize dirty state when entering EDIT mode
+                *original_edit_details = Some(edit_details.clone());
+                dirty_fields.clear();
 
                 // Auto-fill episode number if series is assigned but episode number is not
                 if edit_details.series.is_some()

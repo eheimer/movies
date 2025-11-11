@@ -5,7 +5,7 @@
 
 use crate::dto::EpisodeDetail;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum EpisodeField {
     Path = 0,
     Filename = 1,

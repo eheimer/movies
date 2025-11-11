@@ -11,6 +11,8 @@ pub struct Config {
     pub path: String,
     pub current_fg: String,
     pub current_bg: String,
+    pub dirty_fg: String,
+    pub dirty_bg: String,
     pub video_extensions: Vec<String>,
     pub video_player: String,
 }
@@ -22,6 +24,8 @@ impl Default for Config {
             path: ".".to_string(),
             current_fg: "Black".to_string(),
             current_bg: "White".to_string(),
+            dirty_fg: "Black".to_string(),
+            dirty_bg: "White".to_string(),
             video_extensions: vec![
                 "mp4".to_string(),
                 "mkv".to_string(),

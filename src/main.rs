@@ -15,6 +15,7 @@ use display::draw_screen;
 use dto::EpisodeDetail;
 use episode_field::EpisodeField;
 use path_resolver::PathResolver;
+use std::collections::HashSet;
 use std::io;
 use std::panic;
 use std::sync::mpsc::{self, Receiver, Sender};
@@ -49,6 +50,8 @@ fn main_loop(mut entries: Vec<Entry>, config: Config, resolver: PathResolver) ->
     let mut season_number: Option<usize> = None;
     let mut view_context = ViewContext::TopLevel;
     let mut last_action: Option<LastAction> = None;
+    let mut original_edit_details: Option<EpisodeDetail> = None;
+    let mut dirty_fields: HashSet<EpisodeField> = HashSet::new();
 
     // Create a channel to communicate between the thread and the main loop
     let (tx, rx): (Sender<()>, Receiver<()>) = mpsc::channel();
@@ -129,6 +132,7 @@ fn main_loop(mut entries: Vec<Entry>, config: Config, resolver: PathResolver) ->
                 &new_series,
                 season_number,
                 &last_action,
+                &dirty_fields,
             )?;
             redraw = false;
         }
@@ -173,6 +177,16 @@ fn main_loop(mut entries: Vec<Entry>, config: Config, resolver: PathResolver) ->
                             &mut redraw,
                             &view_context,
                             &mut last_action,
+                            original_edit_details.as_ref().unwrap_or(&EpisodeDetail {
+                                title: String::new(),
+                                year: String::new(),
+                                watched: String::new(),
+                                length: String::new(),
+                                series: None,
+                                season: None,
+                                episode_number: String::new(),
+                            }),
+                            &mut dirty_fields,
                         );
                     }
                     Mode::Browse => {
@@ -196,6 +210,8 @@ fn main_loop(mut entries: Vec<Entry>, config: Config, resolver: PathResolver) ->
                             &last_action,
                             &mut edit_field,
                             &mut edit_cursor_pos,
+                            &mut original_edit_details,
+                            &mut dirty_fields,
                         )? {
                             break Ok(());
                         }
@@ -242,6 +258,14 @@ fn main_loop(mut entries: Vec<Entry>, config: Config, resolver: PathResolver) ->
                             mode = Mode::Browse;
                             redraw = true;
                         }
+                    }
+                }
+
+                // Clear dirty state when exiting EDIT mode
+                if !matches!(mode, Mode::Edit) {
+                    if original_edit_details.is_some() {
+                        original_edit_details = None;
+                        dirty_fields.clear();
                     }
                 }
             }
