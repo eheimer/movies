@@ -192,7 +192,11 @@ pub fn get_entries() -> Result<Vec<Entry>> {
     let mut stmt = conn.prepare(
         "SELECT id, name, location, 
               COALESCE(CAST(episode.episode_number AS TEXT), '') as episode_number 
-         FROM episode WHERE series_id IS NULL ORDER BY episode_number, name",
+         FROM episode WHERE series_id IS NULL 
+         ORDER BY 
+           CASE WHEN episode_number IS NULL OR episode_number = '' THEN 1 ELSE 0 END,
+           CAST(episode_number AS INTEGER),
+           name",
     )?;
     let episode_iter = stmt.query_map([], |row| {
         Ok(Entry::Episode {
@@ -267,7 +271,11 @@ pub fn get_entries_for_season(season_id: usize) -> Result<Vec<Entry>> {
     let mut stmt = conn.prepare(
         "SELECT id, name, location, 
               COALESCE(CAST(episode.episode_number AS TEXT), '') as episode_number 
-         FROM episode WHERE season_id = ?1 ORDER BY episode_number, name",
+         FROM episode WHERE season_id = ?1 
+         ORDER BY 
+           CASE WHEN episode_number IS NULL OR episode_number = '' THEN 1 ELSE 0 END,
+           CAST(episode_number AS INTEGER),
+           name",
     )?;
     let episode_iter = stmt.query_map(params![season_id], |row| {
         Ok(Entry::Episode {
