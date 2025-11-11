@@ -13,13 +13,11 @@ pub enum Entry {
     Season {
         season_id: usize,
         number: usize,
-        series_id: usize,
     },
     Episode {
         episode_id: usize,
         name: String,
         location: String,
-        episode_number: String,
     },
 }
 
@@ -67,17 +65,6 @@ pub enum Mode {
     Entry,        // initial load from disk
     SeriesSelect, // series selection
     SeriesCreate, // create a new series
-}
-
-//TODO: this might need to be moved to database.rs or at least
-// utilized by the get_all_entries function for sorting the episodes
-pub fn pad_string_as_number(s: &str, width: usize) -> String {
-    let mut padded = String::new();
-    for _ in 0..width.saturating_sub(s.len()) {
-        padded.push('0');
-    }
-    padded.push_str(s);
-    padded
 }
 
 pub fn truncate_string(s: &str, max_length: usize) -> String {

@@ -107,24 +107,6 @@ pub fn episode_exists(location: &str) -> Result<bool> {
     Ok(exists)
 }
 
-pub fn import_episode(location: &str, name: &str) -> Result<()> {
-    if episode_exists(location)? {
-        return Ok(());
-    }
-
-    let conn = DB_CONN.lock().unwrap();
-    let conn = conn
-        .as_ref()
-        .expect("Database connection is not initialized");
-
-    conn.execute(
-        "INSERT INTO episode (location, name, watched, length, series_id, season_id, episode_number, year)
-         VALUES (?1, ?2, false, 0, null, null, null, null)",
-        params![location, name],
-    )?;
-    Ok(())
-}
-
 /// Import an episode with relative path storage
 /// 
 /// # Arguments
@@ -190,8 +172,7 @@ pub fn get_entries() -> Result<Vec<Entry>> {
 
     // Retrieve episodes that are not part of a series
     let mut stmt = conn.prepare(
-        "SELECT id, name, location, 
-              COALESCE(CAST(episode.episode_number AS TEXT), '') as episode_number 
+        "SELECT id, name, location 
          FROM episode WHERE series_id IS NULL 
          ORDER BY 
            CASE WHEN episode_number IS NULL OR episode_number = '' THEN 1 ELSE 0 END,
@@ -203,7 +184,6 @@ pub fn get_entries() -> Result<Vec<Entry>> {
             episode_id: row.get(0)?,
             name: row.get(1)?,
             location: row.get(2)?,
-            episode_number: row.get(3)?,
         })
     })?;
 
@@ -229,7 +209,6 @@ pub fn get_entries_for_series(series_id: usize) -> Result<Vec<Entry>> {
         Ok(Entry::Season {
             season_id: row.get(0)?,
             number: row.get(1)?,
-            series_id,
         })
     })?;
 
@@ -239,8 +218,7 @@ pub fn get_entries_for_series(series_id: usize) -> Result<Vec<Entry>> {
 
     // Retrieve episodes that are part of the series but not part of a season
     let mut stmt = conn.prepare(
-        "SELECT id, name, location, 
-              COALESCE(CAST(episode.episode_number AS TEXT), '') as episode_number 
+        "SELECT id, name, location 
          FROM episode WHERE series_id = ?1 AND season_id IS NULL ORDER BY year, name",
     )?;
     let episode_iter = stmt.query_map(params![series_id], |row| {
@@ -248,7 +226,6 @@ pub fn get_entries_for_series(series_id: usize) -> Result<Vec<Entry>> {
             episode_id: row.get(0)?,
             name: row.get(1)?,
             location: row.get(2)?,
-            episode_number: row.get(3)?,
         })
     })?;
 
@@ -269,8 +246,7 @@ pub fn get_entries_for_season(season_id: usize) -> Result<Vec<Entry>> {
 
     // Retrieve episodes that are part of the season
     let mut stmt = conn.prepare(
-        "SELECT id, name, location, 
-              COALESCE(CAST(episode.episode_number AS TEXT), '') as episode_number 
+        "SELECT id, name, location 
          FROM episode WHERE season_id = ?1 
          ORDER BY 
            CASE WHEN episode_number IS NULL OR episode_number = '' THEN 1 ELSE 0 END,
@@ -282,7 +258,6 @@ pub fn get_entries_for_season(season_id: usize) -> Result<Vec<Entry>> {
             episode_id: row.get(0)?,
             name: row.get(1)?,
             location: row.get(2)?,
-            episode_number: row.get(3)?,
         })
     })?;
 

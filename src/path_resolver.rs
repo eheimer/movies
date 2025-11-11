@@ -204,21 +204,6 @@ impl PathResolver {
         Ok(())
     }
     
-    /// Get the configured root directory path
-    /// 
-    /// # Returns
-    /// * `&Path` - Reference to the root directory path
-    pub fn get_root_dir(&self) -> &Path {
-        &self.root_dir
-    }
-    
-    /// Get the executable directory path
-    /// 
-    /// # Returns
-    /// * `&Path` - Reference to the executable directory path
-    pub fn get_executable_dir(&self) -> &Path {
-        &self.executable_dir
-    }
 }
 
 #[cfg(test)]
@@ -232,7 +217,7 @@ mod tests {
         let resolver = PathResolver::new(None).unwrap();
         
         // Should use executable directory as root when no config provided
-        assert_eq!(resolver.get_root_dir(), resolver.get_executable_dir());
+        assert_eq!(resolver.root_dir, resolver.executable_dir);
     }
     
     #[test]
@@ -244,7 +229,7 @@ mod tests {
         let db_path = resolver.get_database_path();
         
         // Database should be in executable directory, not the configured root
-        assert!(db_path.starts_with(resolver.get_executable_dir()));
+        assert!(db_path.starts_with(&resolver.executable_dir));
         assert_eq!(db_path.file_name().unwrap(), "videos.db");
     }
     

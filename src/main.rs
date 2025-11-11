@@ -30,7 +30,6 @@ fn main_loop(mut entries: Vec<Entry>, config: Config, resolver: PathResolver) ->
     let mut filtered_entries: Vec<Entry> = entries.clone();
     let mut playing_file: Option<String> = None;
     let mut mode = Mode::Browse;
-    let mut entry_path = String::new();
     let mut first_entry = 0;
     let mut edit_field = EpisodeField::Title;
     let mut edit_cursor_pos: usize = 0;
@@ -59,7 +58,7 @@ fn main_loop(mut entries: Vec<Entry>, config: Config, resolver: PathResolver) ->
     //if entries is empty, we will automatically load the config path
     // set entry_path to the config value, then change mode to Entry
     // Resolve the config path to an absolute path using the PathResolver
-    entry_path = config.get_resolved_path(&resolver)
+    let mut entry_path = config.get_resolved_path(&resolver)
         .to_string_lossy()
         .to_string();
     if entries.is_empty() {
