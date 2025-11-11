@@ -20,7 +20,7 @@ use std::panic;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::time::Duration;
 use terminal::{initialize_terminal, restore_terminal};
-use util::{Entry, Mode, ViewContext};
+use util::{Entry, LastAction, Mode, ViewContext};
 
 fn main_loop(mut entries: Vec<Entry>, config: Config, resolver: PathResolver) -> io::Result<()> {
     let mut current_item = 0;
@@ -48,6 +48,7 @@ fn main_loop(mut entries: Vec<Entry>, config: Config, resolver: PathResolver) ->
     let mut selected_entry_id: Option<usize> = None;
     let mut season_number: Option<usize> = None;
     let mut view_context = ViewContext::TopLevel;
+    let mut last_action: Option<LastAction> = None;
 
     // Create a channel to communicate between the thread and the main loop
     let (tx, rx): (Sender<()>, Receiver<()>) = mpsc::channel();
@@ -127,6 +128,7 @@ fn main_loop(mut entries: Vec<Entry>, config: Config, resolver: PathResolver) ->
                 &mut series_selection,
                 &new_series,
                 season_number,
+                &last_action,
             )?;
             redraw = false;
         }
@@ -170,6 +172,7 @@ fn main_loop(mut entries: Vec<Entry>, config: Config, resolver: PathResolver) ->
                             &mut edit_cursor_pos,
                             &mut redraw,
                             &view_context,
+                            &mut last_action,
                         );
                     }
                     Mode::Browse => {
@@ -190,6 +193,7 @@ fn main_loop(mut entries: Vec<Entry>, config: Config, resolver: PathResolver) ->
                             &resolver,
                             &tx,
                             &mut view_context,
+                            &last_action,
                         )? {
                             break Ok(());
                         }
@@ -207,6 +211,7 @@ fn main_loop(mut entries: Vec<Entry>, config: Config, resolver: PathResolver) ->
                                 &mut entries,
                                 &mut filtered_entries,
                                 &view_context,
+                                &mut last_action,
                             );
                         } else {
                             // selected entry is a series, change mode back to browse

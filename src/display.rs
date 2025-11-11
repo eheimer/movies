@@ -4,12 +4,12 @@ use crate::episode_field::EpisodeField;
 use crate::terminal::{
     clear_line, clear_screen, get_terminal_size, hide_cursor, move_cursor, print_at, show_cursor,
 };
-use crate::util::{truncate_string, Entry, Mode};
+use crate::util::{can_repeat_action, truncate_string, Entry, LastAction, Mode};
 use crossterm::style::{Color, Stylize};
 use std::convert::From;
 use std::io;
 
-const HEADER_SIZE: usize = 5;
+const HEADER_SIZE: usize = 6;
 const FOOTER_SIZE: usize = 0;
 const COL1_WIDTH: usize = 45;
 const MIN_COL2_WIDTH: usize = 20;
@@ -50,45 +50,62 @@ fn draw_header(
     series_selected: bool,
     season_selected: bool,
     series_filter_active: bool,
+    last_action_display: &str,
 ) -> io::Result<()> {
-    let instructions: Vec<&str> = match mode {
+    let show_f5 = !last_action_display.is_empty();
+    
+    let instructions: Vec<String> = match mode {
         Mode::Browse => {
             if series_selected {
                 vec![
-                    "type to filter, [\u{2191}]/[\u{2193}] navigate, [ENTER] show episodes, [ESC] exit",
-                    "[CTRL][L] rescan"
+                    "type to filter, [\u{2191}]/[\u{2193}] navigate, [ENTER] show episodes, [ESC] exit".to_string(),
+                    "[CTRL][L] rescan".to_string()
                 ]
             } else if season_selected {
                 vec![
-                    "type to filter, [\u{2191}]/[\u{2193}] navigate, [ENTER] show episodes, [ESC] back",
-                    "[CTRL][L] rescan"
+                    "type to filter, [\u{2191}]/[\u{2193}] navigate, [ENTER] show episodes, [ESC] back".to_string(),
+                    "[CTRL][L] rescan".to_string()
                 ]
             } else if series_filter_active {
+                let mut line2 = "[F2] edit, [F3] toggle watched, [F4] assign to series".to_string();
+                if show_f5 {
+                    line2.push_str(", [F5] Repeat action");
+                }
+                line2.push_str(", [CTRL][L] rescan");
                 vec![
-                    "type to filter, [\u{2191}]/[\u{2193}] navigate, [ENTER] play, [ESC] back",
-                    "[F2] edit, [F3] toggle watched, [F4] assign to series, [CTRL][L] rescan",
+                    "type to filter, [\u{2191}]/[\u{2193}] navigate, [ENTER] play, [ESC] back".to_string(),
+                    line2,
                 ]
             } else {
+                let mut line2 = "[F2] edit, [F3] toggle watched, [F4] assign to series".to_string();
+                if show_f5 {
+                    line2.push_str(", [F5] Repeat action");
+                }
+                line2.push_str(", [CTRL][L] rescan");
                 vec![
-                    "type to filter, [\u{2191}]/[\u{2193}] navigate, [ENTER] play, [ESC] exit",
-                    "[F2] edit, [F3] toggle watched, [F4] assign to series, [CTRL][L] rescan",
+                    "type to filter, [\u{2191}]/[\u{2193}] navigate, [ENTER] play, [ESC] exit".to_string(),
+                    line2,
                 ]
             }
         }
-        Mode::Edit => vec!["[\u{2191}]/[\u{2193}] change field, [ESC] cancel, [F2] save changes"],
-        Mode::Entry => vec!["Enter a file path to scan, [ESC] cancel"],
+        Mode::Edit => vec!["[\u{2191}]/[\u{2193}] change field, [ESC] cancel, [F2] save changes".to_string()],
+        Mode::Entry => vec!["Enter a file path to scan, [ESC] cancel".to_string()],
         Mode::SeriesSelect => vec![
-            "[\u{2191}]/[\u{2193}] navigate, [ENTER] select, [ESC] cancel",
-            "[+] create a new series, [CTRL][-] deselect series",
+            "[\u{2191}]/[\u{2193}] navigate, [ENTER] select, [ESC] cancel".to_string(),
+            "[+] create a new series, [CTRL][-] deselect series".to_string(),
         ],
-        Mode::SeriesCreate => vec!["Type a series name, [ENTER] save, [ESC] cancel"],
+        Mode::SeriesCreate => vec!["Type a series name, [ENTER] save, [ESC] cancel".to_string()],
     };
     //loop through the instructions and print them in the header
-    for (i, instructions) in instructions.iter().enumerate() {
-        print_at(1, i, &instructions.with(Color::Black).on(Color::White))?;
+    for (i, instruction) in instructions.iter().enumerate() {
+        print_at(1, i, &instruction.as_str().with(Color::Black).on(Color::White))?;
     }
 
-    print_at(0, 3, &format!("filter: {}", filter))?;
+    // Print last action display at row 2
+    print_at(0, 2, &last_action_display)?;
+
+    // Adjust filter line to row 4 (was row 3)
+    print_at(0, 4, &format!("filter: {}", filter))?;
     Ok(())
 }
 
@@ -107,6 +124,7 @@ pub fn draw_screen(
     series_selection: &mut Option<usize>,
     new_series: &String,
     season_number: Option<usize>,
+    last_action: &Option<LastAction>,
 ) -> io::Result<()> {
     clear_screen()?;
 
@@ -123,12 +141,29 @@ pub fn draw_screen(
         && matches!(entries.get(current_item), Some(Entry::Episode { .. }))
         && edit_details.series.is_some();
 
+    // Calculate last_action_display string
+    let last_action_display = if !entries.is_empty() {
+        let selected_entry = entries.get(current_item);
+        if let Some(entry) = selected_entry {
+            if can_repeat_action(last_action, entry, edit_details) {
+                last_action.as_ref().map(|a| a.format_display()).unwrap_or_default()
+            } else {
+                String::new()
+            }
+        } else {
+            String::new()
+        }
+    } else {
+        String::new()
+    };
+
     draw_header(
         mode,
         filter,
         series_selected,
         season_selected,
         series_filter_active,
+        &last_action_display,
     )?;
 
     if entries.is_empty() {

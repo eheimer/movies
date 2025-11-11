@@ -110,6 +110,7 @@ pub fn handle_edit_mode(
     edit_cursor_pos: &mut usize,
     redraw: &mut bool,
     view_context: &ViewContext,
+    last_action: &mut Option<crate::util::LastAction>,
 ) {
     match code {
         KeyCode::F(2) => {
@@ -122,9 +123,17 @@ pub fn handle_edit_mode(
             
             // Handle season creation if season_number is set
             if let Some(series) = &edit_details.series {
-                if let Some(season_number) = season_number {
-                    let _ = database::create_season_and_assign(series.id, *season_number, episode_id)
+                if let Some(season_num) = season_number {
+                    let season_id = database::create_season_and_assign(series.id, *season_num, episode_id)
                         .expect("Failed to create season and assign");
+                    
+                    // Update last_action with the season assignment
+                    *last_action = Some(crate::util::LastAction::SeasonAssignment {
+                        series_id: series.id,
+                        series_name: series.name.clone(),
+                        season_id,
+                        season_number: *season_num,
+                    });
                 }
             }
             
@@ -396,6 +405,7 @@ pub fn handle_browse_mode(
     resolver: &PathResolver,
     tx: &Sender<()>,
     view_context: &mut ViewContext,
+    last_action: &Option<crate::util::LastAction>,
 ) -> io::Result<bool> {
     match code {
         KeyCode::Char('l') if modifiers.contains(event::KeyModifiers::CONTROL) => {
@@ -446,6 +456,57 @@ pub fn handle_browse_mode(
             // enter series select mode
             *mode = Mode::SeriesSelect;
             *redraw = true;
+        }
+        KeyCode::F(5) => {
+            // Repeat last action
+            if let Some(action) = last_action {
+                // Get the current selected entry
+                if *current_item < filtered_entries.len() {
+                    let selected_entry = &filtered_entries[*current_item];
+                    
+                    // Get episode_id if the selected entry is an Episode
+                    if let Entry::Episode { episode_id, .. } = selected_entry {
+                        // Check if we can repeat the action
+                        if crate::util::can_repeat_action(last_action, selected_entry, edit_details) {
+                            match action {
+                                crate::util::LastAction::SeriesAssignment { series_id, .. } => {
+                                    // Assign the episode to the series
+                                    let _ = database::assign_series(*series_id, *episode_id);
+                                }
+                                crate::util::LastAction::SeasonAssignment {
+                                    series_id,
+                                    season_number,
+                                    ..
+                                } => {
+                                    // Assign the episode to the series and season
+                                    let _ = database::create_season_and_assign(
+                                        *series_id,
+                                        *season_number,
+                                        *episode_id,
+                                    );
+                                }
+                            }
+                            
+                            // Reload entries based on current view context
+                            *entries = match view_context {
+                                ViewContext::TopLevel => {
+                                    database::get_entries().expect("Failed to get entries")
+                                }
+                                ViewContext::Series { series_id } => {
+                                    database::get_entries_for_series(*series_id)
+                                        .expect("Failed to get entries for series")
+                                }
+                                ViewContext::Season { season_id } => {
+                                    database::get_entries_for_season(*season_id)
+                                        .expect("Failed to get entries for season")
+                                }
+                            };
+                            *filtered_entries = entries.clone();
+                            *redraw = true;
+                        }
+                    }
+                }
+            }
         }
         KeyCode::Up => {
             if *current_item > 0 {
@@ -585,6 +646,7 @@ pub fn handle_series_select_mode(
     entries: &mut Vec<Entry>,
     filtered_entries: &mut Vec<Entry>,
     view_context: &ViewContext,
+    last_action: &mut Option<crate::util::LastAction>,
 ) {
     match code {
         KeyCode::Up => {
@@ -597,9 +659,19 @@ pub fn handle_series_select_mode(
         }
         KeyCode::Enter => {
             // save the series id to the episode, then return to browse mode
-            let series_id = series[series_selection.unwrap()].id;
+            let selected_series = &series[series_selection.unwrap()];
+            let series_id = selected_series.id;
+            let series_name = selected_series.name.clone();
+            
             *episode_detail =
                 database::assign_series(series_id, episode_id).expect("Failed to assign series");
+            
+            // Update last_action with the series assignment
+            *last_action = Some(crate::util::LastAction::SeriesAssignment {
+                series_id,
+                series_name,
+            });
+            
             // Reload entries based on current view context
             *entries = match view_context {
                 ViewContext::TopLevel => {
