@@ -721,6 +721,8 @@ pub fn handle_series_select_mode(
     filtered_entries: &mut Vec<Entry>,
     view_context: &ViewContext,
     last_action: &mut Option<crate::util::LastAction>,
+    new_series: &mut String,
+    edit_cursor_pos: &mut usize,
 ) {
     match code {
         KeyCode::Up => {
@@ -771,6 +773,8 @@ pub fn handle_series_select_mode(
         KeyCode::Char('+') => {
             // Create a new series
             *series_selection = None;
+            *new_series = String::new();
+            *edit_cursor_pos = 0;
             *mode = Mode::SeriesCreate;
             *redraw = true;
         }

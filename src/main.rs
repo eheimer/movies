@@ -230,6 +230,8 @@ fn main_loop(mut entries: Vec<Entry>, config: Config, resolver: PathResolver) ->
                                 &mut filtered_entries,
                                 &view_context,
                                 &mut last_action,
+                                &mut new_series,
+                                &mut edit_cursor_pos,
                             );
                         } else {
                             // selected entry is a series, change mode back to browse
