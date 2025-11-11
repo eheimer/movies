@@ -169,6 +169,7 @@ fn main_loop(mut entries: Vec<Entry>, config: Config, resolver: PathResolver) ->
                             &mut edit_field,
                             &mut edit_cursor_pos,
                             &mut redraw,
+                            &view_context,
                         );
                     }
                     Mode::Browse => {
@@ -205,6 +206,7 @@ fn main_loop(mut entries: Vec<Entry>, config: Config, resolver: PathResolver) ->
                                 &mut edit_details,
                                 &mut entries,
                                 &mut filtered_entries,
+                                &view_context,
                             );
                         } else {
                             // selected entry is a series, change mode back to browse
@@ -226,6 +228,7 @@ fn main_loop(mut entries: Vec<Entry>, config: Config, resolver: PathResolver) ->
                                 &mut edit_details,
                                 &mut entries,
                                 &mut filtered_entries,
+                                &view_context,
                             );
                         } else {
                             // selected entry is a series, change mode back to browse

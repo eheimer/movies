@@ -109,6 +109,7 @@ pub fn handle_edit_mode(
     edit_field: &mut EpisodeField,
     edit_cursor_pos: &mut usize,
     redraw: &mut bool,
+    view_context: &ViewContext,
 ) {
     match code {
         KeyCode::F(2) => {
@@ -118,22 +119,33 @@ pub fn handle_edit_mode(
                 _ => 0,
             };
             let _ = database::update_episode_detail(episode_id, edit_details);
-            // Reload entries based on whether the episode is part of a series or not
+            
+            // Handle season creation if season_number is set
             if let Some(series) = &edit_details.series {
-                // if season_number is not None, call database.create_season_and_assign
                 if let Some(season_number) = season_number {
-                    let season_id =
-                        database::create_season_and_assign(series.id, *season_number, episode_id)
-                            .expect("Failed to create season and assign");
-                    *entries = database::get_entries_for_season(season_id)
-                        .expect("Failed to get entries for season");
-                } else {
-                    *entries = database::get_entries_for_series(series.id)
-                        .expect("Failed to get entries for series");
+                    let _ = database::create_season_and_assign(series.id, *season_number, episode_id)
+                        .expect("Failed to create season and assign");
                 }
-            } else {
-                *entries = database::get_entries().expect("Failed to get entries");
             }
+            
+            // Reload entries based on current view context
+            *entries = match view_context {
+                ViewContext::TopLevel => {
+                    database::get_entries().unwrap_or_else(|_| {
+                        database::get_entries().expect("Failed to get entries")
+                    })
+                }
+                ViewContext::Series { series_id } => {
+                    database::get_entries_for_series(*series_id).unwrap_or_else(|_| {
+                        database::get_entries().expect("Failed to get entries")
+                    })
+                }
+                ViewContext::Season { season_id } => {
+                    database::get_entries_for_season(*season_id).unwrap_or_else(|_| {
+                        database::get_entries().expect("Failed to get entries")
+                    })
+                }
+            };
             // let's set edit_field back to the first field
             *edit_field = EpisodeField::Title;
             *filtered_entries = entries.clone();
@@ -572,6 +584,7 @@ pub fn handle_series_select_mode(
     episode_detail: &mut EpisodeDetail,
     entries: &mut Vec<Entry>,
     filtered_entries: &mut Vec<Entry>,
+    view_context: &ViewContext,
 ) {
     match code {
         KeyCode::Up => {
@@ -587,8 +600,24 @@ pub fn handle_series_select_mode(
             let series_id = series[series_selection.unwrap()].id;
             *episode_detail =
                 database::assign_series(series_id, episode_id).expect("Failed to assign series");
-            // Reload entries from the database
-            *entries = database::get_entries().expect("Failed to get entries");
+            // Reload entries based on current view context
+            *entries = match view_context {
+                ViewContext::TopLevel => {
+                    database::get_entries().unwrap_or_else(|_| {
+                        database::get_entries().expect("Failed to get entries")
+                    })
+                }
+                ViewContext::Series { series_id } => {
+                    database::get_entries_for_series(*series_id).unwrap_or_else(|_| {
+                        database::get_entries().expect("Failed to get entries")
+                    })
+                }
+                ViewContext::Season { season_id } => {
+                    database::get_entries_for_season(*season_id).unwrap_or_else(|_| {
+                        database::get_entries().expect("Failed to get entries")
+                    })
+                }
+            };
             *filtered_entries = entries.clone();
             *mode = Mode::Browse;
             *redraw = true;
@@ -621,6 +650,7 @@ pub fn handle_series_create_mode(
     episode_detail: &mut EpisodeDetail,
     entries: &mut Vec<Entry>,
     filtered_entries: &mut Vec<Entry>,
+    view_context: &ViewContext,
 ) {
     match code {
         KeyCode::Enter => {
@@ -629,8 +659,24 @@ pub fn handle_series_create_mode(
                 .expect("Failed to create series");
             // reload the series list
             *series = database::get_all_series().expect("Failed to get series");
-            // Reload entries from the database
-            *entries = database::get_entries().expect("Failed to get entries");
+            // Reload entries based on current view context
+            *entries = match view_context {
+                ViewContext::TopLevel => {
+                    database::get_entries().unwrap_or_else(|_| {
+                        database::get_entries().expect("Failed to get entries")
+                    })
+                }
+                ViewContext::Series { series_id } => {
+                    database::get_entries_for_series(*series_id).unwrap_or_else(|_| {
+                        database::get_entries().expect("Failed to get entries")
+                    })
+                }
+                ViewContext::Season { season_id } => {
+                    database::get_entries_for_season(*season_id).unwrap_or_else(|_| {
+                        database::get_entries().expect("Failed to get entries")
+                    })
+                }
+            };
             *filtered_entries = entries.clone();
             *mode = Mode::Browse;
             *redraw = true;
