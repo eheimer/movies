@@ -983,6 +983,7 @@ fn execute_menu_action(
 
                 // Auto-fill episode number if series is assigned but episode number is not
                 if edit_details.series.is_some()
+                    && season_number.is_some()
                     && (edit_details.episode_number.is_empty() || edit_details.episode_number == "0")
                 {
                     // Calculate next available episode number
@@ -994,6 +995,7 @@ fn execute_menu_action(
 
                     // Pre-fill the episode number
                     edit_details.episode_number = next_episode.to_string();
+                    dirty_fields.insert(EpisodeField::EpisodeNumber);
 
                     // Set cursor to episode number field
                     *edit_field = EpisodeField::EpisodeNumber;
