@@ -394,6 +394,20 @@ pub fn toggle_watched_status(id: usize) -> Result<(), Box<dyn std::error::Error>
     Ok(())
 }
 
+pub fn clear_series_data(episode_id: usize) -> Result<(), Box<dyn std::error::Error>> {
+    let conn = DB_CONN.lock().unwrap();
+    let conn = conn
+        .as_ref()
+        .expect("Database connection is not initialized");
+
+    conn.execute(
+        "UPDATE episode SET series_id = NULL, season_id = NULL, episode_number = NULL WHERE id = ?1",
+        params![episode_id],
+    )?;
+
+    Ok(())
+}
+
 pub fn get_all_series() -> Result<Vec<Series>> {
     let conn = DB_CONN.lock().unwrap();
     let conn = conn

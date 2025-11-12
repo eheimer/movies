@@ -1090,5 +1090,24 @@ fn execute_menu_action(
             *mode = Mode::Entry;
             *redraw = true;
         }
+        MenuAction::ClearSeriesData => {
+            // Clear series, season, and episode number for the remembered episode
+            if let Entry::Episode { episode_id, .. } = filtered_entries[remembered_item] {
+                database::clear_series_data(episode_id)
+                    .expect("Failed to clear series data");
+
+                // Reload entries based on current view context
+                *entries = match view_context {
+                    ViewContext::TopLevel => database::get_entries().expect("Failed to get entries"),
+                    ViewContext::Series { series_id } => database::get_entries_for_series(*series_id)
+                        .expect("Failed to get entries for series"),
+                    ViewContext::Season { season_id } => database::get_entries_for_season(*season_id)
+                        .expect("Failed to get entries for season"),
+                };
+                *filtered_entries = entries.clone();
+                *mode = Mode::Browse;
+                *redraw = true;
+            }
+        }
     }
 }

@@ -23,6 +23,7 @@ pub enum MenuAction {
     AssignToSeries,
     RepeatAction,
     Rescan,
+    ClearSeriesData,
 }
 
 pub struct MenuContext {
@@ -57,6 +58,12 @@ fn define_all_menu_items() -> Vec<MenuItem> {
             label: "Repeat action".to_string(),
             hotkey: Some(KeyCode::F(5)),
             action: MenuAction::RepeatAction,
+            location: MenuLocation::ContextMenu,
+        },
+        MenuItem {
+            label: "Clear Series Data".to_string(),
+            hotkey: Some(KeyCode::F(6)),
+            action: MenuAction::ClearSeriesData,
             location: MenuLocation::ContextMenu,
         },
         MenuItem {
@@ -95,6 +102,18 @@ fn is_item_available(item: &MenuItem, context: &MenuContext) -> bool {
         MenuAction::Rescan => {
             // Always available
             true
+        }
+        MenuAction::ClearSeriesData => {
+            // Available only when selected entry is an Episode with series data
+            if let Some(Entry::Episode { .. }) = context.selected_entry {
+                // Check if any series-related field is populated
+                context.episode_detail.series.is_some()
+                    || context.episode_detail.season.is_some()
+                    || (!context.episode_detail.episode_number.is_empty()
+                        && context.episode_detail.episode_number != "0")
+            } else {
+                false
+            }
         }
     }
 }
