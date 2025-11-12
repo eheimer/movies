@@ -394,6 +394,48 @@ pub fn toggle_watched_status(id: usize) -> Result<(), Box<dyn std::error::Error>
     Ok(())
 }
 
+pub fn unwatch_all_in_season(season_id: usize) -> Result<(), Box<dyn std::error::Error>> {
+    let conn = DB_CONN.lock().unwrap();
+    let conn = conn
+        .as_ref()
+        .expect("Database connection is not initialized");
+
+    conn.execute(
+        "UPDATE episode SET watched = false WHERE season_id = ?1",
+        params![season_id],
+    )?;
+
+    Ok(())
+}
+
+pub fn unwatch_all_in_series(series_id: usize) -> Result<(), Box<dyn std::error::Error>> {
+    let conn = DB_CONN.lock().unwrap();
+    let conn = conn
+        .as_ref()
+        .expect("Database connection is not initialized");
+
+    conn.execute(
+        "UPDATE episode SET watched = false WHERE series_id = ?1",
+        params![series_id],
+    )?;
+
+    Ok(())
+}
+
+pub fn unwatch_all_standalone() -> Result<(), Box<dyn std::error::Error>> {
+    let conn = DB_CONN.lock().unwrap();
+    let conn = conn
+        .as_ref()
+        .expect("Database connection is not initialized");
+
+    conn.execute(
+        "UPDATE episode SET watched = false WHERE series_id IS NULL",
+        [],
+    )?;
+
+    Ok(())
+}
+
 pub fn clear_series_data(episode_id: usize) -> Result<(), Box<dyn std::error::Error>> {
     let conn = DB_CONN.lock().unwrap();
     let conn = conn

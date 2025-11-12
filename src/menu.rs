@@ -24,6 +24,7 @@ pub enum MenuAction {
     RepeatAction,
     Rescan,
     ClearSeriesData,
+    UnwatchAll,
 }
 
 pub struct MenuContext {
@@ -64,6 +65,12 @@ fn define_all_menu_items() -> Vec<MenuItem> {
             label: "Clear Series Data".to_string(),
             hotkey: Some(KeyCode::F(6)),
             action: MenuAction::ClearSeriesData,
+            location: MenuLocation::ContextMenu,
+        },
+        MenuItem {
+            label: "Unwatch All".to_string(),
+            hotkey: Some(KeyCode::F(7)),
+            action: MenuAction::UnwatchAll,
             location: MenuLocation::ContextMenu,
         },
         MenuItem {
@@ -114,6 +121,10 @@ fn is_item_available(item: &MenuItem, context: &MenuContext) -> bool {
             } else {
                 false
             }
+        }
+        MenuAction::UnwatchAll => {
+            // Available in all contexts
+            true
         }
     }
 }

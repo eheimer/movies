@@ -1109,5 +1109,34 @@ fn execute_menu_action(
                 *redraw = true;
             }
         }
+        MenuAction::UnwatchAll => {
+            // Determine scope based on view_context
+            match view_context {
+                ViewContext::Season { season_id } => {
+                    database::unwatch_all_in_season(*season_id)
+                        .expect("Failed to unwatch all episodes in season");
+                }
+                ViewContext::Series { series_id } => {
+                    database::unwatch_all_in_series(*series_id)
+                        .expect("Failed to unwatch all episodes in series");
+                }
+                ViewContext::TopLevel => {
+                    database::unwatch_all_standalone()
+                        .expect("Failed to unwatch all standalone episodes");
+                }
+            }
+
+            // Reload entries based on current view context
+            *entries = match view_context {
+                ViewContext::TopLevel => database::get_entries().expect("Failed to get entries"),
+                ViewContext::Series { series_id } => database::get_entries_for_series(*series_id)
+                    .expect("Failed to get entries for series"),
+                ViewContext::Season { season_id } => database::get_entries_for_season(*season_id)
+                    .expect("Failed to get entries for season"),
+            };
+            *filtered_entries = entries.clone();
+            *mode = Mode::Browse;
+            *redraw = true;
+        }
     }
 }
