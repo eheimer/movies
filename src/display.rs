@@ -1,10 +1,12 @@
 use crate::config::Config;
 use crate::dto::{EpisodeDetail, Series};
 use crate::episode_field::EpisodeField;
+use crate::menu::MenuItem;
 use crate::terminal::{
     clear_line, clear_screen, get_terminal_size, hide_cursor, move_cursor, print_at, show_cursor,
 };
 use crate::util::{can_repeat_action, truncate_string, Entry, LastAction, Mode};
+use crossterm::event::KeyCode;
 use crossterm::style::{Color, Stylize};
 use std::collections::HashSet;
 use std::convert::From;
@@ -53,55 +55,30 @@ fn draw_header(
     series_filter_active: bool,
     last_action_display: &str,
     is_dirty: bool,
-    selected_entry: Option<&Entry>,
-    edit_details: &EpisodeDetail,
+    _selected_entry: Option<&Entry>,
+    _edit_details: &EpisodeDetail,
 ) -> io::Result<()> {
-    let show_f5 = !last_action_display.is_empty();
-    
-    // Determine if F4 should be shown
-    let show_f4 = if let Some(Entry::Episode { .. }) = selected_entry {
-        edit_details.series.is_none()
-    } else {
-        false
-    };
-    
     let instructions: Vec<String> = match mode {
         Mode::Browse => {
             if series_selected {
                 vec![
                     "type to filter, [\u{2191}]/[\u{2193}] navigate, [ENTER] show episodes, [ESC] exit".to_string(),
-                    "[CTRL][L] rescan".to_string()
+                    "[F1] Menu, [CTRL][L] rescan".to_string()
                 ]
             } else if season_selected {
                 vec![
                     "type to filter, [\u{2191}]/[\u{2193}] navigate, [ENTER] show episodes, [ESC] back".to_string(),
-                    "[CTRL][L] rescan".to_string()
+                    "[F1] Menu, [CTRL][L] rescan".to_string()
                 ]
             } else if series_filter_active {
-                let mut line2 = "[F2] edit, [F3] toggle watched".to_string();
-                if show_f4 {
-                    line2.push_str(", [F4] assign to series");
-                }
-                if show_f5 {
-                    line2.push_str(", [F5] Repeat action");
-                }
-                line2.push_str(", [CTRL][L] rescan");
                 vec![
                     "type to filter, [\u{2191}]/[\u{2193}] navigate, [ENTER] play, [ESC] back".to_string(),
-                    line2,
+                    "[F1] Menu, [CTRL][L] rescan".to_string(),
                 ]
             } else {
-                let mut line2 = "[F2] edit, [F3] toggle watched".to_string();
-                if show_f4 {
-                    line2.push_str(", [F4] assign to series");
-                }
-                if show_f5 {
-                    line2.push_str(", [F5] Repeat action");
-                }
-                line2.push_str(", [CTRL][L] rescan");
                 vec![
                     "type to filter, [\u{2191}]/[\u{2193}] navigate, [ENTER] play, [ESC] exit".to_string(),
-                    line2,
+                    "[F1] Menu, [CTRL][L] rescan".to_string(),
                 ]
             }
         }
@@ -118,6 +95,9 @@ fn draw_header(
             "[+] create a new series, [CTRL][-] deselect series".to_string(),
         ],
         Mode::SeriesCreate => vec!["Type a series name, [ENTER] save, [ESC] cancel".to_string()],
+        Mode::Menu => vec![
+            "[\u{2191}]/[\u{2193}] navigate, [ENTER] select, [ESC] close menu".to_string(),
+        ],
     };
     //loop through the instructions and print them in the header
     for (i, instruction) in instructions.iter().enumerate() {
@@ -149,6 +129,8 @@ pub fn draw_screen(
     season_number: Option<usize>,
     last_action: &Option<LastAction>,
     dirty_fields: &HashSet<EpisodeField>,
+    menu_items: &[MenuItem],
+    menu_selection: usize,
 ) -> io::Result<()> {
     clear_screen()?;
 
@@ -257,6 +239,11 @@ pub fn draw_screen(
         if let Mode::SeriesSelect | Mode::SeriesCreate = mode {
             draw_series_window(mode, series, new_series, series_selection, config)?;
         }
+    }
+
+    // Draw context menu if in Menu mode
+    if let Mode::Menu = mode {
+        draw_context_menu(menu_items, menu_selection, config)?;
     }
 
     Ok(())
@@ -462,6 +449,77 @@ fn draw_series_window(
     Ok(())
 }
 
+fn draw_context_menu(
+    menu_items: &[MenuItem],
+    selected_index: usize,
+    config: &Config,
+) -> io::Result<()> {
+    if menu_items.is_empty() {
+        return Ok(());
+    }
+
+    // Calculate menu dimensions - need to account for label + spacing + hotkey
+    let max_label_width = menu_items
+        .iter()
+        .map(|item| item.label.len())
+        .max()
+        .unwrap_or(20);
+    
+    let max_hotkey_width = menu_items
+        .iter()
+        .map(|item| format_hotkey(&item.hotkey).len())
+        .max()
+        .unwrap_or(5);
+    
+    // Width = left padding + label + spacing + hotkey + right padding
+    let menu_width = 2 + max_label_width + 2 + max_hotkey_width + 2;
+    let menu_height = menu_items.len() + 2; // Add 2 for top and bottom borders
+
+    // Calculate menu position (right-justified, at first row)
+    let (terminal_width, _) = get_terminal_size()?;
+    let start_col = terminal_width.saturating_sub(menu_width);
+    let start_row = 0;
+
+    // Draw the menu window with double-line border
+    draw_window(start_col, start_row, menu_width, menu_height, true)?;
+
+    // Draw each menu item with left-justified label and right-justified hotkey
+    for (i, item) in menu_items.iter().enumerate() {
+        let hotkey_str = format_hotkey(&item.hotkey);
+        let content_width = menu_width - 2; // Subtract borders
+        
+        // Create the display text with label left-justified and hotkey right-justified
+        let spacing = content_width.saturating_sub(item.label.len() + hotkey_str.len());
+        let display_text = format!("{}{}{}", item.label, " ".repeat(spacing), hotkey_str);
+        
+        let formatted_text = if i == selected_index {
+            // Highlight the selected item
+            format!(
+                "{}",
+                display_text
+                    .with(string_to_fg_color_or_default(&config.current_fg))
+                    .on(string_to_bg_color_or_default(&config.current_bg))
+            )
+        } else {
+            display_text
+        };
+
+        print_at(start_col + 1, start_row + 1 + i, &formatted_text)?;
+    }
+
+    Ok(())
+}
+
+fn format_hotkey(hotkey: &Option<KeyCode>) -> String {
+    match hotkey {
+        Some(KeyCode::F(n)) => format!("[F{}]", n),
+        Some(KeyCode::Char(c)) => format!("[{}]", c.to_uppercase()),
+        Some(KeyCode::Enter) => "[ENTER]".to_string(),
+        Some(KeyCode::Esc) => "[ESC]".to_string(),
+        _ => "".to_string(),
+    }
+}
+
 fn draw_window(
     left: usize,
     top: usize,
@@ -483,10 +541,14 @@ fn draw_window(
     }
     print!("{}", top_right);
 
-    // Draw side borders
+    // Draw side borders and clear interior
     for row in (top + 1)..(top + height - 1) {
         print_at(left, row, &vertical)?;
-        print_at(left + width - 1, row, &vertical)?;
+        // Clear the interior space
+        for _ in 1..width - 1 {
+            print!(" ");
+        }
+        print!("{}", vertical);
     }
 
     // Draw bottom border

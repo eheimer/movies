@@ -4,6 +4,7 @@ mod display;
 mod dto;
 mod episode_field;
 mod handlers;
+mod menu;
 mod path_resolver;
 mod terminal;
 mod util;
@@ -52,6 +53,8 @@ fn main_loop(mut entries: Vec<Entry>, config: Config, resolver: PathResolver) ->
     let mut last_action: Option<LastAction> = None;
     let mut original_edit_details: Option<EpisodeDetail> = None;
     let mut dirty_fields: HashSet<EpisodeField> = HashSet::new();
+    let mut menu_selection: usize = 0;
+    let mut remembered_item: usize = 0;
 
     // Create a channel to communicate between the thread and the main loop
     let (tx, rx): (Sender<()>, Receiver<()>) = mpsc::channel();
@@ -116,6 +119,19 @@ fn main_loop(mut entries: Vec<Entry>, config: Config, resolver: PathResolver) ->
                 }
             }
 
+            // Get menu items for Menu mode
+            let menu_items = if let Mode::Menu = mode {
+                let menu_context = menu::MenuContext {
+                    selected_entry: filtered_entries.get(remembered_item).cloned(),
+                    episode_detail: edit_details.clone(),
+                    last_action: last_action.clone(),
+                    view_context: view_context.clone(),
+                };
+                menu::get_context_menu_items(&menu_context)
+            } else {
+                Vec::new()
+            };
+
             draw_screen(
                 &filtered_entries,
                 current_item,
@@ -133,6 +149,8 @@ fn main_loop(mut entries: Vec<Entry>, config: Config, resolver: PathResolver) ->
                 season_number,
                 &last_action,
                 &dirty_fields,
+                &menu_items,
+                menu_selection,
             )?;
             redraw = false;
         }
@@ -207,11 +225,15 @@ fn main_loop(mut entries: Vec<Entry>, config: Config, resolver: PathResolver) ->
                             &resolver,
                             &tx,
                             &mut view_context,
-                            &last_action,
+                            &mut last_action,
                             &mut edit_field,
                             &mut edit_cursor_pos,
                             &mut original_edit_details,
                             &mut dirty_fields,
+                            &mut remembered_item,
+                            &mut menu_selection,
+                            &mut series,
+                            &mut series_selection,
                         )? {
                             break Ok(());
                         }
@@ -261,6 +283,36 @@ fn main_loop(mut entries: Vec<Entry>, config: Config, resolver: PathResolver) ->
                             mode = Mode::Browse;
                             redraw = true;
                         }
+                    }
+                    Mode::Menu => {
+                        let menu_context = menu::MenuContext {
+                            selected_entry: filtered_entries.get(remembered_item).cloned(),
+                            episode_detail: edit_details.clone(),
+                            last_action: last_action.clone(),
+                            view_context: view_context.clone(),
+                        };
+                        let menu_items = menu::get_context_menu_items(&menu_context);
+
+                        handlers::handle_menu_mode(
+                            code,
+                            &menu_items,
+                            &mut menu_selection,
+                            &mut mode,
+                            &mut redraw,
+                            remembered_item,
+                            &mut filtered_entries,
+                            &mut entries,
+                            &mut edit_details,
+                            &mut season_number,
+                            &view_context,
+                            &mut last_action,
+                            &mut edit_field,
+                            &mut edit_cursor_pos,
+                            &mut original_edit_details,
+                            &mut dirty_fields,
+                            &mut series,
+                            &mut series_selection,
+                        );
                     }
                 }
 

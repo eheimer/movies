@@ -12,6 +12,7 @@ use crate::display;
 use crate::dto::EpisodeDetail;
 use crate::dto::Series;
 use crate::episode_field::EpisodeField;
+use crate::menu::{MenuAction, MenuItem};
 use crate::path_resolver::PathResolver;
 use crate::util::{run_video_player, Entry, Mode, ViewContext};
 use display::get_max_displayed_items;
@@ -443,12 +444,54 @@ pub fn handle_browse_mode(
     resolver: &PathResolver,
     tx: &Sender<()>,
     view_context: &mut ViewContext,
-    last_action: &Option<crate::util::LastAction>,
+    last_action: &mut Option<crate::util::LastAction>,
     edit_field: &mut EpisodeField,
     edit_cursor_pos: &mut usize,
     original_edit_details: &mut Option<EpisodeDetail>,
     dirty_fields: &mut HashSet<EpisodeField>,
+    remembered_item: &mut usize,
+    menu_selection: &mut usize,
+    series: &mut Vec<Series>,
+    series_selection: &mut Option<usize>,
 ) -> io::Result<bool> {
+    // Check for context menu hotkeys first (F2-F5)
+    // Build menu context to check if actions are available
+    let menu_context = crate::menu::MenuContext {
+        selected_entry: filtered_entries.get(*current_item).cloned(),
+        episode_detail: edit_details.clone(),
+        last_action: last_action.clone(),
+        view_context: view_context.clone(),
+    };
+    let menu_items = crate::menu::get_context_menu_items(&menu_context);
+    
+    // Check if the pressed key matches any available menu item hotkey
+    for item in &menu_items {
+        if let Some(hotkey) = &item.hotkey {
+            if *hotkey == code {
+                // Execute the menu action directly
+                execute_menu_action(
+                    &item.action,
+                    mode,
+                    redraw,
+                    *current_item,
+                    filtered_entries,
+                    entries,
+                    edit_details,
+                    season_number,
+                    view_context,
+                    last_action,
+                    edit_field,
+                    edit_cursor_pos,
+                    original_edit_details,
+                    dirty_fields,
+                    series,
+                    series_selection,
+                );
+                return Ok(true);
+            }
+        }
+    }
+    
     match code {
         KeyCode::Char('l') if modifiers.contains(event::KeyModifiers::CONTROL) => {
             // clear entries and filtered entries
@@ -458,129 +501,12 @@ pub fn handle_browse_mode(
             search.clear();
             *redraw = true;
         }
-        KeyCode::F(2) => {
-            // Enter edit mode only if the current entry is an Episode
-            if let Entry::Episode { .. } = filtered_entries[*current_item] {
-                *mode = Mode::Edit;
-                let episode_id = match &filtered_entries[*current_item] {
-                    Entry::Episode { episode_id, .. } => *episode_id,
-                    _ => 0,
-                };
-                *edit_details =
-                    database::get_episode_detail(episode_id).expect("Failed to get entry details");
-                *season_number = edit_details.season.as_ref().map(|season| season.number);
-
-                // Initialize dirty state when entering EDIT mode
-                *original_edit_details = Some(edit_details.clone());
-                dirty_fields.clear();
-
-                // Auto-fill episode number if series is assigned but episode number is not
-                if edit_details.series.is_some()
-                    && (edit_details.episode_number.is_empty() || edit_details.episode_number == "0")
-                {
-                    // Calculate next available episode number
-                    let next_episode = database::get_next_available_episode_number(
-                        edit_details.series.as_ref().unwrap().id,
-                        *season_number,
-                    )
-                    .unwrap_or(1);
-
-                    // Pre-fill the episode number
-                    edit_details.episode_number = next_episode.to_string();
-
-                    // Set cursor to episode number field
-                    *edit_field = EpisodeField::EpisodeNumber;
-                    *edit_cursor_pos = edit_details.episode_number.len();
-                } else {
-                    // Normal behavior: start at first field
-                    *edit_field = EpisodeField::Title;
-                    *edit_cursor_pos = 0;
-                }
-
-                *redraw = true;
-            }
-        }
-        KeyCode::F(3) => {
-            // Toggle the watched status of the selected entry
-            if let Entry::Episode { .. } = filtered_entries[*current_item] {
-                let episode_id = match &filtered_entries[*current_item] {
-                    Entry::Episode { episode_id, .. } => *episode_id,
-                    _ => 0,
-                };
-                database::toggle_watched_status(episode_id)
-                    .expect("Failed to toggle watched status");
-                
-                // Reload entries based on current view context
-                *entries = match view_context {
-                    ViewContext::TopLevel => database::get_entries().expect("Failed to get entries"),
-                    ViewContext::Series { series_id } => database::get_entries_for_series(*series_id)
-                        .expect("Failed to get entries for series"),
-                    ViewContext::Season { season_id } => database::get_entries_for_season(*season_id)
-                        .expect("Failed to get entries for season"),
-                };
-                *filtered_entries = entries.clone();
-                *redraw = true;
-            }
-        }
-        KeyCode::F(4) => {
-            // Only allow series assignment for episodes without an existing series
-            if let Entry::Episode { .. } = filtered_entries[*current_item] {
-                if edit_details.series.is_none() {
-                    *mode = Mode::SeriesSelect;
-                    *redraw = true;
-                }
-            }
-        }
-        KeyCode::F(5) => {
-            // Repeat last action
-            if let Some(action) = last_action {
-                // Get the current selected entry
-                if *current_item < filtered_entries.len() {
-                    let selected_entry = &filtered_entries[*current_item];
-                    
-                    // Get episode_id if the selected entry is an Episode
-                    if let Entry::Episode { episode_id, .. } = selected_entry {
-                        // Check if we can repeat the action
-                        if crate::util::can_repeat_action(last_action, selected_entry, edit_details) {
-                            match action {
-                                crate::util::LastAction::SeriesAssignment { series_id, .. } => {
-                                    // Assign the episode to the series
-                                    let _ = database::assign_series(*series_id, *episode_id);
-                                }
-                                crate::util::LastAction::SeasonAssignment {
-                                    series_id,
-                                    season_number,
-                                    ..
-                                } => {
-                                    // Assign the episode to the series and season
-                                    let _ = database::create_season_and_assign(
-                                        *series_id,
-                                        *season_number,
-                                        *episode_id,
-                                    );
-                                }
-                            }
-                            
-                            // Reload entries based on current view context
-                            *entries = match view_context {
-                                ViewContext::TopLevel => {
-                                    database::get_entries().expect("Failed to get entries")
-                                }
-                                ViewContext::Series { series_id } => {
-                                    database::get_entries_for_series(*series_id)
-                                        .expect("Failed to get entries for series")
-                                }
-                                ViewContext::Season { season_id } => {
-                                    database::get_entries_for_season(*season_id)
-                                        .expect("Failed to get entries for season")
-                                }
-                            };
-                            *filtered_entries = entries.clone();
-                            *redraw = true;
-                        }
-                    }
-                }
-            }
+        KeyCode::F(1) => {
+            // Open context menu
+            *mode = Mode::Menu;
+            *remembered_item = *current_item;
+            *menu_selection = 0;
+            *redraw = true;
         }
         KeyCode::Up => {
             if *current_item > 0 {
@@ -917,5 +843,250 @@ pub fn handle_series_create_mode(
             *redraw = true;
         }
         _ => {}
+    }
+}
+
+pub fn handle_menu_mode(
+    code: KeyCode,
+    menu_items: &[MenuItem],
+    menu_selection: &mut usize,
+    mode: &mut Mode,
+    redraw: &mut bool,
+    remembered_item: usize,
+    filtered_entries: &mut Vec<Entry>,
+    entries: &mut Vec<Entry>,
+    edit_details: &mut EpisodeDetail,
+    season_number: &mut Option<usize>,
+    view_context: &ViewContext,
+    last_action: &mut Option<crate::util::LastAction>,
+    edit_field: &mut EpisodeField,
+    edit_cursor_pos: &mut usize,
+    original_edit_details: &mut Option<EpisodeDetail>,
+    dirty_fields: &mut HashSet<EpisodeField>,
+    series: &mut Vec<Series>,
+    series_selection: &mut Option<usize>,
+) {
+    // Handle navigation
+    match code {
+        KeyCode::Up => {
+            if menu_items.is_empty() {
+                return;
+            }
+            if *menu_selection == 0 {
+                *menu_selection = menu_items.len() - 1;
+            } else {
+                *menu_selection -= 1;
+            }
+            *redraw = true;
+        }
+        KeyCode::Down => {
+            if menu_items.is_empty() {
+                return;
+            }
+            *menu_selection = (*menu_selection + 1) % menu_items.len();
+            *redraw = true;
+        }
+        KeyCode::Enter => {
+            if menu_items.is_empty() {
+                return;
+            }
+            // Execute the selected menu item
+            let selected_action = &menu_items[*menu_selection].action;
+            execute_menu_action(
+                selected_action,
+                mode,
+                redraw,
+                remembered_item,
+                filtered_entries,
+                entries,
+                edit_details,
+                season_number,
+                view_context,
+                last_action,
+                edit_field,
+                edit_cursor_pos,
+                original_edit_details,
+                dirty_fields,
+                series,
+                series_selection,
+            );
+        }
+        KeyCode::Esc => {
+            // Close menu and return to Browse mode
+            *mode = Mode::Browse;
+            *redraw = true;
+        }
+        _ => {
+            // Check if the key matches any hotkey
+            for (index, item) in menu_items.iter().enumerate() {
+                if let Some(hotkey) = &item.hotkey {
+                    if *hotkey == code {
+                        // Execute this menu item
+                        execute_menu_action(
+                            &item.action,
+                            mode,
+                            redraw,
+                            remembered_item,
+                            filtered_entries,
+                            entries,
+                            edit_details,
+                            season_number,
+                            view_context,
+                            last_action,
+                            edit_field,
+                            edit_cursor_pos,
+                            original_edit_details,
+                            dirty_fields,
+                            series,
+                            series_selection,
+                        );
+                        // Update menu selection to match the executed item
+                        *menu_selection = index;
+                        return;
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn execute_menu_action(
+    action: &MenuAction,
+    mode: &mut Mode,
+    redraw: &mut bool,
+    remembered_item: usize,
+    filtered_entries: &mut Vec<Entry>,
+    entries: &mut Vec<Entry>,
+    edit_details: &mut EpisodeDetail,
+    season_number: &mut Option<usize>,
+    view_context: &ViewContext,
+    last_action: &mut Option<crate::util::LastAction>,
+    edit_field: &mut EpisodeField,
+    edit_cursor_pos: &mut usize,
+    original_edit_details: &mut Option<EpisodeDetail>,
+    dirty_fields: &mut HashSet<EpisodeField>,
+    series: &mut Vec<Series>,
+    series_selection: &mut Option<usize>,
+) {
+    match action {
+        MenuAction::Edit => {
+            // Enter edit mode for the remembered episode
+            if let Entry::Episode { episode_id, .. } = filtered_entries[remembered_item] {
+                *mode = Mode::Edit;
+                *edit_details = database::get_episode_detail(episode_id)
+                    .expect("Failed to get entry details");
+                *season_number = edit_details.season.as_ref().map(|season| season.number);
+
+                // Initialize dirty state when entering EDIT mode
+                *original_edit_details = Some(edit_details.clone());
+                dirty_fields.clear();
+
+                // Auto-fill episode number if series is assigned but episode number is not
+                if edit_details.series.is_some()
+                    && (edit_details.episode_number.is_empty() || edit_details.episode_number == "0")
+                {
+                    // Calculate next available episode number
+                    let next_episode = database::get_next_available_episode_number(
+                        edit_details.series.as_ref().unwrap().id,
+                        *season_number,
+                    )
+                    .unwrap_or(1);
+
+                    // Pre-fill the episode number
+                    edit_details.episode_number = next_episode.to_string();
+
+                    // Set cursor to episode number field
+                    *edit_field = EpisodeField::EpisodeNumber;
+                    *edit_cursor_pos = edit_details.episode_number.len();
+                } else {
+                    // Normal behavior: start at first field
+                    *edit_field = EpisodeField::Title;
+                    *edit_cursor_pos = 0;
+                }
+
+                *redraw = true;
+            }
+        }
+        MenuAction::ToggleWatched => {
+            // Toggle watched status for the remembered episode
+            if let Entry::Episode { episode_id, .. } = filtered_entries[remembered_item] {
+                database::toggle_watched_status(episode_id)
+                    .expect("Failed to toggle watched status");
+
+                // Reload entries based on current view context
+                *entries = match view_context {
+                    ViewContext::TopLevel => database::get_entries().expect("Failed to get entries"),
+                    ViewContext::Series { series_id } => database::get_entries_for_series(*series_id)
+                        .expect("Failed to get entries for series"),
+                    ViewContext::Season { season_id } => database::get_entries_for_season(*season_id)
+                        .expect("Failed to get entries for season"),
+                };
+                *filtered_entries = entries.clone();
+                *mode = Mode::Browse;
+                *redraw = true;
+            }
+        }
+        MenuAction::AssignToSeries => {
+            // Enter series selection mode for the remembered episode
+            if let Entry::Episode { .. } = filtered_entries[remembered_item] {
+                // Reload series list
+                *series = database::get_all_series().expect("Failed to get series");
+                *series_selection = Some(0);
+                *mode = Mode::SeriesSelect;
+                *redraw = true;
+            }
+        }
+        MenuAction::RepeatAction => {
+            // Repeat the last action on the remembered episode
+            if let Some(action) = last_action {
+                if let Entry::Episode { episode_id, .. } = filtered_entries[remembered_item] {
+                    match action {
+                        crate::util::LastAction::SeriesAssignment { series_id, .. } => {
+                            // Assign the episode to the series
+                            let _ = database::assign_series(*series_id, episode_id);
+                        }
+                        crate::util::LastAction::SeasonAssignment {
+                            series_id,
+                            season_number: season_num,
+                            ..
+                        } => {
+                            // Assign the episode to the series and season
+                            let _ = database::create_season_and_assign(
+                                *series_id,
+                                *season_num,
+                                episode_id,
+                            );
+                        }
+                    }
+
+                    // Reload entries based on current view context
+                    *entries = match view_context {
+                        ViewContext::TopLevel => {
+                            database::get_entries().expect("Failed to get entries")
+                        }
+                        ViewContext::Series { series_id } => {
+                            database::get_entries_for_series(*series_id)
+                                .expect("Failed to get entries for series")
+                        }
+                        ViewContext::Season { season_id } => {
+                            database::get_entries_for_season(*season_id)
+                                .expect("Failed to get entries for season")
+                        }
+                    };
+                    *filtered_entries = entries.clone();
+                    *mode = Mode::Browse;
+                    *redraw = true;
+                }
+            }
+        }
+        MenuAction::Rescan => {
+            // This action is handled in browse mode with CTRL+L
+            // For consistency, we'll close the menu and let the user use CTRL+L
+            // Or we could implement it here - let's implement it here for completeness
+            *entries = Vec::new();
+            *filtered_entries = Vec::new();
+            *mode = Mode::Entry;
+            *redraw = true;
+        }
     }
 }

@@ -65,6 +65,7 @@ pub enum Mode {
     Entry,        // initial load from disk
     SeriesSelect, // series selection
     SeriesCreate, // create a new series
+    Menu,         // context menu
 }
 
 pub fn truncate_string(s: &str, max_length: usize) -> String {
