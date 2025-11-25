@@ -67,3 +67,17 @@
     - Position cursor at row 4 (filter line row)
     - Cursor will be hidden by existing `hide_cursor()` call when not in filter mode
     - _Requirements: 4.2_
+
+- [x] 5. Implement visual focus indicators for filter mode
+  - [x] 5.1 Modify episode list rendering to conditionally apply highlighting
+    - In the episode list rendering loop in `draw_screen()`, add condition `&& !filter_mode` to the highlight check
+    - Only apply current item highlighting when `i == current_item && !filter_mode`
+    - This removes highlight from episode list when in filter mode
+    - _Requirements: 5.1, 5.3_
+  
+  - [x] 5.2 Add highlight styling to filter label when in filter mode
+    - In `draw_header()` where the filter line is displayed, conditionally style the "filter:" label
+    - When `filter_mode` is true, apply highlight colors to "filter:" label using `with()` and `on()` methods
+    - When `filter_mode` is false, display "filter:" label without styling
+    - Only style the label text "filter:", not the entire line or the filter string value
+    - _Requirements: 5.2, 5.4_

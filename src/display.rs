@@ -58,6 +58,7 @@ fn draw_header(
     _selected_entry: Option<&Entry>,
     _edit_details: &EpisodeDetail,
     filter_mode: bool,
+    config: &Config,
 ) -> io::Result<()> {
     let instructions: Vec<String> = match mode {
         Mode::Browse => {
@@ -115,7 +116,17 @@ fn draw_header(
 
     // Show filter line when filter_mode is true OR filter string is not empty
     if filter_mode || !filter.is_empty() {
-        print_at(0, 4, &format!("filter: {}", filter))?;
+        // Apply highlight to "filter:" label when in filter mode
+        let filter_label = if filter_mode {
+            format!("filter:")
+                .with(string_to_fg_color_or_default(&config.current_fg))
+                .on(string_to_bg_color_or_default(&config.current_bg))
+                .to_string()
+        } else {
+            "filter:".to_string()
+        };
+        
+        print_at(0, 4, &format!("{} {}", filter_label, filter))?;
     }
     Ok(())
 }
@@ -189,6 +200,7 @@ pub fn draw_screen(
         selected_entry,
         edit_details,
         filter_mode,
+        config,
     )?;
 
     if entries.is_empty() {
@@ -224,7 +236,7 @@ pub fn draw_screen(
             };
 
             let mut formatted_text = format!("{}", display_text);
-            if i == current_item {
+            if i == current_item && !filter_mode {
                 formatted_text = format!(
                     "{}",
                     display_text

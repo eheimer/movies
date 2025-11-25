@@ -59,3 +59,14 @@ This feature introduces a toggle filter mode that changes the current auto-type-
 2. WHEN in Filter Mode, THE Application SHALL display the `filter:` line regardless of Filter String length
 3. WHEN the filter is accepted AND the Filter String length is greater than 0, THE Application SHALL display the `filter:` line
 4. WHEN the filter is canceled, THE Application SHALL hide the `filter:` line
+
+### Requirement 5
+
+**User Story:** As a user, I want clear visual feedback about which UI element is active, so that I understand where my input will go
+
+#### Acceptance Criteria
+
+1. WHILE in Filter Mode, THE Application SHALL remove the highlight from the currently selected item in the episode list
+2. WHILE in Filter Mode, THE Application SHALL apply highlight styling to the "filter:" label text only (not the entire filter line)
+3. WHILE NOT in Filter Mode, THE Application SHALL apply highlight styling to the currently selected item in the episode list
+4. WHILE NOT in Filter Mode, THE Application SHALL NOT apply highlight styling to the "filter:" label

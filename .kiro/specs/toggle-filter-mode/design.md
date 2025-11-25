@@ -115,7 +115,17 @@ When in filter mode:
 // 1. In filter mode (always show), OR
 // 2. Filter string has content (filter was accepted)
 if in_filter_mode || !filter.is_empty() {
-    print_at(0, 4, &format!("filter: {}", filter))?;
+    // Apply highlight to "filter:" label when in filter mode
+    let filter_label = if in_filter_mode {
+        format!("filter:", )
+            .with(config.current_fg)
+            .on(config.current_bg)
+            .to_string()
+    } else {
+        "filter:".to_string()
+    };
+    
+    print_at(0, 4, &format!("{} {}", filter_label, filter))?;
     
     // Show cursor at end of filter string when in filter mode
     if in_filter_mode {
@@ -134,6 +144,37 @@ When entering filter mode:
 When exiting filter mode:
 - Hide cursor
 - This is handled by the existing `hide_cursor()` call at the start of `draw_screen()`
+
+**Episode List Highlighting Logic:**
+
+The episode list rendering in `draw_screen()` needs to be modified to conditionally apply highlighting based on filter mode state:
+
+```rust
+// When rendering each entry in the episode list
+for (i, entry) in entries.iter().enumerate().skip(*first_entry).take(max_lines as usize) {
+    let display_text = match entry {
+        // ... existing entry formatting ...
+    };
+
+    let mut formatted_text = format!("{}", display_text);
+    
+    // Only apply highlight to current item when NOT in filter mode
+    if i == current_item && !filter_mode {
+        formatted_text = format!(
+            "{}",
+            display_text
+                .with(string_to_fg_color_or_default(&config.current_fg))
+                .on(string_to_bg_color_or_default(&config.current_bg))
+        );
+    }
+    
+    print_at(0, i - *first_entry + HEADER_SIZE, &formatted_text)?;
+}
+```
+
+This ensures that:
+- When in filter mode: No episode list item is highlighted (focus is on filter input)
+- When not in filter mode: Current episode list item is highlighted (focus is on list navigation)
 
 ### Function Signatures
 
@@ -227,6 +268,17 @@ No new error conditions are introduced. Existing error handling patterns will be
    - Type characters and verify cursor moves
    - Exit filter mode (ENTER or ESC)
    - Verify cursor is hidden
+
+7b. **Visual Focus Indicators:**
+   - Start in Browse mode with an episode selected
+   - Verify the selected episode has highlight styling
+   - Verify the "filter:" label has no highlight styling
+   - Press `/` to enter filter mode
+   - Verify the selected episode NO LONGER has highlight styling
+   - Verify the "filter:" label NOW has highlight styling
+   - Press ENTER to accept filter
+   - Verify the selected episode has highlight styling again
+   - Verify the "filter:" label no longer has highlight styling
 
 8. **Empty Filter Acceptance:**
    - Enter filter mode (press `/`)
