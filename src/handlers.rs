@@ -575,6 +575,7 @@ pub fn handle_browse_mode(
             let selected_entry = &filtered_entries[selected].clone();
             match selected_entry {
                 Entry::Series { series_id, .. } => {
+                    search.clear();
                     // If a series is selected, reload the entries with the series filter
                     *current_item = 0;
                     *entries = database::get_entries_for_series(*series_id)
@@ -610,6 +611,7 @@ pub fn handle_browse_mode(
                     }
                 }
                 Entry::Season { season_id, .. } => {
+                    search.clear();
                     // If a season is selected, reload the entries with the season filter
                     *current_item = 0;
                     *entries = database::get_entries_for_season(*season_id)
