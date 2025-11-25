@@ -525,6 +525,21 @@ pub fn handle_browse_mode(
                 *redraw = true;
             }
         }
+        KeyCode::Char('k') if !*filter_mode => {
+            if *current_item > 0 {
+                *current_item -= 1;
+                if *current_item < *first_entry {
+                    *first_entry = *current_item;
+                }
+                *redraw = true;
+            }
+        }
+        KeyCode::Char('j') if !*filter_mode => {
+            if *current_item < filtered_entries.len() - 1 {
+                *current_item += 1;
+                *redraw = true;
+            }
+        }
         KeyCode::PageUp if !*filter_mode => {
             let max_lines = get_max_displayed_items()?;
             if *current_item > *first_entry {
