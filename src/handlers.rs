@@ -453,6 +453,7 @@ pub fn handle_browse_mode(
     menu_selection: &mut usize,
     series: &mut Vec<Series>,
     series_selection: &mut Option<usize>,
+    filter_mode: &mut bool,
 ) -> io::Result<bool> {
     // Check for context menu hotkeys first (F2-F5)
     // Build menu context to check if actions are available
@@ -493,7 +494,8 @@ pub fn handle_browse_mode(
     }
     
     match code {
-        KeyCode::Char('l') if modifiers.contains(event::KeyModifiers::CONTROL) => {
+        // When in filter mode, only allow filter-related keys
+        KeyCode::Char('l') if modifiers.contains(event::KeyModifiers::CONTROL) && !*filter_mode => {
             // clear entries and filtered entries
             *entries = Vec::new();
             *filtered_entries = Vec::new();
@@ -501,14 +503,14 @@ pub fn handle_browse_mode(
             search.clear();
             *redraw = true;
         }
-        KeyCode::F(1) => {
+        KeyCode::F(1) if !*filter_mode => {
             // Open context menu
             *mode = Mode::Menu;
             *remembered_item = *current_item;
             *menu_selection = 0;
             *redraw = true;
         }
-        KeyCode::Up => {
+        KeyCode::Up if !*filter_mode => {
             if *current_item > 0 {
                 *current_item -= 1;
                 if *current_item < *first_entry {
@@ -517,13 +519,13 @@ pub fn handle_browse_mode(
                 *redraw = true;
             }
         }
-        KeyCode::Down => {
+        KeyCode::Down if !*filter_mode => {
             if *current_item < filtered_entries.len() - 1 {
                 *current_item += 1;
                 *redraw = true;
             }
         }
-        KeyCode::PageUp => {
+        KeyCode::PageUp if !*filter_mode => {
             let max_lines = get_max_displayed_items()?;
             if *current_item > *first_entry {
                 *current_item = *first_entry;
@@ -532,7 +534,7 @@ pub fn handle_browse_mode(
             }
             *redraw = true;
         }
-        KeyCode::PageDown => {
+        KeyCode::PageDown if !*filter_mode => {
             let max_lines = get_max_displayed_items()?;
             if *current_item < *first_entry + max_lines - 1 {
                 *current_item = *first_entry + max_lines - 1;
@@ -541,7 +543,19 @@ pub fn handle_browse_mode(
             }
             *redraw = true;
         }
-        KeyCode::Enter => {
+        KeyCode::Char('/') if !*filter_mode => {
+            // Enter filter mode and set cursor to end of search string
+            *filter_mode = true;
+            *edit_cursor_pos = search.len();
+            *redraw = true;
+        }
+        KeyCode::Enter if *filter_mode => {
+            // Accept filter and exit filter mode
+            *filter_mode = false;
+            *edit_cursor_pos = 0;
+            *redraw = true;
+        }
+        KeyCode::Enter if !*filter_mode => {
             let selected = *current_item;
             let selected_entry = &filtered_entries[selected].clone();
             match selected_entry {
@@ -592,8 +606,15 @@ pub fn handle_browse_mode(
             }
             *redraw = true;
         }
+        KeyCode::Esc if *filter_mode => {
+            // Cancel filter: clear search string and exit filter mode
+            search.clear();
+            *filter_mode = false;
+            *edit_cursor_pos = 0;
+            *redraw = true;
+        }
         KeyCode::Esc
-            if matches!(filtered_entries[*current_item], Entry::Episode { .. })
+            if !*filter_mode && matches!(filtered_entries[*current_item], Entry::Episode { .. })
                 && edit_details.season.is_some() =>
         {
             //go back to the season view
@@ -607,9 +628,9 @@ pub fn handle_browse_mode(
             *redraw = true;
         }
         KeyCode::Esc
-            if matches!(filtered_entries[*current_item], Entry::Season { .. })
+            if !*filter_mode && (matches!(filtered_entries[*current_item], Entry::Season { .. })
                 || matches!(filtered_entries[*current_item], Entry::Episode { .. })
-                    && edit_details.series.is_some() =>
+                    && edit_details.series.is_some()) =>
         {
             *current_item = 0;
             search.clear();
@@ -618,19 +639,77 @@ pub fn handle_browse_mode(
             *view_context = ViewContext::TopLevel;
             *redraw = true;
         }
-        KeyCode::Esc => return Ok(false),
-        KeyCode::Backspace => {
-            // If backspace is pressed, remove the last character from the search string
-            search.pop();
-            *redraw = true;
-        }
-        _ => {
-            // If a displayable character is pressed, add it to the search string
-            if let KeyCode::Char(c) = code {
-                search.push(c);
+        KeyCode::Esc if !*filter_mode => return Ok(false),
+        KeyCode::Left if modifiers.contains(event::KeyModifiers::CONTROL) && *filter_mode => {
+            // Jump back by words (separated by spaces)
+            if *edit_cursor_pos > 0 {
+                let mut i = *edit_cursor_pos - 1;
+                while i > 0 && search.chars().nth(i - 1).unwrap() == ' ' {
+                    i -= 1;
+                }
+                while i > 0 && search.chars().nth(i - 1).unwrap() != ' ' {
+                    i -= 1;
+                }
+                *edit_cursor_pos = i;
                 *redraw = true;
             }
         }
+        KeyCode::Left if *filter_mode => {
+            if *edit_cursor_pos > 0 {
+                *edit_cursor_pos -= 1;
+            }
+            *redraw = true;
+        }
+        KeyCode::Right if modifiers.contains(event::KeyModifiers::CONTROL) && *filter_mode => {
+            // Jump forward by words (separated by spaces)
+            if *edit_cursor_pos < search.len() {
+                let mut i = *edit_cursor_pos;
+                while i < search.len() && search.chars().nth(i).unwrap() != ' ' {
+                    i += 1;
+                }
+                while i < search.len() && search.chars().nth(i).unwrap() == ' ' {
+                    i += 1;
+                }
+                *edit_cursor_pos = i;
+                *redraw = true;
+            }
+        }
+        KeyCode::Right if *filter_mode => {
+            if *edit_cursor_pos < search.len() {
+                *edit_cursor_pos += 1;
+            }
+            *redraw = true;
+        }
+        KeyCode::Home if *filter_mode => {
+            *edit_cursor_pos = 0;
+            *redraw = true;
+        }
+        KeyCode::End if *filter_mode => {
+            *edit_cursor_pos = search.len();
+            *redraw = true;
+        }
+        KeyCode::Backspace if *filter_mode => {
+            // Remove the character BEFORE the cursor position
+            if *edit_cursor_pos > 0 {
+                search.remove(*edit_cursor_pos - 1);
+                *edit_cursor_pos -= 1;
+                *redraw = true;
+            }
+        }
+        KeyCode::Delete if *filter_mode => {
+            // Remove the character AT the cursor position
+            if *edit_cursor_pos < search.len() {
+                search.remove(*edit_cursor_pos);
+                *redraw = true;
+            }
+        }
+        KeyCode::Char(c) if *filter_mode => {
+            // Insert character at cursor position
+            search.insert(*edit_cursor_pos, c);
+            *edit_cursor_pos += 1;
+            *redraw = true;
+        }
+        _ => {}
     }
     Ok(true)
 }

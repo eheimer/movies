@@ -57,27 +57,33 @@ fn draw_header(
     is_dirty: bool,
     _selected_entry: Option<&Entry>,
     _edit_details: &EpisodeDetail,
+    filter_mode: bool,
 ) -> io::Result<()> {
     let instructions: Vec<String> = match mode {
         Mode::Browse => {
-            if series_selected {
+            // When in filter mode, show simplified menu helpers (only first line)
+            if filter_mode {
                 vec![
-                    "type to filter, [\u{2191}]/[\u{2193}] navigate, [ENTER] show episodes, [ESC] exit".to_string(),
+                    "[ENTER] accept, [ESC] cancel".to_string(),
+                ]
+            } else if series_selected {
+                vec![
+                    "[/] filter, [\u{2191}]/[\u{2193}] navigate, [ENTER] show episodes, [ESC] exit".to_string(),
                     "[F1] Menu, [CTRL][L] rescan".to_string()
                 ]
             } else if season_selected {
                 vec![
-                    "type to filter, [\u{2191}]/[\u{2193}] navigate, [ENTER] show episodes, [ESC] back".to_string(),
+                    "[/] filter, [\u{2191}]/[\u{2193}] navigate, [ENTER] show episodes, [ESC] back".to_string(),
                     "[F1] Menu, [CTRL][L] rescan".to_string()
                 ]
             } else if series_filter_active {
                 vec![
-                    "type to filter, [\u{2191}]/[\u{2193}] navigate, [ENTER] play, [ESC] back".to_string(),
+                    "[/] filter, [\u{2191}]/[\u{2193}] navigate, [ENTER] play, [ESC] back".to_string(),
                     "[F1] Menu, [CTRL][L] rescan".to_string(),
                 ]
             } else {
                 vec![
-                    "type to filter, [\u{2191}]/[\u{2193}] navigate, [ENTER] play, [ESC] exit".to_string(),
+                    "[/] filter, [\u{2191}]/[\u{2193}] navigate, [ENTER] play, [ESC] exit".to_string(),
                     "[F1] Menu, [CTRL][L] rescan".to_string(),
                 ]
             }
@@ -107,8 +113,10 @@ fn draw_header(
     // Print last action display at row 2
     print_at(0, 2, &last_action_display)?;
 
-    // Adjust filter line to row 4 (was row 3)
-    print_at(0, 4, &format!("filter: {}", filter))?;
+    // Show filter line when filter_mode is true OR filter string is not empty
+    if filter_mode || !filter.is_empty() {
+        print_at(0, 4, &format!("filter: {}", filter))?;
+    }
     Ok(())
 }
 
@@ -131,6 +139,7 @@ pub fn draw_screen(
     dirty_fields: &HashSet<EpisodeField>,
     menu_items: &[MenuItem],
     menu_selection: usize,
+    filter_mode: bool,
 ) -> io::Result<()> {
     clear_screen()?;
 
@@ -179,6 +188,7 @@ pub fn draw_screen(
         is_dirty,
         selected_entry,
         edit_details,
+        filter_mode,
     )?;
 
     if entries.is_empty() {
@@ -244,6 +254,13 @@ pub fn draw_screen(
     // Draw context menu if in Menu mode
     if let Mode::Menu = mode {
         draw_context_menu(menu_items, menu_selection, config)?;
+    }
+
+    // Position cursor at edit_cursor_pos when in filter mode
+    // This must be done AFTER all other drawing to ensure cursor is in the right place
+    if filter_mode && matches!(mode, Mode::Browse) {
+        show_cursor()?;
+        move_cursor(8 + edit_cursor_pos, 4)?; // "filter: " is 8 chars, row 4 is filter line
     }
 
     Ok(())

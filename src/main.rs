@@ -55,6 +55,7 @@ fn main_loop(mut entries: Vec<Entry>, config: Config, resolver: PathResolver) ->
     let mut dirty_fields: HashSet<EpisodeField> = HashSet::new();
     let mut menu_selection: usize = 0;
     let mut remembered_item: usize = 0;
+    let mut filter_mode: bool = false;
 
     // Create a channel to communicate between the thread and the main loop
     let (tx, rx): (Sender<()>, Receiver<()>) = mpsc::channel();
@@ -151,6 +152,7 @@ fn main_loop(mut entries: Vec<Entry>, config: Config, resolver: PathResolver) ->
                 &dirty_fields,
                 &menu_items,
                 menu_selection,
+                filter_mode,
             )?;
             redraw = false;
         }
@@ -234,6 +236,7 @@ fn main_loop(mut entries: Vec<Entry>, config: Config, resolver: PathResolver) ->
                             &mut menu_selection,
                             &mut series,
                             &mut series_selection,
+                            &mut filter_mode,
                         )? {
                             break Ok(());
                         }
