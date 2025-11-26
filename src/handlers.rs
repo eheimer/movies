@@ -454,6 +454,7 @@ pub fn handle_browse_mode(
     series: &mut Vec<Series>,
     series_selection: &mut Option<usize>,
     filter_mode: &mut bool,
+    first_series: &mut usize,
 ) -> io::Result<bool> {
     // Check for context menu hotkeys first (F2-F5)
     // Build menu context to check if actions are available
@@ -487,6 +488,7 @@ pub fn handle_browse_mode(
                     dirty_fields,
                     series,
                     series_selection,
+                    first_series,
                 );
                 return Ok(true);
             }
@@ -745,13 +747,14 @@ pub fn handle_series_select_mode(
     last_action: &mut Option<crate::util::LastAction>,
     new_series: &mut String,
     edit_cursor_pos: &mut usize,
+    first_series: &mut usize,
 ) {
     match code {
-        KeyCode::Up => {
+        KeyCode::Up | KeyCode::Char('k') => {
             *series_selection = series_selection.map(|s| s.saturating_sub(1)).or(Some(0));
             *redraw = true;
         }
-        KeyCode::Down => {
+        KeyCode::Down | KeyCode::Char('j') => {
             *series_selection = series_selection.map(|s| s.saturating_add(1)).or(Some(0));
             *redraw = true;
         }
@@ -824,6 +827,7 @@ pub fn handle_series_create_mode(
     filtered_entries: &mut Vec<Entry>,
     view_context: &ViewContext,
     last_action: &mut Option<crate::util::LastAction>,
+    first_series: &mut usize,
 ) {
     match code {
         KeyCode::Enter => {
@@ -867,6 +871,7 @@ pub fn handle_series_create_mode(
             // Return to series select mode
             *new_series = String::new();
             *edit_cursor_pos = 0;
+            *first_series = 0;
             *mode = Mode::SeriesSelect;
             *redraw = true;
         }
@@ -961,6 +966,7 @@ pub fn handle_menu_mode(
     dirty_fields: &mut HashSet<EpisodeField>,
     series: &mut Vec<Series>,
     series_selection: &mut Option<usize>,
+    first_series: &mut usize,
 ) {
     // Handle navigation
     match code {
@@ -1005,6 +1011,7 @@ pub fn handle_menu_mode(
                 dirty_fields,
                 series,
                 series_selection,
+                first_series,
             );
         }
         KeyCode::Esc => {
@@ -1035,6 +1042,7 @@ pub fn handle_menu_mode(
                             dirty_fields,
                             series,
                             series_selection,
+                            first_series,
                         );
                         // Update menu selection to match the executed item
                         *menu_selection = index;
@@ -1063,6 +1071,7 @@ fn execute_menu_action(
     dirty_fields: &mut HashSet<EpisodeField>,
     series: &mut Vec<Series>,
     series_selection: &mut Option<usize>,
+    first_series: &mut usize,
 ) {
     match action {
         MenuAction::Edit => {
@@ -1130,6 +1139,7 @@ fn execute_menu_action(
                 // Reload series list
                 *series = database::get_all_series().expect("Failed to get series");
                 *series_selection = Some(0);
+                *first_series = 0;
                 *mode = Mode::SeriesSelect;
                 *redraw = true;
             }

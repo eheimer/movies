@@ -56,6 +56,7 @@ fn main_loop(mut entries: Vec<Entry>, config: Config, resolver: PathResolver) ->
     let mut menu_selection: usize = 0;
     let mut remembered_item: usize = 0;
     let mut filter_mode: bool = false;
+    let mut first_series: usize = 0;
 
     // Create a channel to communicate between the thread and the main loop
     let (tx, rx): (Sender<()>, Receiver<()>) = mpsc::channel();
@@ -153,6 +154,7 @@ fn main_loop(mut entries: Vec<Entry>, config: Config, resolver: PathResolver) ->
                 &menu_items,
                 menu_selection,
                 filter_mode,
+                &mut first_series,
             )?;
             redraw = false;
         }
@@ -237,6 +239,7 @@ fn main_loop(mut entries: Vec<Entry>, config: Config, resolver: PathResolver) ->
                             &mut series,
                             &mut series_selection,
                             &mut filter_mode,
+                            &mut first_series,
                         )? {
                             break Ok(());
                         }
@@ -257,6 +260,7 @@ fn main_loop(mut entries: Vec<Entry>, config: Config, resolver: PathResolver) ->
                                 &mut last_action,
                                 &mut new_series,
                                 &mut edit_cursor_pos,
+                                &mut first_series,
                             );
                         } else {
                             // selected entry is a series, change mode back to browse
@@ -280,6 +284,7 @@ fn main_loop(mut entries: Vec<Entry>, config: Config, resolver: PathResolver) ->
                                 &mut filtered_entries,
                                 &view_context,
                                 &mut last_action,
+                                &mut first_series,
                             );
                         } else {
                             // selected entry is a series, change mode back to browse
@@ -315,6 +320,7 @@ fn main_loop(mut entries: Vec<Entry>, config: Config, resolver: PathResolver) ->
                             &mut dirty_fields,
                             &mut series,
                             &mut series_selection,
+                            &mut first_series,
                         );
                     }
                 }

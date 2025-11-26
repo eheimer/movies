@@ -151,6 +151,7 @@ pub fn draw_screen(
     menu_items: &[MenuItem],
     menu_selection: usize,
     filter_mode: bool,
+    first_series: &mut usize,
 ) -> io::Result<()> {
     clear_screen()?;
 
@@ -259,7 +260,7 @@ pub fn draw_screen(
             )?;
         }
         if let Mode::SeriesSelect | Mode::SeriesCreate = mode {
-            draw_series_window(mode, series, new_series, series_selection, config)?;
+            draw_series_window(mode, series, new_series, series_selection, config, first_series)?;
         }
     }
 
@@ -388,6 +389,7 @@ fn draw_series_window(
     new_series: &String,
     series_selection: &mut Option<usize>,
     config: &Config,
+    first_series: &mut usize,
 ) -> io::Result<()> {
     let start_col = COL1_WIDTH + 2;
     let start_row = HEADER_SIZE + DETAIL_HEIGHT;
@@ -452,11 +454,29 @@ fn draw_series_window(
                     .on(Color::White)
             ),
         )?;
-        for (i, series) in series.iter().enumerate() {
+        
+        // Calculate maximum visible series items (subtract borders and title)
+        let max_visible_series = series_window_height.saturating_sub(3).max(1);
+        
+        // Implement viewport adjustment logic
+        if let Some(selection) = series_selection {
+            if *selection < *first_series {
+                *first_series = *selection;
+            } else if *selection >= *first_series + max_visible_series {
+                *first_series = *selection - max_visible_series + 1;
+            }
+        }
+        
+        // Update series rendering to use viewport
+        for (i, series_item) in series.iter()
+            .enumerate()
+            .skip(*first_series)
+            .take(max_visible_series)
+        {
             let display_text = format!(
                 "[{}] {}",
                 i + 1,
-                truncate_string(&series.name, SERIES_WIDTH)
+                truncate_string(&series_item.name, SERIES_WIDTH)
             );
             let formatted_text = if Some(i) == *series_selection {
                 format!(
@@ -468,9 +488,10 @@ fn draw_series_window(
             } else {
                 display_text
             };
+            // Adjust row calculation to account for skipped items
             print_at(
                 series_window_start_col + 1,
-                start_row + 2 + i,
+                start_row + 2 + (i - *first_series),
                 &formatted_text,
             )?;
         }
