@@ -1,6 +1,6 @@
 use crossterm::event::KeyCode;
 use crate::dto::EpisodeDetail;
-use crate::util::{can_repeat_action, Entry, LastAction, ViewContext};
+use crate::util::{can_repeat_action, Entry, LastAction};
 
 #[derive(Debug, Clone)]
 pub struct MenuItem {
@@ -12,7 +12,6 @@ pub struct MenuItem {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum MenuLocation {
-    FirstLine,           // Always visible in first header line
     FirstLinePreferred,  // Prefer first line, overflow to context menu if needed
     ContextMenu,         // Only visible in F1 context menu
 }
@@ -32,7 +31,6 @@ pub struct MenuContext {
     pub selected_entry: Option<Entry>,
     pub episode_detail: EpisodeDetail,
     pub last_action: Option<LastAction>,
-    pub view_context: ViewContext,
 }
 
 /// Define all menu items with their properties
@@ -138,14 +136,6 @@ pub fn get_available_menu_items(context: &MenuContext) -> Vec<MenuItem> {
         .collect()
 }
 
-/// Get only first-line menu items
-pub fn get_first_line_items(context: &MenuContext) -> Vec<MenuItem> {
-    get_available_menu_items(context)
-        .into_iter()
-        .filter(|item| item.location == MenuLocation::FirstLine)
-        .collect()
-}
-
 /// Get only context menu items
 pub fn get_context_menu_items(context: &MenuContext) -> Vec<MenuItem> {
     get_available_menu_items(context)
@@ -212,7 +202,7 @@ pub fn calculate_menu_helper_width(item: &MenuItem) -> usize {
 mod tests {
     use super::*;
     use crate::dto::{EpisodeDetail, Season, Series};
-    use crate::util::{Entry, ViewContext};
+    use crate::util::Entry;
 
     #[test]
     fn test_first_line_preferred_respects_availability() {
@@ -235,7 +225,6 @@ mod tests {
             }),
             episode_detail: episode_detail.clone(),
             last_action: None,
-            view_context: ViewContext::TopLevel,
         };
 
         // Get first line preferred items
@@ -266,7 +255,6 @@ mod tests {
             }),
             episode_detail: episode_detail.clone(),
             last_action: None,
-            view_context: ViewContext::TopLevel,
         };
 
         let available_items = get_available_menu_items(&context);
@@ -308,7 +296,6 @@ mod tests {
             }),
             episode_detail: episode_detail.clone(),
             last_action: None,
-            view_context: ViewContext::TopLevel,
         };
 
         let available_items = get_available_menu_items(&context);
@@ -343,7 +330,6 @@ mod tests {
             }),
             episode_detail: episode_detail.clone(),
             last_action: None,
-            view_context: ViewContext::TopLevel,
         };
 
         let available_items = get_available_menu_items(&context);

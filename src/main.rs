@@ -127,7 +127,6 @@ fn main_loop(mut entries: Vec<Entry>, config: Config, resolver: PathResolver) ->
                     selected_entry: filtered_entries.get(remembered_item).cloned(),
                     episode_detail: edit_details.clone(),
                     last_action: last_action.clone(),
-                    view_context: view_context.clone(),
                 };
                 menu::get_context_menu_items(&menu_context)
             } else {
@@ -298,7 +297,6 @@ fn main_loop(mut entries: Vec<Entry>, config: Config, resolver: PathResolver) ->
                             selected_entry: filtered_entries.get(remembered_item).cloned(),
                             episode_detail: edit_details.clone(),
                             last_action: last_action.clone(),
-                            view_context: view_context.clone(),
                         };
                         let menu_items = menu::get_context_menu_items(&menu_context);
 

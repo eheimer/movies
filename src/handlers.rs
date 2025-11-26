@@ -462,7 +462,6 @@ pub fn handle_browse_mode(
         selected_entry: filtered_entries.get(*current_item).cloned(),
         episode_detail: edit_details.clone(),
         last_action: last_action.clone(),
-        view_context: view_context.clone(),
     };
     let menu_items = crate::menu::get_context_menu_items(&menu_context);
     
@@ -739,7 +738,7 @@ pub fn handle_series_select_mode(
     last_action: &mut Option<crate::util::LastAction>,
     new_series: &mut String,
     edit_cursor_pos: &mut usize,
-    first_series: &mut usize,
+    _first_series: &mut usize,
 ) {
     match code {
         KeyCode::Up | KeyCode::Char('k') => {

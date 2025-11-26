@@ -60,7 +60,7 @@ fn draw_header(
     filter_mode: bool,
     config: &Config,
     last_action: &Option<LastAction>,
-    view_context: &ViewContext,
+    _view_context: &ViewContext,
 ) -> io::Result<()> {
     // Get terminal width for overflow calculation
     let (terminal_width, _) = get_terminal_size()?;
@@ -117,7 +117,6 @@ fn draw_header(
             selected_entry: selected_entry.cloned(),
             episode_detail: edit_details.clone(),
             last_action: last_action.clone(),
-            view_context: view_context.clone(),
         };
         
         let first_line_preferred = crate::menu::get_first_line_preferred_items(&menu_context);
