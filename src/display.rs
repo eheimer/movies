@@ -1,18 +1,18 @@
 use crate::config::Config;
 use crate::dto::{EpisodeDetail, Series};
 use crate::episode_field::EpisodeField;
-use crate::menu::MenuItem;
+use crate::menu::{MenuItem, MenuContext};
 use crate::terminal::{
     clear_line, clear_screen, get_terminal_size, hide_cursor, move_cursor, print_at, show_cursor,
 };
-use crate::util::{can_repeat_action, truncate_string, Entry, LastAction, Mode};
+use crate::util::{can_repeat_action, truncate_string, Entry, LastAction, Mode, ViewContext};
 use crossterm::event::KeyCode;
 use crossterm::style::{Color, Stylize};
 use std::collections::HashSet;
 use std::convert::From;
 use std::io;
 
-const HEADER_SIZE: usize = 6;
+const HEADER_SIZE: usize = 5;
 const FOOTER_SIZE: usize = 0;
 const COL1_WIDTH: usize = 45;
 const MIN_COL2_WIDTH: usize = 20;
@@ -55,38 +55,36 @@ fn draw_header(
     series_filter_active: bool,
     last_action_display: &str,
     is_dirty: bool,
-    _selected_entry: Option<&Entry>,
-    _edit_details: &EpisodeDetail,
+    selected_entry: Option<&Entry>,
+    edit_details: &EpisodeDetail,
     filter_mode: bool,
     config: &Config,
+    last_action: &Option<LastAction>,
+    view_context: &ViewContext,
 ) -> io::Result<()> {
-    let instructions: Vec<String> = match mode {
+    // Get terminal width for overflow calculation
+    let (terminal_width, _) = get_terminal_size()?;
+    
+    // Start building the header string
+    let mut header = String::new();
+    
+    // 1. Always start with "[F1] Menu, "
+    header.push_str("[F1] Menu, ");
+    
+    // 2. Build hardcoded context-specific helpers based on mode/context
+    let hardcoded_helpers = match mode {
         Mode::Browse => {
-            // When in filter mode, show simplified menu helpers (only first line)
+            // When in filter mode, show simplified menu helpers
             if filter_mode {
-                vec![
-                    "[ENTER] accept, [ESC] cancel".to_string(),
-                ]
+                "[ENTER] accept, [ESC] cancel".to_string()
             } else if series_selected {
-                vec![
-                    "[/] filter, [\u{2191}]/[\u{2193}] navigate, [ENTER] show episodes, [ESC] exit".to_string(),
-                    "[F1] Menu, [CTRL][L] rescan".to_string()
-                ]
+                "[/] filter, [\u{2191}]/[\u{2193}] navigate, [ENTER] show episodes, [ESC] exit".to_string()
             } else if season_selected {
-                vec![
-                    "[/] filter, [\u{2191}]/[\u{2193}] navigate, [ENTER] show episodes, [ESC] back".to_string(),
-                    "[F1] Menu, [CTRL][L] rescan".to_string()
-                ]
+                "[/] filter, [\u{2191}]/[\u{2193}] navigate, [ENTER] show episodes, [ESC] back".to_string()
             } else if series_filter_active {
-                vec![
-                    "[/] filter, [\u{2191}]/[\u{2193}] navigate, [ENTER] play, [ESC] back".to_string(),
-                    "[F1] Menu, [CTRL][L] rescan".to_string(),
-                ]
+                "[/] filter, [\u{2191}]/[\u{2193}] navigate, [ENTER] play, [ESC] back".to_string()
             } else {
-                vec![
-                    "[/] filter, [\u{2191}]/[\u{2193}] navigate, [ENTER] play, [ESC] exit".to_string(),
-                    "[F1] Menu, [CTRL][L] rescan".to_string(),
-                ]
+                "[/] filter, [\u{2191}]/[\u{2193}] navigate, [ENTER] play, [ESC] exit".to_string()
             }
         }
         Mode::Edit => {
@@ -94,25 +92,74 @@ fn draw_header(
             if is_dirty {
                 instruction.push_str(", [F2] save changes");
             }
-            vec![instruction]
+            instruction
         },
-        Mode::Entry => vec!["Enter a file path to scan, [ESC] cancel".to_string()],
-        Mode::SeriesSelect => vec![
-            "[\u{2191}]/[\u{2193}] navigate, [ENTER] select, [ESC] cancel".to_string(),
-            "[+] create a new series, [CTRL][-] deselect series".to_string(),
-        ],
-        Mode::SeriesCreate => vec!["Type a series name, [ENTER] save, [ESC] cancel".to_string()],
-        Mode::Menu => vec![
-            "[\u{2191}]/[\u{2193}] navigate, [ENTER] select, [ESC] close menu".to_string(),
-        ],
+        Mode::Entry => "Enter a file path to scan, [ESC] cancel".to_string(),
+        Mode::SeriesSelect => {
+            "[\u{2191}]/[\u{2193}] navigate, [ENTER] select, [ESC] cancel, [+] create a new series, [CTRL][-] deselect series".to_string()
+        },
+        Mode::SeriesCreate => "Type a series name, [ENTER] save, [ESC] cancel".to_string(),
+        Mode::Menu => {
+            "[\u{2191}]/[\u{2193}] navigate, [ENTER] select, [ESC] close menu".to_string()
+        },
     };
-    //loop through the instructions and print them in the header
-    for (i, instruction) in instructions.iter().enumerate() {
-        print_at(1, i, &instruction.as_str().with(Color::Black).on(Color::White))?;
+    
+    // Add hardcoded helpers to header
+    header.push_str(&hardcoded_helpers);
+    
+    // 3. Calculate remaining width for FirstLinePreferred items
+    let used_width = header.len();
+    let remaining_width = terminal_width.saturating_sub(used_width);
+    
+    // 4. Get FirstLinePreferred items (only in Browse mode, not in filter mode)
+    if matches!(mode, Mode::Browse) && !filter_mode {
+        let menu_context = MenuContext {
+            selected_entry: selected_entry.cloned(),
+            episode_detail: edit_details.clone(),
+            last_action: last_action.clone(),
+            view_context: view_context.clone(),
+        };
+        
+        let first_line_preferred = crate::menu::get_first_line_preferred_items(&menu_context);
+        
+        // 5. Add FirstLinePreferred items that fit within remaining width
+        let mut available_width = remaining_width;
+        let mut first_item = true;
+        
+        for item in first_line_preferred {
+            let item_width = crate::menu::calculate_menu_helper_width(&item);
+            
+            if item_width <= available_width {
+                // Add separator before each item
+                if first_item {
+                    header.push_str(", ");
+                    available_width = available_width.saturating_sub(2);
+                    first_item = false;
+                }
+                
+                // Format the menu item: "[hotkey] label, "
+                let hotkey_str = format_hotkey(&item.hotkey);
+                let item_str = format!("{} {}, ", hotkey_str, item.label);
+                header.push_str(&item_str);
+                
+                available_width = available_width.saturating_sub(item_width);
+            } else {
+                // Item doesn't fit, stop adding items
+                break;
+            }
+        }
     }
+    
+    // Remove trailing ", " if present
+    if header.ends_with(", ") {
+        header.truncate(header.len() - 2);
+    }
+    
+    // Print single instruction line
+    print_at(0, 0, &header.as_str().with(Color::Black).on(Color::White))?;
 
-    // Print last action display at row 2
-    print_at(0, 2, &last_action_display)?;
+    // Print last action display at row 1
+    print_at(0, 1, &last_action_display)?;
 
     // Show filter line when filter_mode is true OR filter string is not empty
     if filter_mode || !filter.is_empty() {
@@ -126,7 +173,7 @@ fn draw_header(
             "filter:".to_string()
         };
         
-        print_at(0, 4, &format!("{} {}", filter_label, filter))?;
+        print_at(0, 3, &format!("{} {}", filter_label, filter))?;
     }
     Ok(())
 }
@@ -152,6 +199,7 @@ pub fn draw_screen(
     menu_selection: usize,
     filter_mode: bool,
     first_series: &mut usize,
+    view_context: &ViewContext,
 ) -> io::Result<()> {
     clear_screen()?;
 
@@ -202,6 +250,8 @@ pub fn draw_screen(
         edit_details,
         filter_mode,
         config,
+        last_action,
+        view_context,
     )?;
 
     if entries.is_empty() {
@@ -247,7 +297,7 @@ pub fn draw_screen(
             }
             print_at(0, i - *first_entry + HEADER_SIZE, &formatted_text)?;
         }
-        if !series_selected && !season_selected {
+        if !series_selected && !season_selected && !matches!(mode, Mode::Menu) {
             draw_detail_window(
                 &entries[current_item],
                 mode,
@@ -273,7 +323,7 @@ pub fn draw_screen(
     // This must be done AFTER all other drawing to ensure cursor is in the right place
     if filter_mode && matches!(mode, Mode::Browse) {
         show_cursor()?;
-        move_cursor(8 + edit_cursor_pos, 4)?; // "filter: " is 8 chars, row 4 is filter line
+        move_cursor(8 + edit_cursor_pos, 3)?; // "filter: " is 8 chars, row 3 is filter line
     }
 
     Ok(())

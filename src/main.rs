@@ -155,6 +155,7 @@ fn main_loop(mut entries: Vec<Entry>, config: Config, resolver: PathResolver) ->
                 menu_selection,
                 filter_mode,
                 &mut first_series,
+                &view_context,
             )?;
             redraw = false;
         }

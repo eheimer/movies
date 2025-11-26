@@ -497,14 +497,6 @@ pub fn handle_browse_mode(
     
     match code {
         // When in filter mode, only allow filter-related keys
-        KeyCode::Char('l') if modifiers.contains(event::KeyModifiers::CONTROL) && !*filter_mode => {
-            // clear entries and filtered entries
-            *entries = Vec::new();
-            *filtered_entries = Vec::new();
-            *mode = Mode::Entry;
-            search.clear();
-            *redraw = true;
-        }
         KeyCode::F(1) if !*filter_mode => {
             // Open context menu
             *mode = Mode::Menu;
