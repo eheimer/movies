@@ -2,13 +2,10 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 
-use crate::path_resolver::PathResolver;
-
 #[derive(Deserialize, Serialize)]
 pub struct Config {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub root_dir: Option<String>,
-    pub path: String,
+    pub db_location: Option<String>,
     pub current_fg: String,
     pub current_bg: String,
     #[serde(default = "default_dirty_fg")]
@@ -30,8 +27,7 @@ fn default_dirty_bg() -> String {
 impl Default for Config {
     fn default() -> Self {
         Config {
-            root_dir: None,
-            path: ".".to_string(),
+            db_location: None,
             current_fg: "Black".to_string(),
             current_bg: "White".to_string(),
             dirty_fg: "Black".to_string(),
@@ -51,22 +47,32 @@ impl Default for Config {
 }
 
 impl Config {
-    /// Get the resolved absolute path for the video directory
-    /// Uses the PathResolver to resolve the path relative to the configured root directory
-    /// 
-    /// # Arguments
-    /// * `resolver` - PathResolver instance to use for path resolution
+    /// Get the database path as a PathBuf
     /// 
     /// # Returns
-    /// * `PathBuf` - Resolved absolute path to the video directory
-    pub fn get_resolved_path(&self, resolver: &PathResolver) -> PathBuf {
-        resolver.resolve_config_path(&self.path)
+    /// * `Option<PathBuf>` - Database path if configured, None otherwise
+    pub fn get_database_path(&self) -> Option<PathBuf> {
+        self.db_location.as_ref().map(PathBuf::from)
+    }
+    
+    /// Set the database path and save the config
+    /// 
+    /// # Arguments
+    /// * `path` - Path to the database file
+    pub fn set_database_path(&mut self, path: PathBuf) {
+        self.db_location = Some(path.to_string_lossy().to_string());
+    }
+    
+    /// Check if this is a first run (no database location configured)
+    /// 
+    /// # Returns
+    /// * `bool` - True if db_location is None
+    pub fn is_first_run(&self) -> bool {
+        self.db_location.is_none()
     }
 }
 
 /// Read configuration from file
-/// This function reads the config without requiring a PathResolver,
-/// allowing the root_dir to be extracted and used to create the PathResolver.
 /// If the config file has missing optional fields, they will be filled with defaults
 /// and the file will be updated.
 /// 
@@ -96,9 +102,7 @@ pub fn read_config(config_path: &PathBuf) -> Config {
                         eprintln!("Error: Could not parse config.json: {}. Using default values.", e);
                         let default_config = Config::default();
                         // Try to write the default config
-                        if let Ok(default_json) = serde_json::to_string_pretty(&default_config) {
-                            let _ = fs::write(config_path, default_json);
-                        }
+                        save_config(&default_config, config_path);
                         default_config
                     }
                 }
@@ -110,12 +114,23 @@ pub fn read_config(config_path: &PathBuf) -> Config {
         }
     } else {
         let default_config = Config::default();
-        let default_config_json = serde_json::to_string_pretty(&default_config).unwrap();
-        if let Err(e) = fs::write(config_path, default_config_json) {
-            eprintln!("Warning: Could not create config file at: {}", config_path.display());
-            eprintln!("Error: {}", e);
-            eprintln!("Using default configuration values.");
-        }
+        save_config(&default_config, config_path);
         default_config
     }
 }
+
+/// Save configuration to file
+/// 
+/// # Arguments
+/// * `config` - Configuration to save
+/// * `config_path` - Path to the config.json file
+pub fn save_config(config: &Config, config_path: &PathBuf) {
+    if let Ok(config_json) = serde_json::to_string_pretty(config) {
+        if let Err(e) = fs::write(config_path, config_json) {
+            eprintln!("Warning: Could not write config file at: {}", config_path.display());
+            eprintln!("Error: {}", e);
+        }
+    }
+}
+
+

@@ -10,6 +10,8 @@ pub enum PathResolverError {
     RootDirectoryNotAccessible(PathBuf),
     PathNotUnderRoot(PathBuf),
     InvalidRelativePath(String),
+    DatabaseNotFound(PathBuf),
+    InvalidDatabasePath(PathBuf),
     IoError(io::Error),
 }
 
@@ -27,6 +29,12 @@ impl fmt::Display for PathResolverError {
             }
             PathResolverError::InvalidRelativePath(path) => {
                 write!(f, "Invalid relative path: {}", path)
+            }
+            PathResolverError::DatabaseNotFound(path) => {
+                write!(f, "Database not found at: {}", path.display())
+            }
+            PathResolverError::InvalidDatabasePath(path) => {
+                write!(f, "Invalid database path (no parent directory): {}", path.display())
             }
             PathResolverError::IoError(err) => {
                 write!(f, "IO error: {}", err)
@@ -51,7 +59,39 @@ pub struct PathResolver {
 }
 
 impl PathResolver {
+    /// Create a new PathResolver from database location
+    /// 
+    /// # Arguments
+    /// * `db_path` - Path to the videos.sqlite database file
+    /// 
+    /// # Returns
+    /// * `Result<Self, PathResolverError>` - New PathResolver or error
+    pub fn from_database_path(db_path: &Path) -> Result<Self, PathResolverError> {
+        // Validate database path exists
+        if !db_path.exists() {
+            return Err(PathResolverError::DatabaseNotFound(db_path.to_path_buf()));
+        }
+        
+        // Get parent directory as root
+        let root_dir = db_path.parent()
+            .ok_or_else(|| PathResolverError::InvalidDatabasePath(db_path.to_path_buf()))?
+            .to_path_buf();
+        
+        // Canonicalize to resolve symlinks
+        let canonical_root = root_dir.canonicalize()
+            .map_err(PathResolverError::IoError)?;
+        
+        Ok(PathResolver {
+            root_dir: canonical_root,
+        })
+    }
+
+
+    
     /// Create a new PathResolver with optional configurable root directory
+    /// 
+    /// # Deprecated
+    /// This constructor is deprecated and will be removed. Use `from_database_path` instead.
     /// 
     /// # Arguments
     /// * `config_root_dir` - Optional root directory path from config.json
@@ -59,6 +99,7 @@ impl PathResolver {
     /// 
     /// # Returns
     /// * `Result<Self, PathResolverError>` - New PathResolver or error
+    #[deprecated(note = "Use from_database_path instead")]
     pub fn new(config_root_dir: Option<&str>) -> Result<Self, PathResolverError> {
         // Determine root directory
         let root_dir = match config_root_dir {
@@ -101,7 +142,15 @@ impl PathResolver {
             root_dir,
         })
     }
-    
+
+    /// Get the root directory used for path resolution
+    /// 
+    /// # Returns
+    /// * `&Path` - Reference to the root directory
+    pub fn get_root_dir(&self) -> &Path {
+        &self.root_dir
+    }
+
     /// Convert an absolute path to a relative path from the configured root directory
     /// 
     /// # Arguments
@@ -134,22 +183,7 @@ impl PathResolver {
         self.root_dir.join(relative_path)
     }
     
-    /// Resolve a path from config.json relative to the configured root directory
-    /// 
-    /// # Arguments
-    /// * `config_path` - Path string from config file
-    /// 
-    /// # Returns
-    /// * `PathBuf` - Resolved absolute path
-    pub fn resolve_config_path(&self, config_path: &str) -> PathBuf {
-        let path = PathBuf::from(config_path);
-        
-        if path.is_absolute() {
-            path
-        } else {
-            self.root_dir.join(path)
-        }
-    }
+
     
     /// Validate that a path is under the configured root directory
     /// This enforces strict path validation to prevent directory traversal
@@ -191,12 +225,54 @@ mod tests {
     use tempfile::TempDir;
     
     #[test]
-    fn test_path_resolver_creation_with_default_root() {
-        let resolver = PathResolver::new(None).unwrap();
+    fn test_from_database_path_valid() {
+        let temp_dir = TempDir::new().unwrap();
+        let temp_path = temp_dir.path();
         
-        // Should use current directory as root when no config provided
-        let current_dir = env::current_dir().unwrap().canonicalize().unwrap();
-        assert_eq!(resolver.root_dir, current_dir);
+        // Create a test database file
+        let db_path = temp_path.join("videos.sqlite");
+        fs::write(&db_path, "test").unwrap();
+        
+        let resolver = PathResolver::from_database_path(&db_path).unwrap();
+        
+        // Root should be the parent directory of the database
+        let expected_root = temp_path.canonicalize().unwrap();
+        assert_eq!(resolver.root_dir, expected_root);
+    }
+    
+    #[test]
+    fn test_from_database_path_not_found() {
+        let temp_dir = TempDir::new().unwrap();
+        let temp_path = temp_dir.path();
+        
+        // Try to create resolver with non-existent database
+        let db_path = temp_path.join("nonexistent.sqlite");
+        let result = PathResolver::from_database_path(&db_path);
+        
+        assert!(result.is_err());
+        match result {
+            Err(PathResolverError::DatabaseNotFound(_)) => {
+                // Expected error type
+            }
+            _ => panic!("Expected DatabaseNotFound error"),
+        }
+    }
+    
+    #[test]
+    fn test_get_root_dir() {
+        let temp_dir = TempDir::new().unwrap();
+        let temp_path = temp_dir.path();
+        
+        // Create a test database file
+        let db_path = temp_path.join("videos.sqlite");
+        fs::write(&db_path, "test").unwrap();
+        
+        let resolver = PathResolver::from_database_path(&db_path).unwrap();
+        
+        // get_root_dir should return reference to root directory
+        let root = resolver.get_root_dir();
+        let expected_root = temp_path.canonicalize().unwrap();
+        assert_eq!(root, expected_root);
     }
     
     #[test]
@@ -204,11 +280,15 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let temp_path = temp_dir.path();
         
-        // Create a test file
+        // Create a test database file
+        let db_path = temp_path.join("videos.sqlite");
+        fs::write(&db_path, "test").unwrap();
+        
+        // Create a test video file
         let test_file = temp_path.join("test_video.mp4");
         fs::write(&test_file, "test").unwrap();
         
-        let resolver = PathResolver::new(Some(temp_path.to_str().unwrap())).unwrap();
+        let resolver = PathResolver::from_database_path(&db_path).unwrap();
         
         // Convert to relative
         let relative = resolver.to_relative(&test_file).unwrap();
@@ -224,7 +304,11 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let temp_path = temp_dir.path();
         
-        let resolver = PathResolver::new(Some(temp_path.to_str().unwrap())).unwrap();
+        // Create a test database file
+        let db_path = temp_path.join("videos.sqlite");
+        fs::write(&db_path, "test").unwrap();
+        
+        let resolver = PathResolver::from_database_path(&db_path).unwrap();
         
         // Create a file outside the root directory
         let parent_dir = temp_path.parent().unwrap();
@@ -245,23 +329,5 @@ mod tests {
                 panic!("Expected error, but validation passed");
             }
         }
-    }
-    
-    #[test]
-    fn test_config_path_resolution() {
-        let temp_dir = TempDir::new().unwrap();
-        let temp_path = temp_dir.path();
-        
-        let resolver = PathResolver::new(Some(temp_path.to_str().unwrap())).unwrap();
-        
-        // Test relative path resolution
-        let relative_config_path = "Videos";
-        let resolved = resolver.resolve_config_path(relative_config_path);
-        assert_eq!(resolved, temp_path.join("Videos"));
-        
-        // Test absolute path (should remain unchanged)
-        let absolute_config_path = "/usr/bin/vlc";
-        let resolved_abs = resolver.resolve_config_path(absolute_config_path);
-        assert_eq!(resolved_abs, PathBuf::from("/usr/bin/vlc"));
     }
 }

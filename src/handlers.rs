@@ -24,66 +24,163 @@ pub fn handle_entry_mode(
     filtered_entries: &mut Vec<Entry>,
     mode: &mut Mode,
     redraw: &mut bool,
-    config: &Config,
-    resolver: &PathResolver,
+    config: &mut Config,
+    config_path: &std::path::PathBuf,
+    resolver: &mut Option<PathResolver>,
 ) {
     match code {
         KeyCode::Enter => {
-            // Scan the entered path for video files and insert them into the database
-            let path = Path::new(&entry_path)
-                .canonicalize()
-                .unwrap_or_else(|_| Path::new(&entry_path).to_path_buf());
-            let new_entries: Vec<_> = WalkDir::new(&path)
-                .into_iter()
-                .filter_map(|e| e.ok())
-                .filter(|e| e.file_type().is_file())
-                .filter(|e| {
-                    e.path()
-                        .extension()
-                        .and_then(|ext| ext.to_str())
-                        .map_or(false, |ext| {
-                            config.video_extensions.contains(&ext.to_lowercase())
+            // Validate the directory exists
+            let path = Path::new(&entry_path);
+            if !path.exists() {
+                eprintln!("Error: Directory does not exist: {}", entry_path);
+                *redraw = true;
+                return;
+            }
+            
+            let canonical_path = path.canonicalize()
+                .unwrap_or_else(|_| path.to_path_buf());
+            
+            // Check if videos.sqlite exists in that directory
+            let db_path = canonical_path.join("videos.sqlite");
+            let db_exists = db_path.exists();
+            
+            if db_exists {
+                display::load_videos(&format!("Connected to existing database at {}", db_path.display()), 0)
+                    .expect("Failed to display message");
+            } else {
+                display::load_videos("Creating new database...", 0)
+                    .expect("Failed to display message");
+            }
+            
+            // Initialize database (creates if doesn't exist, opens if exists)
+            if let Err(e) = database::initialize_database(&db_path) {
+                eprintln!("\nError: Failed to initialize database: {}", e);
+                
+                // Check for common error types and provide specific guidance
+                let error_str = e.to_string().to_lowercase();
+                if error_str.contains("permission") || error_str.contains("access") {
+                    eprintln!("Permission denied. Please ensure you have write permissions to this directory.");
+                } else if error_str.contains("no space") || error_str.contains("disk full") {
+                    eprintln!("Insufficient disk space. Please free up space and try again.");
+                } else {
+                    eprintln!("Please check the error details above and try again.");
+                }
+                
+                *redraw = true;
+                return;
+            }
+            
+            // Update config with db_location and save to file
+            config.set_database_path(db_path.clone());
+            crate::config::save_config(config, config_path);
+            
+            // Create PathResolver from database path
+            match PathResolver::from_database_path(&db_path) {
+                Ok(new_resolver) => {
+                    *resolver = Some(new_resolver);
+                    
+                    // Perform scan of the directory
+                    let new_entries: Vec<_> = WalkDir::new(&canonical_path)
+                        .into_iter()
+                        .filter_map(|e| e.ok())
+                        .filter(|e| e.file_type().is_file())
+                        .filter(|e| {
+                            e.path()
+                                .extension()
+                                .and_then(|ext| ext.to_str())
+                                .map_or(false, |ext| {
+                                    config.video_extensions.contains(&ext.to_lowercase())
+                                })
                         })
-                })
-                .map(|e| e.into_path())
-                .collect();
-            display::load_videos(entry_path, new_entries.len()).expect("Failed to load videos");
-            
-            let mut imported_count = 0;
-            let mut skipped_count = 0;
-            
-            for entry in &new_entries {
-                let location = entry.to_string_lossy().to_string();
-                let name = entry
-                    .file_name()
-                    .unwrap_or_default()
-                    .to_string_lossy()
-                    .to_string();
+                        .map(|e| e.into_path())
+                        .collect();
+                    
+                    let mut imported_count = 0;
+                    let mut skipped_count = 0;
+                    
+                    for entry in &new_entries {
+                        let location = entry.to_string_lossy().to_string();
+                        let name = entry
+                            .file_name()
+                            .unwrap_or_default()
+                            .to_string_lossy()
+                            .to_string();
 
-                // Use import_episode_relative with error handling for files outside root
-                match database::import_episode_relative(&location, &name, resolver) {
-                    Ok(_) => imported_count += 1,
-                    Err(e) => {
-                        eprintln!("Warning: Skipping file outside configured root directory: {} - {}", location, e);
-                        skipped_count += 1;
+                        // Use import_episode_relative with error handling for files outside root
+                        if let Some(ref res) = resolver {
+                            match database::import_episode_relative(&location, &name, res) {
+                                Ok(_) => imported_count += 1,
+                                Err(e) => {
+                                    eprintln!("Warning: Skipping file outside configured root directory: {} - {}", location, e);
+                                    skipped_count += 1;
+                                }
+                            }
+                        }
                     }
+                    
+                    if db_exists {
+                        display::load_videos(
+                            &format!("Connected to existing database at {}", db_path.display()),
+                            0
+                        ).expect("Failed to display message");
+                        if imported_count > 0 {
+                            display::load_videos(
+                                &format!("Found {} new videos", imported_count),
+                                imported_count
+                            ).expect("Failed to display message");
+                        }
+                    } else {
+                        display::load_videos(
+                            &format!("Created new database and imported {} videos", imported_count),
+                            imported_count
+                        ).expect("Failed to display message");
+                    }
+                    
+                    if skipped_count > 0 {
+                        eprintln!("Skipped {} files outside configured root directory", skipped_count);
+                    }
+
+                    // Load entries and switch to Browse mode
+                    *entries = database::get_entries().expect("Failed to get entries");
+                    *filtered_entries = entries.clone();
+                    *mode = Mode::Browse;
+                    *redraw = true;
+                }
+                Err(e) => {
+                    eprintln!("\nError: Failed to create PathResolver: {}", e);
+                    
+                    match e {
+                        crate::path_resolver::PathResolverError::DatabaseNotFound(path) => {
+                            eprintln!("Database not found at {}", path.display());
+                        }
+                        crate::path_resolver::PathResolverError::InvalidDatabasePath(path) => {
+                            eprintln!("Invalid database path: {}", path.display());
+                            eprintln!("The database path must have a valid parent directory.");
+                        }
+                        crate::path_resolver::PathResolverError::IoError(io_err) => {
+                            eprintln!("IO error: {}", io_err);
+                            
+                            let error_str = io_err.to_string().to_lowercase();
+                            if error_str.contains("permission") || error_str.contains("access") {
+                                eprintln!("Permission denied. Please ensure you have read permissions.");
+                            }
+                        }
+                        _ => {
+                            eprintln!("Please check the error details above and try again.");
+                        }
+                    }
+                    
+                    *redraw = true;
                 }
             }
-            
-            if skipped_count > 0 {
-                eprintln!("Imported {} files, skipped {} files outside configured root directory", imported_count, skipped_count);
-            }
-
-            // Reload entries from the database
-            *entries = database::get_entries().expect("Failed to get entries");
-            *filtered_entries = entries.clone();
-            *mode = Mode::Browse;
-            *redraw = true;
         }
         KeyCode::Esc => {
-            // reload entries from the database
-            *entries = database::get_entries().expect("Failed to get entries");
-            *filtered_entries = entries.clone();
+            // reload entries from the database (if database is initialized)
+            if resolver.is_some() {
+                *entries = database::get_entries().expect("Failed to get entries");
+                *filtered_entries = entries.clone();
+            }
             *mode = Mode::Browse;
             *redraw = true;
         }
@@ -489,6 +586,8 @@ pub fn handle_browse_mode(
                         series,
                         series_selection,
                         first_series,
+                        config,
+                        resolver,
                     );
                     return Ok(true);
                 }
@@ -962,6 +1061,8 @@ pub fn handle_menu_mode(
     series: &mut Vec<Series>,
     series_selection: &mut Option<usize>,
     first_series: &mut usize,
+    config: &Config,
+    resolver: &PathResolver,
 ) {
     // Handle navigation
     match code {
@@ -1007,6 +1108,8 @@ pub fn handle_menu_mode(
                 series,
                 series_selection,
                 first_series,
+                config,
+                resolver,
             );
         }
         KeyCode::Esc => {
@@ -1038,6 +1141,8 @@ pub fn handle_menu_mode(
                             series,
                             series_selection,
                             first_series,
+                            config,
+                            resolver,
                         );
                         // Update menu selection to match the executed item
                         *menu_selection = index;
@@ -1067,6 +1172,8 @@ fn execute_menu_action(
     series: &mut Vec<Series>,
     series_selection: &mut Option<usize>,
     first_series: &mut usize,
+    config: &Config,
+    resolver: &PathResolver,
 ) {
     match action {
         MenuAction::Edit => {
@@ -1183,13 +1290,87 @@ fn execute_menu_action(
             }
         }
         MenuAction::Rescan => {
-            // This action is handled in browse mode with CTRL+L
-            // For consistency, we'll close the menu and let the user use CTRL+L
-            // Or we could implement it here - let's implement it here for completeness
-            *entries = Vec::new();
-            *filtered_entries = Vec::new();
-            *mode = Mode::Entry;
-            *redraw = true;
+            // Check if db_location is None (shouldn't happen but handle gracefully)
+            if config.db_location.is_none() {
+                // Enter Entry mode for first-run setup
+                *entries = Vec::new();
+                *filtered_entries = Vec::new();
+                *mode = Mode::Entry;
+                *redraw = true;
+            } else {
+                // Get root directory from PathResolver and scan automatically
+                let scan_dir = resolver.get_root_dir();
+                
+                // Display message showing scan directory
+                display::load_videos(
+                    &format!("Rescanning {}...", scan_dir.display()),
+                    0
+                ).expect("Failed to display rescan message");
+                
+                // Scan the directory for video files
+                let new_entries: Vec<_> = WalkDir::new(scan_dir)
+                    .into_iter()
+                    .filter_map(|e| e.ok())
+                    .filter(|e| e.file_type().is_file())
+                    .filter(|e| {
+                        e.path()
+                            .extension()
+                            .and_then(|ext| ext.to_str())
+                            .map_or(false, |ext| {
+                                config.video_extensions.contains(&ext.to_lowercase())
+                            })
+                    })
+                    .map(|e| e.into_path())
+                    .collect();
+                
+                let mut imported_count = 0;
+                let mut skipped_count = 0;
+                
+                for entry in &new_entries {
+                    let location = entry.to_string_lossy().to_string();
+                    let name = entry
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .to_string();
+
+                    match database::import_episode_relative(&location, &name, resolver) {
+                        Ok(_) => imported_count += 1,
+                        Err(e) => {
+                            eprintln!("Warning: Skipping file: {} - {}", location, e);
+                            skipped_count += 1;
+                        }
+                    }
+                }
+                
+                if imported_count > 0 {
+                    display::load_videos(
+                        &format!("Rescan complete. Found {} new videos", imported_count),
+                        imported_count
+                    ).expect("Failed to display rescan result");
+                } else {
+                    display::load_videos(
+                        "Rescan complete. No new videos found",
+                        0
+                    ).expect("Failed to display rescan result");
+                }
+                
+                if skipped_count > 0 {
+                    eprintln!("Skipped {} files", skipped_count);
+                }
+
+                // Reload entries based on current view context
+                *entries = match view_context {
+                    ViewContext::TopLevel => database::get_entries().expect("Failed to get entries"),
+                    ViewContext::Series { series_id } => database::get_entries_for_series(*series_id)
+                        .expect("Failed to get entries for series"),
+                    ViewContext::Season { season_id } => database::get_entries_for_season(*season_id)
+                        .expect("Failed to get entries for season"),
+                };
+                *filtered_entries = entries.clone();
+                *mode = Mode::Browse;
+                *redraw = true;
+            }
         }
         MenuAction::ClearSeriesData => {
             // Clear series, season, and episode number for the remembered episode

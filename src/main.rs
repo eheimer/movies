@@ -10,8 +10,8 @@ mod paths;
 mod terminal;
 mod util;
 
-use config::{read_config, Config};
-use crossterm::event::{self, Event, KeyEvent};
+use config::{read_config, save_config, Config};
+use crossterm::event::{self, Event, KeyCode, KeyEvent};
 use database::get_entries;
 use display::draw_screen;
 use dto::EpisodeDetail;
@@ -20,12 +20,203 @@ use path_resolver::PathResolver;
 use std::collections::HashSet;
 use std::io;
 use std::panic;
+use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::time::Duration;
 use terminal::{initialize_terminal, restore_terminal};
 use util::{Entry, LastAction, Mode, ViewContext};
+use walkdir::WalkDir;
 
-fn main_loop(mut entries: Vec<Entry>, config: Config, resolver: PathResolver) -> io::Result<()> {
+/// Handle first-run setup flow
+/// 
+/// This function guides the user through initial setup when no database location is configured.
+/// It prompts for a video collection directory, checks for existing database, initializes
+/// the database, and performs an initial scan.
+/// 
+/// # Arguments
+/// * `config` - Mutable reference to configuration
+/// * `config_path` - Path to the config file for saving
+/// 
+/// # Returns
+/// * `io::Result<(Vec<Entry>, PathResolver)>` - Loaded entries and PathResolver on success
+fn first_run_flow(
+    config: &mut Config,
+    config_path: &Path,
+) -> io::Result<(Vec<Entry>, PathResolver)> {
+    let mut entry_path = String::new();
+    let mut redraw = true;
+    
+    // Display welcome message
+    println!("Welcome! Please enter the path to your video collection directory to get started.");
+    println!();
+    
+    loop {
+        if redraw {
+            // Draw a simple prompt
+            print!("\rVideo collection directory: {}", entry_path);
+            io::Write::flush(&mut io::stdout())?;
+            redraw = false;
+        }
+        
+        // Poll for events
+        if event::poll(Duration::from_millis(100))? {
+            if let Event::Key(KeyEvent { code, .. }) = event::read()? {
+                match code {
+                    KeyCode::Enter => {
+                        if entry_path.is_empty() {
+                            println!("\nError: Please enter a directory path");
+                            redraw = true;
+                            continue;
+                        }
+                        
+                        // Canonicalize the path
+                        let path = match Path::new(&entry_path).canonicalize() {
+                            Ok(p) => p,
+                            Err(e) => {
+                                println!("\nError: Invalid directory path: {}", e);
+                                entry_path.clear();
+                                redraw = true;
+                                continue;
+                            }
+                        };
+                        
+                        if !path.is_dir() {
+                            println!("\nError: Path is not a directory");
+                            entry_path.clear();
+                            redraw = true;
+                            continue;
+                        }
+                        
+                        // Check if videos.sqlite exists in the directory
+                        let db_path = path.join("videos.sqlite");
+                        let db_exists = db_path.exists();
+                        
+                        println!(); // New line after input
+                        
+                        if db_exists {
+                            println!("Connected to existing database at {}", db_path.display());
+                        } else {
+                            println!("Creating new database...");
+                        }
+                        
+                        // Initialize database
+                        if let Err(e) = database::initialize_database(&db_path) {
+                            println!("\nError: Failed to initialize database: {}", e);
+                            
+                            // Check for common error types and provide specific guidance
+                            let error_str = e.to_string().to_lowercase();
+                            if error_str.contains("permission") || error_str.contains("access") {
+                                println!("Permission denied. Please ensure you have write permissions to this directory.");
+                            } else if error_str.contains("no space") || error_str.contains("disk full") {
+                                println!("Insufficient disk space. Please free up space and try again.");
+                            }
+                            
+                            entry_path.clear();
+                            redraw = true;
+                            continue;
+                        }
+                        
+                        // Update config with db_location
+                        config.set_database_path(db_path.clone());
+                        save_config(config, &config_path.to_path_buf());
+                        
+                        // Create PathResolver from database path
+                        let resolver = match PathResolver::from_database_path(&db_path) {
+                            Ok(r) => r,
+                            Err(e) => {
+                                let error_msg = e.to_string();
+                                println!("\nError: Failed to create path resolver: {}", error_msg);
+                                
+                                match &e {
+                                    path_resolver::PathResolverError::DatabaseNotFound(path) => {
+                                        println!("Database not found at {}", path.display());
+                                    }
+                                    path_resolver::PathResolverError::InvalidDatabasePath(path) => {
+                                        println!("Invalid database path: {}", path.display());
+                                    }
+                                    path_resolver::PathResolverError::IoError(io_err) => {
+                                        println!("IO error: {}", io_err);
+                                    }
+                                    _ => {}
+                                }
+                                
+                                return Err(io::Error::new(io::ErrorKind::Other, error_msg));
+                            }
+                        };
+                        
+                        // Perform initial scan
+                        println!("Scanning directory for video files...");
+                        let video_files: Vec<_> = WalkDir::new(&path)
+                            .into_iter()
+                            .filter_map(|e| e.ok())
+                            .filter(|e| e.file_type().is_file())
+                            .filter(|e| {
+                                e.path()
+                                    .extension()
+                                    .and_then(|ext| ext.to_str())
+                                    .map_or(false, |ext| {
+                                        config.video_extensions.contains(&ext.to_lowercase())
+                                    })
+                            })
+                            .map(|e| e.into_path())
+                            .collect();
+                        
+                        let total_files = video_files.len();
+                        let mut imported_count = 0;
+                        let mut skipped_count = 0;
+                        
+                        for video_path in &video_files {
+                            let location = video_path.to_string_lossy().to_string();
+                            let name = video_path
+                                .file_name()
+                                .unwrap_or_default()
+                                .to_string_lossy()
+                                .to_string();
+                            
+                            match database::import_episode_relative(&location, &name, &resolver) {
+                                Ok(_) => imported_count += 1,
+                                Err(_) => skipped_count += 1,
+                            }
+                        }
+                        
+                        if db_exists {
+                            println!("Connected to existing database at {}", db_path.display());
+                            if imported_count > 0 {
+                                println!("Found {} new videos.", imported_count);
+                            }
+                        } else {
+                            println!("Created new database and imported {} videos", imported_count);
+                        }
+                        
+                        if skipped_count > 0 {
+                            println!("Note: {} files were skipped.", skipped_count);
+                        }
+                        
+                        // Load entries from database
+                        let entries = get_entries().expect("Failed to get entries");
+                        
+                        return Ok((entries, resolver));
+                    }
+                    KeyCode::Esc => {
+                        println!("\nSetup cancelled. Exiting...");
+                        return Err(io::Error::new(io::ErrorKind::Interrupted, "Setup cancelled"));
+                    }
+                    KeyCode::Backspace => {
+                        entry_path.pop();
+                        redraw = true;
+                    }
+                    KeyCode::Char(c) => {
+                        entry_path.push(c);
+                        redraw = true;
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+}
+
+fn main_loop(mut entries: Vec<Entry>, mut config: Config, mut resolver: Option<PathResolver>, config_path: PathBuf) -> io::Result<()> {
     let mut current_item = 0;
     let mut redraw = true;
     let mut search: String = String::new();
@@ -61,15 +252,8 @@ fn main_loop(mut entries: Vec<Entry>, config: Config, resolver: PathResolver) ->
     // Create a channel to communicate between the thread and the main loop
     let (tx, rx): (Sender<()>, Receiver<()>) = mpsc::channel();
 
-    //if entries is empty, we will automatically load the config path
-    // set entry_path to the config value, then change mode to Entry
-    // Resolve the config path to an absolute path using the PathResolver
-    let mut entry_path = config.get_resolved_path(&resolver)
-        .to_string_lossy()
-        .to_string();
-    if entries.is_empty() {
-        mode = Mode::Entry;
-    }
+    // Entry path for manual scans (not used for first-run, which is handled separately)
+    let mut entry_path = String::new();
 
     loop {
         if redraw {
@@ -180,8 +364,9 @@ fn main_loop(mut entries: Vec<Entry>, config: Config, resolver: PathResolver) ->
                             &mut filtered_entries,
                             &mut mode,
                             &mut redraw,
-                            &config,
-                            &resolver,
+                            &mut config,
+                            &config_path,
+                            &mut resolver,
                         );
                     }
                     Mode::Edit => {
@@ -212,36 +397,42 @@ fn main_loop(mut entries: Vec<Entry>, config: Config, resolver: PathResolver) ->
                         );
                     }
                     Mode::Browse => {
-                        if !handlers::handle_browse_mode(
-                            code,
-                            modifiers,
-                            &mut current_item,
-                            &mut first_entry,
-                            &mut filtered_entries,
-                            &mut entries,
-                            &mut search,
-                            &mut playing_file,
-                            &mut mode,
-                            &mut edit_details,
-                            &mut season_number,
-                            &mut redraw,
-                            &config,
-                            &resolver,
-                            &tx,
-                            &mut view_context,
-                            &mut last_action,
-                            &mut edit_field,
-                            &mut edit_cursor_pos,
-                            &mut original_edit_details,
-                            &mut dirty_fields,
-                            &mut remembered_item,
-                            &mut menu_selection,
-                            &mut series,
-                            &mut series_selection,
-                            &mut filter_mode,
-                            &mut first_series,
-                        )? {
-                            break Ok(());
+                        // If resolver is None, we need to enter Entry mode for setup
+                        if resolver.is_none() {
+                            mode = Mode::Entry;
+                            redraw = true;
+                        } else if let Some(ref res) = resolver {
+                            if !handlers::handle_browse_mode(
+                                code,
+                                modifiers,
+                                &mut current_item,
+                                &mut first_entry,
+                                &mut filtered_entries,
+                                &mut entries,
+                                &mut search,
+                                &mut playing_file,
+                                &mut mode,
+                                &mut edit_details,
+                                &mut season_number,
+                                &mut redraw,
+                                &config,
+                                res,
+                                &tx,
+                                &mut view_context,
+                                &mut last_action,
+                                &mut edit_field,
+                                &mut edit_cursor_pos,
+                                &mut original_edit_details,
+                                &mut dirty_fields,
+                                &mut remembered_item,
+                                &mut menu_selection,
+                                &mut series,
+                                &mut series_selection,
+                                &mut filter_mode,
+                                &mut first_series,
+                            )? {
+                                break Ok(());
+                            }
                         }
                     }
                     Mode::SeriesSelect => {
@@ -300,27 +491,35 @@ fn main_loop(mut entries: Vec<Entry>, config: Config, resolver: PathResolver) ->
                         };
                         let menu_items = menu::get_context_menu_items(&menu_context);
 
-                        handlers::handle_menu_mode(
-                            code,
-                            &menu_items,
-                            &mut menu_selection,
-                            &mut mode,
-                            &mut redraw,
-                            remembered_item,
-                            &mut filtered_entries,
-                            &mut entries,
-                            &mut edit_details,
-                            &mut season_number,
-                            &view_context,
-                            &mut last_action,
-                            &mut edit_field,
-                            &mut edit_cursor_pos,
-                            &mut original_edit_details,
-                            &mut dirty_fields,
-                            &mut series,
-                            &mut series_selection,
-                            &mut first_series,
-                        );
+                        if let Some(ref res) = resolver {
+                            handlers::handle_menu_mode(
+                                code,
+                                &menu_items,
+                                &mut menu_selection,
+                                &mut mode,
+                                &mut redraw,
+                                remembered_item,
+                                &mut filtered_entries,
+                                &mut entries,
+                                &mut edit_details,
+                                &mut season_number,
+                                &view_context,
+                                &mut last_action,
+                                &mut edit_field,
+                                &mut edit_cursor_pos,
+                                &mut original_edit_details,
+                                &mut dirty_fields,
+                                &mut series,
+                                &mut series_selection,
+                                &mut first_series,
+                                &config,
+                                res,
+                            );
+                        } else {
+                            // If resolver is None, exit menu and enter Entry mode
+                            mode = Mode::Entry;
+                            redraw = true;
+                        }
                     }
                 }
 
@@ -352,40 +551,98 @@ fn main() -> io::Result<()> {
         }
     };
     
-    let config = read_config(&app_paths.config_file);
+    let mut config = read_config(&app_paths.config_file);
 
-    // Initialize PathResolver with configurable root directory from config
-    let resolver = PathResolver::new(config.root_dir.as_deref())
-        .expect("Failed to initialize path resolver");
+    // Check if this is a first run (no database location configured)
+    if config.is_first_run() {
+        // First run - handle setup before initializing terminal
+        let (entries, resolver) = first_run_flow(&mut config, &app_paths.config_file)?;
+        
+        // Now start the main loop with the configured database
+        initialize_terminal()?;
+        let result = main_loop(entries, config, Some(resolver), app_paths.config_file.clone());
+        restore_terminal()?;
+        return result;
+    }
 
-    // Set database path before any database operations
-    let db_path = app_paths.database_file.clone();
-    database::set_database_path(app_paths.database_file);
-    
-    // Ensure database connection is established by accessing DB_CONN
-    // Temporarily suppress panic output and catch any panic during initialization
-    let db_init_result = {
-        let default_hook = panic::take_hook();
-        panic::set_hook(Box::new(|_| {})); // Suppress panic output
-        
-        let result = panic::catch_unwind(|| {
-            let _ = &*database::DB_CONN;
-        });
-        
-        panic::set_hook(default_hook); // Restore original panic hook
-        result
+    // Not first run - initialize database from config
+    let db_path = match config.get_database_path() {
+        Some(path) => path,
+        None => {
+            eprintln!("Error: Database location not configured");
+            eprintln!("Please check your config file at: {}", app_paths.config_file.display());
+            std::process::exit(1);
+        }
     };
-    
-    if db_init_result.is_err() {
-        eprintln!("Error: Failed to initialize database at: {}", db_path.display());
-        eprintln!("Please ensure you have write permissions to this location.");
+
+    // Check if database file exists
+    if !db_path.exists() {
+        eprintln!("Error: Database not found at {}", db_path.display());
+        eprintln!("The database file may have been moved or deleted.");
+        eprintln!("Please update your config file or delete it to run first-time setup again.");
         std::process::exit(1);
     }
 
+    // Initialize database
+    if let Err(e) = database::initialize_database(&db_path) {
+        eprintln!("Error: Failed to initialize database at {}", db_path.display());
+        eprintln!("Details: {}", e);
+        
+        // Check for common error types and provide specific guidance
+        let error_str = e.to_string().to_lowercase();
+        if error_str.contains("permission") || error_str.contains("access") {
+            eprintln!("This appears to be a permission error.");
+            eprintln!("Please ensure you have read/write permissions to this location.");
+        } else if error_str.contains("no space") || error_str.contains("disk full") {
+            eprintln!("This appears to be a disk space error.");
+            eprintln!("Please ensure you have sufficient disk space available.");
+        } else if error_str.contains("already initialized") {
+            eprintln!("Database is already initialized. This should not happen.");
+        } else {
+            eprintln!("Please check the error details above and ensure the path is accessible.");
+        }
+        
+        std::process::exit(1);
+    }
+
+    // Initialize PathResolver from database location
+    let resolver = match PathResolver::from_database_path(&db_path) {
+        Ok(r) => r,
+        Err(e) => {
+            match &e {
+                path_resolver::PathResolverError::DatabaseNotFound(path) => {
+                    eprintln!("Error: Database not found at {}", path.display());
+                    eprintln!("The database file may have been moved or deleted.");
+                }
+                path_resolver::PathResolverError::InvalidDatabasePath(path) => {
+                    eprintln!("Error: Invalid database path: {}", path.display());
+                    eprintln!("The database path must have a valid parent directory.");
+                }
+                path_resolver::PathResolverError::IoError(io_err) => {
+                    eprintln!("Error: Failed to access database path: {}", io_err);
+                    eprintln!("Database path: {}", db_path.display());
+                    
+                    let error_str = io_err.to_string().to_lowercase();
+                    if error_str.contains("permission") || error_str.contains("access") {
+                        eprintln!("This appears to be a permission error.");
+                        eprintln!("Please ensure you have read permissions to this location.");
+                    }
+                }
+                _ => {
+                    eprintln!("Error: Failed to initialize path resolver: {}", e);
+                    eprintln!("Database path: {}", db_path.display());
+                }
+            }
+            std::process::exit(1);
+        }
+    };
+
+    // Load entries from database
     let entries = get_entries().expect("Failed to get entries");
 
+    // Start main loop
     initialize_terminal()?;
-    let result = main_loop(entries, config, resolver);
+    let result = main_loop(entries, config, Some(resolver), app_paths.config_file);
     restore_terminal()?;
     result
 }

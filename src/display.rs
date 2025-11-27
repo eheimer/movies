@@ -61,6 +61,7 @@ fn draw_header(
     config: &Config,
     last_action: &Option<LastAction>,
     _view_context: &ViewContext,
+    is_first_run: bool,
 ) -> io::Result<()> {
     // Get terminal width for overflow calculation
     let (terminal_width, _) = get_terminal_size()?;
@@ -94,7 +95,14 @@ fn draw_header(
             }
             instruction
         },
-        Mode::Entry => "Enter a file path to scan, [ESC] cancel".to_string(),
+        Mode::Entry => {
+            // Check if we're in first-run state (no entries and no database)
+            if is_first_run {
+                "Welcome! Enter the path to your video collection directory, [ESC] cancel".to_string()
+            } else {
+                "Enter a file path to scan, [ESC] cancel".to_string()
+            }
+        },
         Mode::SeriesSelect => {
             "[\u{2191}]/[\u{2193}] navigate, [ENTER] select, [ESC] cancel, [+] create a new series, [CTRL][-] deselect series".to_string()
         },
@@ -237,6 +245,9 @@ pub fn draw_screen(
     // Extract selected entry for draw_header
     let selected_entry = entries.get(current_item);
 
+    // Determine if we're in first-run state (Entry mode with no entries)
+    let is_first_run = matches!(mode, Mode::Entry) && entries.is_empty();
+    
     draw_header(
         mode,
         filter,
@@ -251,17 +262,77 @@ pub fn draw_screen(
         config,
         last_action,
         view_context,
+        is_first_run,
     )?;
 
-    if entries.is_empty() {
-        if let Mode::Entry = mode {
+    // Handle Entry mode display (both first-run and rescan scenarios)
+    if let Mode::Entry = mode {
+        if entries.is_empty() {
+            // First-run scenario - show welcome message with detailed instructions
+            print_at(
+                0,
+                HEADER_SIZE,
+                &"Welcome to the video library manager!".to_string(),
+            )?;
             print_at(
                 0,
                 HEADER_SIZE + 1,
-                &format!("Enter a file path to scan: {}", entry_path),
+                &"".to_string(),
+            )?;
+            print_at(
+                0,
+                HEADER_SIZE + 2,
+                &"To get started, enter the full path to your video collection directory below.".to_string(),
+            )?;
+            print_at(
+                0,
+                HEADER_SIZE + 3,
+                &"".to_string(),
+            )?;
+            print_at(
+                0,
+                HEADER_SIZE + 4,
+                &"What happens next:".to_string(),
+            )?;
+            print_at(
+                0,
+                HEADER_SIZE + 5,
+                &"  • If videos.sqlite exists in that directory, it will be used (preserving your data)".to_string(),
+            )?;
+            print_at(
+                0,
+                HEADER_SIZE + 6,
+                &"  • If not, a new database will be created and your videos will be scanned".to_string(),
+            )?;
+            print_at(
+                0,
+                HEADER_SIZE + 7,
+                &"".to_string(),
+            )?;
+            print_at(
+                0,
+                HEADER_SIZE + 8,
+                &format!("Path: {}", entry_path),
+            )?;
+        } else {
+            // Rescan scenario - show simpler prompt
+            print_at(
+                0,
+                HEADER_SIZE + 1,
+                &"Enter the path to a directory to scan for video files.".to_string(),
+            )?;
+            print_at(
+                0,
+                HEADER_SIZE + 2,
+                &"".to_string(),
+            )?;
+            print_at(
+                0,
+                HEADER_SIZE + 3,
+                &format!("Path: {}", entry_path),
             )?;
         }
-    } else {
+    } else if !entries.is_empty() {
         let max_lines = get_max_displayed_items()?;
 
         //make sure current_item is between first_entry and first_entry + max_lines.  If it's not, adjust first_entry
@@ -660,9 +731,14 @@ fn draw_window(
     Ok(())
 }
 
-pub fn load_videos(path: &str, count: usize) -> io::Result<()> {
-    clear_line(HEADER_SIZE + 1)?;
-    print!("Importing {} videos from {}...", count, path);
+pub fn load_videos(message: &str, count: usize) -> io::Result<()> {
+    // clear_line(HEADER_SIZE + 1)?;
+    // if count > 0 {
+    //     print!("{} ({} videos)", message, count);
+    // } else {
+    //     print!("{}", message);
+    // }
+    // io::Write::flush(&mut io::stdout())?;
     Ok(())
 }
 
