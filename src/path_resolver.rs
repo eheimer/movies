@@ -6,7 +6,6 @@ use std::path::{Path, PathBuf};
 /// Errors that can occur during path resolution operations
 #[derive(Debug)]
 pub enum PathResolverError {
-    ExecutableLocationNotFound,
     RootDirectoryNotFound(PathBuf),
     RootDirectoryNotAccessible(PathBuf),
     PathNotUnderRoot(PathBuf),
@@ -17,9 +16,6 @@ pub enum PathResolverError {
 impl fmt::Display for PathResolverError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            PathResolverError::ExecutableLocationNotFound => {
-                write!(f, "Could not determine executable location")
-            }
             PathResolverError::RootDirectoryNotFound(path) => {
                 write!(f, "Root directory not found: {}", path.display())
             }
@@ -49,11 +45,8 @@ impl From<io::Error> for PathResolverError {
 
 /// PathResolver handles all path resolution logic for the application
 /// 
-/// It maintains two key directories:
-/// - executable_dir: Where the application executable is located (used for database)
-/// - root_dir: Configurable root directory for video files (from config.json)
+/// It maintains the root directory for video files (from config.json)
 pub struct PathResolver {
-    executable_dir: PathBuf,
     root_dir: PathBuf,
 }
 
@@ -62,14 +55,11 @@ impl PathResolver {
     /// 
     /// # Arguments
     /// * `config_root_dir` - Optional root directory path from config.json
-    ///                      If None, defaults to executable directory
+    ///                      If None, defaults to current directory
     /// 
     /// # Returns
     /// * `Result<Self, PathResolverError>` - New PathResolver or error
     pub fn new(config_root_dir: Option<&str>) -> Result<Self, PathResolverError> {
-        // Get executable directory
-        let executable_dir = Self::detect_executable_directory()?;
-        
         // Determine root directory
         let root_dir = match config_root_dir {
             Some(root_path) => {
@@ -79,7 +69,10 @@ impl PathResolver {
                 let resolved_root = if root_path_buf.is_absolute() {
                     root_path_buf
                 } else {
-                    executable_dir.join(&root_path_buf)
+                    // Resolve relative to current directory
+                    env::current_dir()
+                        .map_err(PathResolverError::IoError)?
+                        .join(&root_path_buf)
                 };
                 
                 // Validate root directory exists and is accessible
@@ -95,33 +88,18 @@ impl PathResolver {
                 resolved_root.canonicalize()
                     .map_err(|_| PathResolverError::RootDirectoryNotAccessible(resolved_root))?
             }
-            None => executable_dir.clone(),
+            None => {
+                // Default to current directory
+                env::current_dir()
+                    .map_err(PathResolverError::IoError)?
+                    .canonicalize()
+                    .map_err(PathResolverError::IoError)?
+            }
         };
         
         Ok(PathResolver {
-            executable_dir,
             root_dir,
         })
-    }
-    
-    /// Detect the directory containing the application executable
-    fn detect_executable_directory() -> Result<PathBuf, PathResolverError> {
-        let exe_path = env::current_exe()
-            .map_err(|_| PathResolverError::ExecutableLocationNotFound)?;
-        
-        let exe_dir = exe_path.parent()
-            .ok_or(PathResolverError::ExecutableLocationNotFound)?
-            .to_path_buf();
-        
-        // Canonicalize to get absolute path
-        exe_dir.canonicalize()
-            .map_err(|_| PathResolverError::ExecutableLocationNotFound)
-    }
-    
-    /// Get the path where the database file should be stored
-    /// Always returns a path in the executable directory
-    pub fn get_database_path(&self) -> PathBuf {
-        self.executable_dir.join("videos.db")
     }
     
     /// Convert an absolute path to a relative path from the configured root directory
@@ -216,21 +194,9 @@ mod tests {
     fn test_path_resolver_creation_with_default_root() {
         let resolver = PathResolver::new(None).unwrap();
         
-        // Should use executable directory as root when no config provided
-        assert_eq!(resolver.root_dir, resolver.executable_dir);
-    }
-    
-    #[test]
-    fn test_database_path_always_in_executable_dir() {
-        let temp_dir = TempDir::new().unwrap();
-        let temp_path = temp_dir.path().to_str().unwrap();
-        
-        let resolver = PathResolver::new(Some(temp_path)).unwrap();
-        let db_path = resolver.get_database_path();
-        
-        // Database should be in executable directory, not the configured root
-        assert!(db_path.starts_with(&resolver.executable_dir));
-        assert_eq!(db_path.file_name().unwrap(), "videos.db");
+        // Should use current directory as root when no config provided
+        let current_dir = env::current_dir().unwrap().canonicalize().unwrap();
+        assert_eq!(resolver.root_dir, current_dir);
     }
     
     #[test]

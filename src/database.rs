@@ -4,25 +4,18 @@ use crate::util::Entry;
 use lazy_static::lazy_static;
 use rusqlite::{params, Connection, Result};
 use std::path::{Path, PathBuf};
-use std::sync::{Mutex, Once};
+use std::sync::{Mutex, OnceLock};
 
-static INIT: Once = Once::new();
-static mut DB_PATH: Option<PathBuf> = None;
+static DB_PATH: OnceLock<PathBuf> = OnceLock::new();
 
 pub fn set_database_path(path: PathBuf) {
-    INIT.call_once(|| {
-        unsafe {
-            DB_PATH = Some(path);
-        }
-    });
+    DB_PATH.get_or_init(|| path);
 }
 
 lazy_static! {
     pub static ref DB_CONN: Mutex<Connection> = {
-        let db_path = unsafe {
-            DB_PATH.as_ref()
-                .expect("Database path not set. Call set_database_path first.")
-        };
+        let db_path = DB_PATH.get()
+            .expect("Database path not set. Call set_database_path first.");
         
         let conn = Connection::open(db_path)
             .expect("Failed to open database");

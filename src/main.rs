@@ -18,7 +18,6 @@ use dto::EpisodeDetail;
 use episode_field::EpisodeField;
 use path_resolver::PathResolver;
 use std::collections::HashSet;
-use std::env;
 use std::io;
 use std::panic;
 use std::sync::mpsc::{self, Receiver, Sender};
