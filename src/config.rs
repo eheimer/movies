@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use crate::path_resolver::PathResolver;
 
@@ -75,8 +75,8 @@ impl Config {
 /// 
 /// # Returns
 /// * `Config` - Loaded configuration or default if file doesn't exist
-pub fn read_config(config_path: &str) -> Config {
-    if Path::new(config_path).exists() {
+pub fn read_config(config_path: &PathBuf) -> Config {
+    if config_path.exists() {
         match fs::read_to_string(config_path) {
             Ok(content) => {
                 match serde_json::from_str::<Config>(&content) {
@@ -111,7 +111,11 @@ pub fn read_config(config_path: &str) -> Config {
     } else {
         let default_config = Config::default();
         let default_config_json = serde_json::to_string_pretty(&default_config).unwrap();
-        fs::write(config_path, default_config_json).unwrap();
+        if let Err(e) = fs::write(config_path, default_config_json) {
+            eprintln!("Warning: Could not create config file at: {}", config_path.display());
+            eprintln!("Error: {}", e);
+            eprintln!("Using default configuration values.");
+        }
         default_config
     }
 }

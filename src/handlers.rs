@@ -456,40 +456,42 @@ pub fn handle_browse_mode(
     filter_mode: &mut bool,
     first_series: &mut usize,
 ) -> io::Result<bool> {
-    // Check for context menu hotkeys first (F2-F5)
+    // Check for context menu hotkeys first (F2-F5) - but not in filter mode
     // Build menu context to check if actions are available
-    let menu_context = crate::menu::MenuContext {
-        selected_entry: filtered_entries.get(*current_item).cloned(),
-        episode_detail: edit_details.clone(),
-        last_action: last_action.clone(),
-    };
-    let menu_items = crate::menu::get_context_menu_items(&menu_context);
-    
-    // Check if the pressed key matches any available menu item hotkey
-    for item in &menu_items {
-        if let Some(hotkey) = &item.hotkey {
-            if *hotkey == code {
-                // Execute the menu action directly
-                execute_menu_action(
-                    &item.action,
-                    mode,
-                    redraw,
-                    *current_item,
-                    filtered_entries,
-                    entries,
-                    edit_details,
-                    season_number,
-                    view_context,
-                    last_action,
-                    edit_field,
-                    edit_cursor_pos,
-                    original_edit_details,
-                    dirty_fields,
-                    series,
-                    series_selection,
-                    first_series,
-                );
-                return Ok(true);
+    if !*filter_mode {
+        let menu_context = crate::menu::MenuContext {
+            selected_entry: filtered_entries.get(*current_item).cloned(),
+            episode_detail: edit_details.clone(),
+            last_action: last_action.clone(),
+        };
+        let menu_items = crate::menu::get_context_menu_items(&menu_context);
+        
+        // Check if the pressed key matches any available menu item hotkey
+        for item in &menu_items {
+            if let Some(hotkey) = &item.hotkey {
+                if *hotkey == code {
+                    // Execute the menu action directly
+                    execute_menu_action(
+                        &item.action,
+                        mode,
+                        redraw,
+                        *current_item,
+                        filtered_entries,
+                        entries,
+                        edit_details,
+                        season_number,
+                        view_context,
+                        last_action,
+                        edit_field,
+                        edit_cursor_pos,
+                        original_edit_details,
+                        dirty_fields,
+                        series,
+                        series_selection,
+                        first_series,
+                    );
+                    return Ok(true);
+                }
             }
         }
     }
@@ -624,7 +626,8 @@ pub fn handle_browse_mode(
             *redraw = true;
         }
         KeyCode::Esc
-            if !*filter_mode && matches!(filtered_entries[*current_item], Entry::Episode { .. })
+            if !*filter_mode && !filtered_entries.is_empty() 
+                && matches!(filtered_entries[*current_item], Entry::Episode { .. })
                 && edit_details.season.is_some() =>
         {
             //go back to the season view
@@ -638,7 +641,8 @@ pub fn handle_browse_mode(
             *redraw = true;
         }
         KeyCode::Esc
-            if !*filter_mode && (matches!(filtered_entries[*current_item], Entry::Season { .. })
+            if !*filter_mode && !filtered_entries.is_empty() 
+                && (matches!(filtered_entries[*current_item], Entry::Season { .. })
                 || matches!(filtered_entries[*current_item], Entry::Episode { .. })
                     && edit_details.series.is_some()) =>
         {

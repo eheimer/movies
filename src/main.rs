@@ -6,12 +6,13 @@ mod episode_field;
 mod handlers;
 mod menu;
 mod path_resolver;
+mod paths;
 mod terminal;
 mod util;
 
 use config::{read_config, Config};
 use crossterm::event::{self, Event, KeyEvent};
-use database::{get_entries, initialize_database};
+use database::get_entries;
 use display::draw_screen;
 use dto::EpisodeDetail;
 use episode_field::EpisodeField;
@@ -342,21 +343,45 @@ fn main() -> io::Result<()> {
         eprintln!("Application crashed: {:?}", info);
     }));
 
-    // Get executable directory to locate config.json
-    let exe_path = env::current_exe().expect("Failed to get executable path");
-    let exe_dir = exe_path.parent().expect("Failed to get executable directory");
-    let config_path = exe_dir.join("config.json");
+    // Initialize application paths
+    let app_paths = match paths::AppPaths::new() {
+        Ok(paths) => paths,
+        Err(e) => {
+            eprintln!("Error: {}", e);
+            eprintln!("Please ensure you have write permissions to your home directory.");
+            std::process::exit(1);
+        }
+    };
     
-    let config = read_config(config_path.to_str().expect("Invalid config path"));
+    let config = read_config(&app_paths.config_file);
 
     // Initialize PathResolver with configurable root directory from config
     let resolver = PathResolver::new(config.root_dir.as_deref())
         .expect("Failed to initialize path resolver");
 
-    // Use the database path from PathResolver (always in executable directory)
-    let db_path = resolver.get_database_path();
-    initialize_database(db_path.to_str().expect("Invalid database path"))
-        .expect("Failed to initialize database");
+    // Set database path before any database operations
+    let db_path = app_paths.database_file.clone();
+    database::set_database_path(app_paths.database_file);
+    
+    // Ensure database connection is established by accessing DB_CONN
+    // Temporarily suppress panic output and catch any panic during initialization
+    let db_init_result = {
+        let default_hook = panic::take_hook();
+        panic::set_hook(Box::new(|_| {})); // Suppress panic output
+        
+        let result = panic::catch_unwind(|| {
+            let _ = &*database::DB_CONN;
+        });
+        
+        panic::set_hook(default_hook); // Restore original panic hook
+        result
+    };
+    
+    if db_init_result.is_err() {
+        eprintln!("Error: Failed to initialize database at: {}", db_path.display());
+        eprintln!("Please ensure you have write permissions to this location.");
+        std::process::exit(1);
+    }
 
     let entries = get_entries().expect("Failed to get entries");
 
