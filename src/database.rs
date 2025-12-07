@@ -458,6 +458,37 @@ pub fn get_all_series() -> Result<Vec<Series>> {
     Ok(series)
 }
 
+pub fn get_series_by_id(series_id: usize) -> Result<Series> {
+    let conn = get_connection().lock().unwrap();
+    
+    let mut stmt = conn.prepare("SELECT id, name FROM series WHERE id = ?1")?;
+    let series = stmt.query_row(params![series_id], |row| {
+        Ok(Series {
+            id: row.get(0)?,
+            name: row.get(1)?,
+        })
+    })?;
+    
+    Ok(series)
+}
+
+pub fn get_season_by_id(season_id: usize) -> Result<(Season, usize)> {
+    let conn = get_connection().lock().unwrap();
+    
+    let mut stmt = conn.prepare("SELECT id, number, series_id FROM season WHERE id = ?1")?;
+    let (season, series_id) = stmt.query_row(params![season_id], |row| {
+        Ok((
+            Season {
+                id: row.get(0)?,
+                number: row.get(1)?,
+            },
+            row.get(2)?
+        ))
+    })?;
+    
+    Ok((season, series_id))
+}
+
 pub fn create_series_and_assign(name: &str, episode_id: usize) -> Result<EpisodeDetail> {
     {
         // Create a new scope to release the lock after the transaction

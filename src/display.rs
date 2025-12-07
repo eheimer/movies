@@ -60,7 +60,7 @@ fn draw_header(
     filter_mode: bool,
     config: &Config,
     last_action: &Option<LastAction>,
-    _view_context: &ViewContext,
+    view_context: &ViewContext,
     is_first_run: bool,
 ) -> io::Result<()> {
     // Get terminal width for overflow calculation
@@ -167,6 +167,19 @@ fn draw_header(
 
     // Print last action display at row 1
     print_at(0, 1, &last_action_display)?;
+
+    // Print breadcrumbs at row 2 based on view context
+    match view_context {
+        ViewContext::Series { series_name, .. } => {
+            print_at(0, 2, &format!("Browsing [{}]", series_name))?;
+        }
+        ViewContext::Season { series_name, season_number, .. } => {
+            print_at(0, 2, &format!("Browsing [{}] -> [season {}]", series_name, season_number))?;
+        }
+        ViewContext::TopLevel => {
+            // No breadcrumbs at top level
+        }
+    }
 
     // Show filter line when filter_mode is true OR filter string is not empty
     if filter_mode || !filter.is_empty() {

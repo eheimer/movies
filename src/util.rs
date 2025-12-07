@@ -55,8 +55,8 @@ impl LastAction {
 #[derive(Debug, Clone)]
 pub enum ViewContext {
     TopLevel,
-    Series { series_id: usize },
-    Season { season_id: usize },
+    Series { series_id: usize, series_name: String },
+    Season { season_id: usize, series_id: usize, series_name: String, season_number: usize },
 }
 
 pub enum Mode {
