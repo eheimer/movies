@@ -746,11 +746,13 @@ fn draw_window(
 
 pub fn load_videos(message: &str, count: usize) -> io::Result<()> {
     // Display status message on the status line (row 1)
+    // This temporarily overrides the last_action_display during operations.
+    // When the screen redraws after the operation completes, the last action will reappear.
     clear_line(1)?;
     if count > 0 {
         print_at(0, 1, &format!("{} ({} videos)", message, count))?;
     } else {
-        print_at(0, 1, &message.to_string())?;
+        print_at(0, 1, &message)?;
     }
     Ok(())
 }
