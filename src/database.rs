@@ -472,18 +472,21 @@ pub fn get_series_by_id(series_id: usize) -> Result<Series> {
     Ok(series)
 }
 
-pub fn get_season_by_id(season_id: usize) -> Result<Season> {
+pub fn get_season_by_id(season_id: usize) -> Result<(Season, usize)> {
     let conn = get_connection().lock().unwrap();
     
-    let mut stmt = conn.prepare("SELECT id, number FROM season WHERE id = ?1")?;
-    let season = stmt.query_row(params![season_id], |row| {
-        Ok(Season {
-            id: row.get(0)?,
-            number: row.get(1)?,
-        })
+    let mut stmt = conn.prepare("SELECT id, number, series_id FROM season WHERE id = ?1")?;
+    let (season, series_id) = stmt.query_row(params![season_id], |row| {
+        Ok((
+            Season {
+                id: row.get(0)?,
+                number: row.get(1)?,
+            },
+            row.get(2)?
+        ))
     })?;
     
-    Ok(season)
+    Ok((season, series_id))
 }
 
 pub fn create_series_and_assign(name: &str, episode_id: usize) -> Result<EpisodeDetail> {

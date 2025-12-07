@@ -174,7 +174,7 @@ fn draw_header(
             print_at(0, 2, &format!("Browsing [{}]", series_name))?;
         }
         ViewContext::Season { series_name, season_number, .. } => {
-            print_at(0, 2, &format!("Browsing [{}] -> [Season {}]", series_name, season_number))?;
+            print_at(0, 2, &format!("Browsing [{}] -> [season {}]", series_name, season_number))?;
         }
         ViewContext::TopLevel => {
             // No breadcrumbs at top level

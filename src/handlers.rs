@@ -721,9 +721,9 @@ pub fn handle_browse_mode(
                         _ => {
                             // Fallback: get series info from database (should not happen)
                             eprintln!("Warning: Season selected but not in Series view context");
-                            let season = database::get_season_by_id(*season_id)
+                            let (season, series_id_from_db) = database::get_season_by_id(*season_id)
                                 .expect("Failed to get season");
-                            let series = database::get_series_by_id(season.id)
+                            let series = database::get_series_by_id(series_id_from_db)
                                 .expect("Failed to get series");
                             (series.id, series.name)
                         }
