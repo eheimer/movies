@@ -438,6 +438,17 @@ pub fn clear_series_data(episode_id: usize) -> Result<(), Box<dyn std::error::Er
     Ok(())
 }
 
+pub fn delete_episode(episode_id: usize) -> Result<(), Box<dyn std::error::Error>> {
+    let conn = get_connection().lock().unwrap();
+
+    conn.execute(
+        "DELETE FROM episode WHERE id = ?1",
+        params![episode_id],
+    )?;
+
+    Ok(())
+}
+
 pub fn get_all_series() -> Result<Vec<Series>> {
     let conn = get_connection().lock().unwrap();
 

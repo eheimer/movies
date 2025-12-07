@@ -5,7 +5,7 @@
 When the user references an issue number (e.g., "#42", "issue #42", "issue 42"), you should:
 
 1. **Fetch the issue details** using the GitHub MCP server
-   - Repository: `eheimer/openworld_api`
+   - Repository: `eheimer/movies`
    - Use `mcp_github_get_issue` with the issue number
 
 2. **Check for tasks.md file** in the issue body or comments

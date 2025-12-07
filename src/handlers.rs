@@ -1441,5 +1441,24 @@ fn execute_menu_action(
             *mode = Mode::Browse;
             *redraw = true;
         }
+        MenuAction::Delete => {
+            // Delete the episode from the database
+            if let Entry::Episode { episode_id, .. } = filtered_entries[remembered_item] {
+                database::delete_episode(episode_id)
+                    .expect("Failed to delete episode");
+
+                // Reload entries based on current view context
+                *entries = match view_context {
+                    ViewContext::TopLevel => database::get_entries().expect("Failed to get entries"),
+                    ViewContext::Series { series_id, .. } => database::get_entries_for_series(*series_id)
+                        .expect("Failed to get entries for series"),
+                    ViewContext::Season { season_id, .. } => database::get_entries_for_season(*season_id)
+                        .expect("Failed to get entries for season"),
+                };
+                *filtered_entries = entries.clone();
+                *mode = Mode::Browse;
+                *redraw = true;
+            }
+        }
     }
 }

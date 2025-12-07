@@ -25,6 +25,7 @@ pub enum MenuAction {
     Rescan,
     ClearSeriesData,
     UnwatchAll,
+    Delete,
 }
 
 pub struct MenuContext {
@@ -78,6 +79,12 @@ fn define_all_menu_items() -> Vec<MenuItem> {
             action: MenuAction::Rescan,
             location: MenuLocation::ContextMenu,
         },
+        MenuItem {
+            label: "Delete".to_string(),
+            hotkey: None,
+            action: MenuAction::Delete,
+            location: MenuLocation::ContextMenu,
+        },
     ]
 }
 
@@ -124,6 +131,10 @@ fn is_item_available(item: &MenuItem, context: &MenuContext) -> bool {
         MenuAction::UnwatchAll => {
             // Available in all contexts
             true
+        }
+        MenuAction::Delete => {
+            // Available only when selected entry is an Episode
+            matches!(context.selected_entry, Some(Entry::Episode { .. }))
         }
     }
 }

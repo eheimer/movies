@@ -620,31 +620,46 @@ fn draw_detail_window(
             }
         };
 
-        // Apply dirty colors to field name if in edit mode and field is dirty
-        let field_name_display = if edit_mode && dirty_fields.contains(&field) {
-            format!("{}:", field.display_name())
+        // Build the line without colors first
+        let field_name = format!("{}:", field.display_name());
+        let line = format!("{} {}", field_name, value);
+        
+        // Truncate the plain text line
+        let max_width = if edit_mode && edit_field.is_editable() {
+            sidebar_width - 4
+        } else {
+            sidebar_width - 2
+        };
+        
+        let truncated_line = truncate_string(&line, max_width);
+        
+        // Apply dirty colors to ONLY the field name if field is dirty
+        let display_line = if edit_mode && dirty_fields.contains(&field) {
+            // Color only the field name part
+            let colored_field_name = format!("{}:", field.display_name())
                 .with(string_to_fg_color_or_default(&config.dirty_fg))
                 .on(string_to_bg_color_or_default(&config.dirty_bg))
-                .to_string()
+                .to_string();
+            
+            // Extract the value part from the truncated line (everything after "field_name: ")
+            // Use char_indices to safely find the split point
+            let field_name_len = field_name.chars().count();
+            let remainder: String = truncated_line.chars().skip(field_name_len).collect();
+            
+            if !remainder.is_empty() {
+                format!("{}{}", colored_field_name, remainder)
+            } else {
+                colored_field_name
+            }
         } else {
-            format!("{}:", field.display_name())
+            truncated_line
         };
-
-        let line = format!("{} {}", field_name_display, value);
         
-        if edit_mode && edit_field.is_editable() {
-            print_at(
-                start_col + 1,
-                start_row + 1 + i,
-                &truncate_string(&line, sidebar_width - 4).to_string(),
-            )?;
-        } else {
-            print_at(
-                start_col + 1,
-                start_row + 1 + i,
-                &truncate_string(&line, sidebar_width - 2).to_string(),
-            )?;
-        }
+        print_at(
+            start_col + 1,
+            start_row + 1 + i,
+            &display_line,
+        )?;
     }
     // Put the cursor at the end of the current edit_field line
     if edit_mode {
@@ -689,7 +704,7 @@ fn draw_series_window(
         }
     }
 
-    let series_window_start_col = start_col + ((sidebar_width - series_window_width) / 2);
+    let series_window_start_col = start_col + (sidebar_width.saturating_sub(series_window_width) / 2);
 
     draw_window(
         series_window_start_col,
