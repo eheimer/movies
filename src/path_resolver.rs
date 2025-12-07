@@ -1,4 +1,3 @@
-use std::env;
 use std::fmt;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -6,8 +5,6 @@ use std::path::{Path, PathBuf};
 /// Errors that can occur during path resolution operations
 #[derive(Debug)]
 pub enum PathResolverError {
-    RootDirectoryNotFound(PathBuf),
-    RootDirectoryNotAccessible(PathBuf),
     PathNotUnderRoot(PathBuf),
     InvalidRelativePath(String),
     DatabaseNotFound(PathBuf),
@@ -18,12 +15,6 @@ pub enum PathResolverError {
 impl fmt::Display for PathResolverError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            PathResolverError::RootDirectoryNotFound(path) => {
-                write!(f, "Root directory not found: {}", path.display())
-            }
-            PathResolverError::RootDirectoryNotAccessible(path) => {
-                write!(f, "Root directory not accessible: {}", path.display())
-            }
             PathResolverError::PathNotUnderRoot(path) => {
                 write!(f, "Path is not under configured root directory: {}", path.display())
             }
@@ -53,7 +44,7 @@ impl From<io::Error> for PathResolverError {
 
 /// PathResolver handles all path resolution logic for the application
 /// 
-/// It maintains the root directory for video files (from config.json)
+/// It maintains the root directory for video files (from config.yaml)
 pub struct PathResolver {
     root_dir: PathBuf,
 }
@@ -106,61 +97,7 @@ impl PathResolver {
     }
 
 
-    
-    /// Create a new PathResolver with optional configurable root directory
-    /// 
-    /// # Deprecated
-    /// This constructor is deprecated and will be removed. Use `from_database_path` instead.
-    /// 
-    /// # Arguments
-    /// * `config_root_dir` - Optional root directory path from config.json
-    ///                      If None, defaults to current directory
-    /// 
-    /// # Returns
-    /// * `Result<Self, PathResolverError>` - New PathResolver or error
-    #[deprecated(note = "Use from_database_path instead")]
-    pub fn new(config_root_dir: Option<&str>) -> Result<Self, PathResolverError> {
-        // Determine root directory
-        let root_dir = match config_root_dir {
-            Some(root_path) => {
-                let root_path_buf = PathBuf::from(root_path);
-                
-                // Handle both absolute and relative paths
-                let resolved_root = if root_path_buf.is_absolute() {
-                    root_path_buf
-                } else {
-                    // Resolve relative to current directory
-                    env::current_dir()
-                        .map_err(PathResolverError::IoError)?
-                        .join(&root_path_buf)
-                };
-                
-                // Validate root directory exists and is accessible
-                if !resolved_root.exists() {
-                    return Err(PathResolverError::RootDirectoryNotFound(resolved_root));
-                }
-                
-                if !resolved_root.is_dir() {
-                    return Err(PathResolverError::RootDirectoryNotAccessible(resolved_root));
-                }
-                
-                // Canonicalize to resolve any symlinks and get absolute path
-                resolved_root.canonicalize()
-                    .map_err(|_| PathResolverError::RootDirectoryNotAccessible(resolved_root))?
-            }
-            None => {
-                // Default to current directory
-                env::current_dir()
-                    .map_err(PathResolverError::IoError)?
-                    .canonicalize()
-                    .map_err(PathResolverError::IoError)?
-            }
-        };
-        
-        Ok(PathResolver {
-            root_dir,
-        })
-    }
+
 
     /// Get the root directory used for path resolution
     /// 

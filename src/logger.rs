@@ -90,11 +90,7 @@ pub fn log_debug(message: &str) {
     write_log(LogLevel::Debug, message);
 }
 
-/// Get access to the log file for testing purposes
-/// This is only used in integration tests to flush and close the file
-pub fn get_log_file_for_test() -> &'static Mutex<Option<File>> {
-    &LOG_FILE
-}
+
 
 /// Prompt the user to save an existing log file
 /// Returns Ok(true) if user wants to save, Ok(false) if not, or an error

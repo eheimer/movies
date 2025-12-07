@@ -163,7 +163,6 @@ fn first_run_flow(
                             .map(|e| e.into_path())
                             .collect();
                         
-                        let total_files = video_files.len();
                         let mut imported_count = 0;
                         let mut skipped_count = 0;
                         

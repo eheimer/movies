@@ -105,7 +105,6 @@ pub fn handle_entry_mode(
                         .collect();
                     
                     let mut imported_count = 0;
-                    let mut skipped_count = 0;
                     
                     for entry in &new_entries {
                         let location = entry.to_string_lossy().to_string();
@@ -122,7 +121,6 @@ pub fn handle_entry_mode(
                                 Ok(false) => {},  // Already exists, don't count
                                 Err(e) => {
                                     eprintln!("Warning: Skipping file outside configured root directory: {} - {}", location, e);
-                                    skipped_count += 1;
                                 }
                             }
                         }
@@ -787,22 +785,21 @@ pub fn handle_browse_mode(
                     *filtered_entries = entries.clone();
                     
                     // Get series info from current view context (we must be in a series view)
-                    let (series_id, series_name) = match view_context {
-                        ViewContext::Series { series_id, series_name } => (*series_id, series_name.clone()),
+                    let series_name = match view_context {
+                        ViewContext::Series { series_name, .. } => series_name.clone(),
                         _ => {
                             // Fallback: get series info from database
                             // This can happen if navigating directly to a season (e.g., after app restart)
-                            let (season, series_id_from_db) = database::get_season_by_id(*season_id)
+                            let (_season, series_id_from_db) = database::get_season_by_id(*season_id)
                                 .expect("Failed to get season");
                             let series = database::get_series_by_id(series_id_from_db)
                                 .expect("Failed to get series");
-                            (series.id, series.name)
+                            series.name
                         }
                     };
                     
                     *view_context = ViewContext::Season { 
                         season_id: *season_id,
-                        series_id,
                         series_name,
                         season_number: *number
                     };
@@ -1484,7 +1481,6 @@ fn execute_menu_action(
                     .collect();
                 
                 let mut imported_count = 0;
-                let mut skipped_count = 0;
                 
                 for entry in &new_entries {
                     let location = entry.to_string_lossy().to_string();
@@ -1499,7 +1495,6 @@ fn execute_menu_action(
                         Ok(false) => {},  // Already exists, don't count
                         Err(e) => {
                             eprintln!("Warning: Skipping file: {} - {}", location, e);
-                            skipped_count += 1;
                         }
                     }
                 }

@@ -1280,7 +1280,7 @@ mod tests {
         let config = Config::default();
         
         // Create a series entry
-        let entry = Entry::Series {
+        let _entry = Entry::Series {
             series_id: 1,
             name: "Test Series".to_string(),
         };
@@ -1309,7 +1309,7 @@ mod tests {
         let config = Config::default();
         
         // Create a season entry
-        let entry = Entry::Season {
+        let _entry = Entry::Season {
             season_id: 1,
             number: 1,
         };
@@ -1338,7 +1338,7 @@ mod tests {
         let config = Config::default();
         
         // Create an episode entry
-        let entry = Entry::Episode {
+        let _entry = Entry::Episode {
             episode_id: 1,
             name: "Test Episode".to_string(),
             location: "test.mp4".to_string(),

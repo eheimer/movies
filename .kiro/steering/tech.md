@@ -23,38 +23,8 @@ inclusion: always
 
 ## Build System
 
-Standard Cargo-based Rust project.
-
-### Common Commands
-
-```bash
-# Build the project
-cargo build
-
-# Build optimized release version
-cargo build --release
-
-# Run the application
-cargo run
-
-# Run with release optimizations
-cargo run --release
-
-# Run tests
-cargo test
-
-# Check code without building
-cargo check
-
-# Format code
-cargo fmt
-
-# Run linter
-cargo clippy
-```
+Standard Cargo: `cargo build`, `cargo run`, `cargo test`, `cargo clippy`
 
 ## Database
 
-- SQLite database stored as `videos.db` in the executable directory
-- Schema includes tables: `series`, `season`, `episode`
-- Relative path storage for video file locations (relative to configured root_dir)
+SQLite `videos.db` in executable directory with tables: `series`, `season`, `episode`. Stores relative paths.

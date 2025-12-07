@@ -15,53 +15,29 @@ src/
 ├── config.rs            # Configuration file management
 ├── dto.rs               # Data transfer objects (EpisodeDetail, Series, Season)
 ├── episode_field.rs     # Episode field enumeration for editing
+├── lib.rs               # Library crate root
+├── logger.rs            # Logging functionality
+├── menu.rs              # Menu system (MenuAction, MenuItem, context menu)
 ├── path_resolver.rs     # Path resolution logic (relative/absolute conversion)
+├── paths.rs             # Application path management
 ├── terminal.rs          # Terminal initialization and restoration
-└── util.rs              # Utility functions (Entry enum, Mode enum, helpers)
+├── util.rs              # Utility functions (Entry enum, Mode enum, helpers)
+└── video_metadata.rs    # Video metadata extraction
 ```
 
-## Architecture Patterns
+## Key Patterns
 
-### Module Organization
+1. **Mode-based State Machine**: Browse, Edit, Entry, SeriesSelect, SeriesCreate modes with mode-specific handlers
+2. **Path Resolution**: Database stores relative paths; PathResolver converts to/from absolute; root_dir in `config.yaml`
+3. **Global DB Connection**: `lazy_static` `DB_CONN` mutex for thread-safe SQLite access
+4. **Entry Enum**: Unified representation of Series/Season/Episode for consistent UI handling
 
-- Each module has a single, focused responsibility
-- Database operations isolated in `database.rs` with lazy_static connection
-- UI rendering separated from business logic
-- Event handling organized by application mode
+## Configuration
 
-### Key Design Patterns
+`config.yaml` in project root with: root_dir, path, colors, video_extensions, video_player, log_file, log_level
 
-1. **Mode-based State Machine**: Application operates in distinct modes (Browse, Edit, Entry, SeriesSelect, SeriesCreate) with mode-specific event handlers
+## Code Conventions
 
-2. **Path Resolution Strategy**:
-
-   - Database stores relative paths (portable across systems)
-   - PathResolver converts between relative and absolute paths
-   - Root directory configurable via `config.json`
-   - Database always stored in executable directory
-
-3. **Global Database Connection**: Uses `lazy_static` for thread-safe global SQLite connection via `DB_CONN` mutex
-
-4. **Entry Enum Pattern**: Unified `Entry` enum represents different browsable items (Series, Season, Episode) for consistent UI handling
-
-### Configuration
-
-- `config.json` in project root
-- Contains: root_dir, path, colors, video_extensions, video_player
-- Auto-created with defaults if missing
-
-### Data Flow
-
-1. User input → Event handlers (`handlers.rs`)
-2. Handlers update state and call database operations (`database.rs`)
-3. Database operations modify SQLite and return updated data
-4. Main loop triggers redraw with new state
-5. Display module renders UI (`display.rs`)
-
-## Code Style Conventions
-
-- Use `Result` types for error handling
-- Prefer `expect()` with descriptive messages over `unwrap()`
-- Database operations return `Result<T>` or `Result<T, Box<dyn std::error::Error>>`
-- Path operations use `PathBuf` and `Path` types
-- Mutable state passed as `&mut` references in handlers
+- Use `Result` types; prefer `expect()` over `unwrap()`
+- Database operations return `Result<T, Box<dyn std::error::Error>>`
+- Mutable state passed as `&mut` references

@@ -1,216 +1,205 @@
-# Video File Browser
+# Video Library Manager
 
-## Overview
+Your personal video collection, organized and accessible from your terminal.
 
-A terminal-based video library manager written in Rust. Browse, organize, and play your video collection with support for series/season/episode organization, metadata tracking, and a keyboard-driven interface.
+## What is this?
 
-## Features
+This is a simple program that helps you organize and browse your video collection. Think of it as a personal Netflix interface for your own movies and TV shows - but running right in your terminal. You can:
 
-### Core Functionality
-- **Browse and Play**: Navigate your video library and launch videos in your configured player
-- **Series Organization**: Organize videos into series, seasons, and episodes
-- **Metadata Tracking**: Track watched status, year, length, and episode numbers
-- **Real-time Search**: Filter entries by typing - search clears automatically when navigating
-- **SQLite Database**: Persistent storage with relative path support for portability
-- **Multi-level Navigation**: Browse top-level entries, drill into series and seasons
+- Browse your entire video collection in one place
+- Organize TV shows into series and seasons
+- Track which episodes you've watched
+- Search for videos by typing
+- Launch videos in your favorite player (like VLC)
 
-### Library Management
-- **Import Videos**: Scan directories to add new videos to your library
-- **Assign to Series**: Organize standalone episodes into series and seasons
-- **Repeat Actions**: Quickly apply the same series/season assignment to multiple episodes
-- **Clear Series Data**: Remove series/season assignments from episodes
-- **Bulk Operations**: Mark all episodes as unwatched (context-aware: all, series, or season)
-- **Rescan Library**: Refresh your library to detect new or removed files
+Perfect for anyone with a large collection of movies or TV shows who wants a better way to keep track of what they have and what they've watched.
 
-### User Interface
-- **Context Menu (F1)**: Access all available actions for the selected item
-- **Function Key Shortcuts**: Quick access to common operations (F2-F7)
-- **Color-coded Display**: Visual distinction between series, seasons, and episodes
-- **Watched Indicators**: See at a glance which episodes you've watched
-- **Smart Availability**: Menu items show/hide based on context and selection
+## Why use this?
 
-## Dependencies
+If you have folders full of video files scattered across your computer, this tool brings them all together. Instead of clicking through folders trying to remember where you put that one episode, you can:
 
-- **crossterm** (0.23): Terminal manipulation and event handling
-- **colored** (2.0): Terminal color output
-- **rusqlite** (0.26.0): SQLite database interface
-- **serde** (1.0) + **serde_yaml**: Configuration serialization
-- **walkdir** (2.3): Recursive directory traversal
-- **lazy_static** (1.4): Global database connection management
+- See your entire collection at a glance
+- Organize TV shows properly (no more "Season 1 Episode 3" in the filename)
+- Remember what you've already watched
+- Find videos quickly by searching
+- Keep everything organized even if you move files around
 
-## Installation
+## Getting Started
 
-Ensure you have Rust installed. Then, clone the repository and build the project:
+### What you'll need
 
-```sh
-git clone <repository-url>
-cd <project-folder>
-cargo build --release
-```
+- A computer running Linux, macOS, or Windows
+- Rust programming language installed ([get it here](https://www.rust-lang.org/tools/install))
+- A video player like VLC ([download VLC](https://www.videolan.org/))
 
-## Configuration
+### Installation
 
-The application uses a `config.yaml` file in the project root. If it doesn't exist, it will be created with default values on first run.
+1. Download this project (or clone it if you know git):
+   ```sh
+   git clone <repository-url>
+   cd <project-folder>
+   ```
 
-Example `config.yaml`:
+2. Build the program:
+   ```sh
+   cargo build --release
+   ```
 
-```yaml
-# === Database Configuration ===
-db_location: null
+3. Run it:
+   ```sh
+   cargo run --release
+   ```
 
-# === Color Configuration ===
-current_fg: Black
-current_bg: White
+The first time you run it, the program will create a configuration file and database for you.
 
-# === Video Configuration ===
-video_extensions:
-  - mp4
-  - mkv
-  - avi
-  - mov
-  - flv
-  - wmv
-  - webm
-video_player: /usr/bin/vlc
-```
+### First-time setup
 
-### Configuration Options
+When you first run the program, you'll need to tell it where your videos are:
 
-The `config.yaml` file includes inline documentation for all settings. Key options include:
+1. The program will create a `config.yaml` file
+2. Open this file in any text editor
+3. Find the line that says `root_dir:` and set it to your video folder path
+   - Example: `root_dir: /home/yourname/Videos`
+4. Make sure `video_player:` points to your video player
+   - Example: `video_player: /usr/bin/vlc`
 
-- **db_location**: Path to the SQLite database file (null uses default location)
-- **current_fg/current_bg**: Colors for selected items
-- **video_extensions**: Supported video file formats
-- **video_player**: Path to your video player executable (e.g., VLC, mpv)
-- **log_level**: Logging verbosity (error, warn, info, debug)
+Save the file and run the program again.
 
-See the generated `config.yaml` file for complete documentation of all available settings.
+## How to use it
 
-### Database
+### Adding your videos
 
-The SQLite database (`videos.db`) is stored in the same directory as the executable. Video file paths are stored relative to `root_dir` for portability across systems.
+Press **F1** to open the menu, then press **S** to rescan your video folder. The program will find all your video files and add them to the library. This might take a minute if you have a lot of videos.
 
-## Usage
+### Browsing your collection
 
-Run the program with:
+Use the **arrow keys** (up and down) to move through your videos. You'll see:
+- Standalone episodes (videos not organized into series)
+- TV series (which you can enter to see seasons)
+- Seasons (which you can enter to see episodes)
 
-```sh
-cargo run --release
-```
+Press **Enter** to:
+- Play a video
+- Open a series to see its seasons
+- Open a season to see its episodes
 
-### Keyboard Controls
+Press **Esc** to go back to the previous screen.
 
-#### Browse Mode (Main Navigation)
-- **Arrow Keys (Up/Down)**: Navigate through entries
-- **Enter**: 
-  - Play selected episode
-  - Enter selected series (view seasons)
-  - Enter selected season (view episodes)
-- **Backspace**: Go back to previous view level
-- **Esc**: Exit the application
-- **Type characters**: Filter entries in real-time (clears automatically when navigating)
-- **F1**: Open context menu
-- **F2**: Edit episode details (when episode selected)
-- **F3**: Toggle watched status (when episode selected)
-- **F4**: Assign episode to series (when unassigned episode selected)
-- **F5**: Repeat last series/season assignment (when available)
-- **F6**: Clear series data from episode (when episode has series data)
-- **F7**: Mark all episodes as unwatched (context-aware)
-- **Ctrl+L**: Rescan library for new/removed files
+### Searching for videos
 
-#### Edit Mode (Episode Details)
-- **Arrow Keys (Up/Down)**: Navigate between fields
-- **Enter**: Edit selected field
-- **Esc**: Return to browse mode without saving
-- **Ctrl+S**: Save changes and return to browse mode
+Press **/** to enter search mode, then start typing. As you type, the list will filter to show only matching videos. Press **Enter** to accept the filter, or **Esc** to cancel and clear the search.
 
-#### Entry Mode (Import Videos)
-- **Type path**: Enter directory path to scan
-- **Enter**: Import videos from entered path
-- **Esc**: Cancel and return to browse mode
-- **Backspace**: Delete last character
+### Organizing TV shows
 
-#### Series Selection Mode
-- **Arrow Keys (Up/Down)**: Navigate series list
-- **Enter**: Assign episode to selected series
-- **Esc**: Cancel and return to browse mode
-- **Type characters**: Filter series by name
-- **Ctrl+N**: Create new series
+Have a bunch of TV show episodes? Here's how to organize them:
 
-#### Series Creation Mode
-- **Type name**: Enter new series name
-- **Enter**: Create series and assign episode
-- **Esc**: Cancel and return to series selection
-
-#### Menu Mode (F1 Context Menu)
-- **Arrow Keys (Up/Down)**: Navigate menu items
-- **Enter**: Execute selected action
-- **Function Keys (F2-F7)**: Execute action directly
-- **Esc**: Close menu and return to browse mode
-
-### Workflow Examples
-
-#### Organizing a New TV Series
-1. Press **Ctrl+L** to scan for new files
-2. Navigate to an episode and press **F4** (Assign to Series)
-3. Press **Ctrl+N** to create a new series, enter the name
-4. Select the season for this episode
-5. For subsequent episodes, press **F5** (Repeat Action) to quickly assign them to the same series/season
-
-#### Marking Episodes as Watched
 1. Navigate to an episode
-2. Press **F3** to toggle watched status
-3. Or press **F1** and select "toggle watched"
+2. Press **F4** (or **F1** for the menu, then select "assign to series")
+3. Choose an existing series or press **+** to create a new one
+4. Type the series name and press **Enter**
 
-#### Bulk Unwatching
-1. Navigate to a series or season (or stay at top level)
-2. Press **F7** to mark all episodes as unwatched in that context
-3. Confirm the action
+For the next episode from the same show, just press **F5** to quickly assign it to the same series and season!
 
-#### Removing Series Organization
-1. Navigate to an episode that's part of a series
-2. Press **F6** to clear all series/season data
-3. The episode becomes standalone again
+### Tracking what you've watched
 
-## Architecture
+Navigate to any episode and press **F3** to mark it as watched (or unwatched). Watched episodes show a special indicator so you can see at a glance what you've already seen.
 
-### Data Model
-- **Episodes**: Individual video files (can be standalone or part of a series)
-- **Series**: Collections of related episodes (e.g., TV shows)
-- **Seasons**: Organizational units within a series
-- **Metadata**: Each episode tracks name, location, watched status, year, length, and episode number
+Want to rewatch a whole series? Press **F7** to mark all episodes as unwatched. This works on:
+- The entire library (if you're at the top level)
+- Just one series (if you're viewing a series)
+- Just one season (if you're viewing a season)
 
-### Path Resolution
-- Video file paths are stored relative to the configured `root_dir`
-- This allows the database to be portable across different systems
-- The database file itself is always stored in the executable directory
-- Files outside the `root_dir` are skipped during import with a warning
+### Editing episode details
 
-### View Contexts
-The application maintains context awareness for operations:
-- **Top Level**: All series and standalone episodes
-- **Series View**: All seasons within a selected series
-- **Season View**: All episodes within a selected season
+Navigate to an episode and press **F2** to edit its details:
+- Name
+- Year
+- Length (in minutes)
+- Episode number
+- Season number
 
-Context-aware operations (like "Unwatch All") automatically scope to the current view.
+Use the arrow keys to move between fields, type to edit, and press **F2** again to save your changes (or **Esc** to cancel).
 
-## Building from Source
+## Quick reference
 
-```sh
-# Clone the repository
-git clone <repository-url>
-cd <project-folder>
+### Main controls
 
-# Build release version
-cargo build --release
+| Key | What it does |
+|-----|--------------|
+| **Arrow keys** | Move up and down through your videos |
+| **Enter** | Play video or open series/season |
+| **Esc** | Go back to previous screen / Exit the program |
+| **/** | Enter search/filter mode |
+| **F1** | Open menu to see all available actions |
 
-# Run tests
-cargo test
+### Quick actions (when viewing an episode)
 
-# Run with optimizations
-cargo run --release
-```
+| Key | What it does |
+|-----|--------------|
+| **F2** | Edit episode details |
+| **F3** | Mark as watched/unwatched |
+| **F4** | Organize into a series |
+| **F5** | Repeat last organization (quick assign) |
+| **F6** | Remove from series (make standalone) |
+| **F7** | Mark all as unwatched |
+
+**Tip:** Press **F1** anytime to see a menu of what you can do with the currently selected item.
+
+## Common questions
+
+### Where is my data stored?
+
+The program creates a `videos.db` file in the same folder as the program. This database remembers all your organization and watched status. Your actual video files stay exactly where they are - the program just keeps track of them.
+
+### Can I move my video files?
+
+Yes! The program stores file locations relative to your `root_dir`, so as long as you update the `root_dir` in `config.yaml` when you move files, everything will still work.
+
+### What video formats are supported?
+
+By default: MP4, MKV, AVI, MOV, FLV, WMV, and WebM. You can add more formats in the `config.yaml` file.
+
+### Can I customize the colors?
+
+Yes! Edit the `config.yaml` file and change the `current_fg` and `current_bg` settings to your preferred colors.
+
+### I moved/deleted some videos. How do I update the library?
+
+Press **F1** to open the menu, then press **S** to rescan. The program will update its database to match what's actually in your video folder.
+
+## Troubleshooting
+
+**Problem:** The program won't start
+- Make sure you've built it with `cargo build --release`
+- Check that you have Rust installed correctly
+
+**Problem:** Videos won't play
+- Check that `video_player` in `config.yaml` points to the correct path
+- Make sure your video player (like VLC) is installed
+
+**Problem:** The program can't find my videos
+- Check that `root_dir` in `config.yaml` points to the right folder
+- Press **F1** then **S** to rescan for videos
+- Make sure your video files have supported extensions (mp4, mkv, etc.)
+
+**Problem:** The interface looks weird
+- Make sure your terminal window is large enough (at least 80 characters wide)
+- Try a different terminal emulator if colors don't display correctly
+
+## For developers
+
+If you're interested in the technical details, architecture, or want to contribute to the project, check out [CONTRIBUTING.md](CONTRIBUTING.md) for developer documentation.
+
+## Contributing
+
+This project was built with AI assistance, and we welcome feedback and contributions! If you find bugs, have ideas for improvements, or want to add features, please:
+
+- Open an issue on GitHub
+- Submit a pull request
+- Share your thoughts on how to make this better
+
+Don't hesitate to critique the code or suggest better approaches - that's how we all learn and improve!
 
 ## License
 
-This project is open-source under the MIT License.
+This project is open-source under the MIT License. Feel free to use it, modify it, and share it!
