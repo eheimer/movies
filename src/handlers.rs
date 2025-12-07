@@ -719,8 +719,8 @@ pub fn handle_browse_mode(
                     let (series_id, series_name) = match view_context {
                         ViewContext::Series { series_id, series_name } => (*series_id, series_name.clone()),
                         _ => {
-                            // Fallback: get series info from database (should not happen)
-                            eprintln!("Warning: Season selected but not in Series view context");
+                            // Fallback: get series info from database
+                            // This can happen if navigating directly to a season (e.g., after app restart)
                             let (season, series_id_from_db) = database::get_season_by_id(*season_id)
                                 .expect("Failed to get season");
                             let series = database::get_series_by_id(series_id_from_db)
