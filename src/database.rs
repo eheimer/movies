@@ -588,6 +588,68 @@ pub fn create_season_and_assign(
     }
 }
 
+/// Get episode counts for a series
+/// 
+/// Counts all episodes across all seasons and standalone episodes within the series.
+/// Treats NULL watched status as unwatched (false).
+/// 
+/// # Arguments
+/// * `series_id` - The series ID
+/// 
+/// # Returns
+/// * `Result<(usize, usize), Box<dyn std::error::Error>>` - (total_episodes, unwatched_episodes) or error
+pub fn get_series_episode_counts(series_id: usize) -> Result<(usize, usize), Box<dyn std::error::Error>> {
+    let conn = get_connection().lock().unwrap();
+    
+    let mut stmt = conn.prepare(
+        "SELECT 
+            COUNT(*) as total,
+            SUM(CASE WHEN watched = 0 OR watched IS NULL THEN 1 ELSE 0 END) as unwatched
+         FROM episode
+         WHERE series_id = ?1"
+    )?;
+    
+    let (total, unwatched) = stmt.query_row(params![series_id], |row| {
+        Ok((
+            row.get::<_, i64>(0)? as usize,
+            row.get::<_, i64>(1)? as usize,
+        ))
+    })?;
+    
+    Ok((total, unwatched))
+}
+
+/// Get episode counts for a season
+/// 
+/// Counts only episodes that belong to the specific season.
+/// Treats NULL watched status as unwatched (false).
+/// 
+/// # Arguments
+/// * `season_id` - The season ID
+/// 
+/// # Returns
+/// * `Result<(usize, usize), Box<dyn std::error::Error>>` - (total_episodes, unwatched_episodes) or error
+pub fn get_season_episode_counts(season_id: usize) -> Result<(usize, usize), Box<dyn std::error::Error>> {
+    let conn = get_connection().lock().unwrap();
+    
+    let mut stmt = conn.prepare(
+        "SELECT 
+            COUNT(*) as total,
+            SUM(CASE WHEN watched = 0 OR watched IS NULL THEN 1 ELSE 0 END) as unwatched
+         FROM episode
+         WHERE season_id = ?1"
+    )?;
+    
+    let (total, unwatched) = stmt.query_row(params![season_id], |row| {
+        Ok((
+            row.get::<_, i64>(0)? as usize,
+            row.get::<_, i64>(1)? as usize,
+        ))
+    })?;
+    
+    Ok((total, unwatched))
+}
+
 /// Calculate the next available episode number for a series and optional season
 /// 
 /// This function finds the lowest positive integer starting from 1 that is not

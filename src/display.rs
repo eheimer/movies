@@ -25,6 +25,48 @@ fn get_sidebar_width() -> io::Result<usize> {
     Ok(sidebar_width.max(MIN_COL2_WIDTH))
 }
 
+/// Format a series entry with episode counts
+/// 
+/// # Arguments
+/// * `name` - The series name
+/// * `series_id` - The series ID for querying counts
+/// 
+/// # Returns
+/// * `String` - Formatted string as "[<series title>] <x> episodes (<y> unwatched)"
+///              or fallback format on error
+pub fn format_series_display(name: &str, series_id: usize) -> String {
+    match crate::database::get_series_episode_counts(series_id) {
+        Ok((total, unwatched)) => {
+            format!("[{}] {} episodes ({} unwatched)", name, total, unwatched)
+        }
+        Err(_) => {
+            // Fallback format on database error
+            format!("[{}] ? episodes", name)
+        }
+    }
+}
+
+/// Format a season entry with episode counts
+/// 
+/// # Arguments
+/// * `number` - The season number
+/// * `season_id` - The season ID for querying counts
+/// 
+/// # Returns
+/// * `String` - Formatted string as "<season title> - <x> episodes (<y> unwatched)"
+///              or fallback format on error
+pub fn format_season_display(number: usize, season_id: usize) -> String {
+    match crate::database::get_season_episode_counts(season_id) {
+        Ok((total, unwatched)) => {
+            format!("Season {} - {} episodes ({} unwatched)", number, total, unwatched)
+        }
+        Err(_) => {
+            // Fallback format on database error
+            format!("Season {} - ? episodes", number)
+        }
+    }
+}
+
 pub fn string_to_color(color: &str) -> Option<Color> {
     match color.to_lowercase().as_str() {
         "black" => Some(Color::Black),
@@ -422,14 +464,16 @@ pub fn draw_screen(
         {
             // Determine the base display text and colors based on entry type
             let (display_text, fg_color, bg_color) = match entry {
-                Entry::Series { name, .. } => {
-                    let text = format!("[{}]", truncate_string(name, COL1_WIDTH));
+                Entry::Series { name, series_id } => {
+                    let formatted = format_series_display(name, *series_id);
+                    let text = truncate_string(&formatted, COL1_WIDTH);
                     let fg = string_to_fg_color_or_default(&config.series_fg);
                     let bg = string_to_bg_color_or_default(&config.series_bg);
                     (text, fg, bg)
                 }
-                Entry::Season { number, .. } => {
-                    let text = format!("Season {}", number);
+                Entry::Season { number, season_id } => {
+                    let formatted = format_season_display(*number, *season_id);
+                    let text = truncate_string(&formatted, COL1_WIDTH);
                     let fg = string_to_fg_color_or_default(&config.season_fg);
                     let bg = string_to_bg_color_or_default(&config.season_bg);
                     (text, fg, bg)
