@@ -270,12 +270,12 @@ pub fn handle_edit_mode(
                         database::get_entries().expect("Failed to get entries")
                     })
                 }
-                ViewContext::Series { series_id } => {
+                ViewContext::Series { series_id, .. } => {
                     database::get_entries_for_series(*series_id).unwrap_or_else(|_| {
                         database::get_entries().expect("Failed to get entries")
                     })
                 }
-                ViewContext::Season { season_id } => {
+                ViewContext::Season { season_id, .. } => {
                     database::get_entries_for_season(*season_id).unwrap_or_else(|_| {
                         database::get_entries().expect("Failed to get entries")
                     })
@@ -668,14 +668,17 @@ pub fn handle_browse_mode(
             let selected = *current_item;
             let selected_entry = &filtered_entries[selected].clone();
             match selected_entry {
-                Entry::Series { series_id, .. } => {
+                Entry::Series { series_id, name } => {
                     search.clear();
                     // If a series is selected, reload the entries with the series filter
                     *current_item = 0;
                     *entries = database::get_entries_for_series(*series_id)
                         .expect("Failed to get entries for series");
                     *filtered_entries = entries.clone();
-                    *view_context = ViewContext::Series { series_id: *series_id };
+                    *view_context = ViewContext::Series { 
+                        series_id: *series_id, 
+                        series_name: name.clone() 
+                    };
                     *redraw = true;
                 }
                 Entry::Episode { location, episode_id, .. } => {
@@ -704,14 +707,34 @@ pub fn handle_browse_mode(
                         }
                     }
                 }
-                Entry::Season { season_id, .. } => {
+                Entry::Season { season_id, number } => {
                     search.clear();
                     // If a season is selected, reload the entries with the season filter
                     *current_item = 0;
                     *entries = database::get_entries_for_season(*season_id)
                         .expect("Failed to get entries for season");
                     *filtered_entries = entries.clone();
-                    *view_context = ViewContext::Season { season_id: *season_id };
+                    
+                    // Get series info from current view context (we must be in a series view)
+                    let (series_id, series_name) = match view_context {
+                        ViewContext::Series { series_id, series_name } => (*series_id, series_name.clone()),
+                        _ => {
+                            // Fallback: get series info from database (should not happen)
+                            eprintln!("Warning: Season selected but not in Series view context");
+                            let season = database::get_season_by_id(*season_id)
+                                .expect("Failed to get season");
+                            let series = database::get_series_by_id(season.id)
+                                .expect("Failed to get series");
+                            (series.id, series.name)
+                        }
+                    };
+                    
+                    *view_context = ViewContext::Season { 
+                        season_id: *season_id,
+                        series_id,
+                        series_name,
+                        season_number: *number
+                    };
                     *redraw = true;
                 }
             }
@@ -733,10 +756,11 @@ pub fn handle_browse_mode(
             *current_item = 0;
             search.clear();
             let series_id = edit_details.series.as_ref().unwrap().id;
+            let series_name = edit_details.series.as_ref().unwrap().name.clone();
             *entries = database::get_entries_for_series(series_id)
                 .expect("Failed to get entries for series");
             *filtered_entries = entries.clone();
-            *view_context = ViewContext::Series { series_id };
+            *view_context = ViewContext::Series { series_id, series_name };
             *redraw = true;
         }
         KeyCode::Esc
@@ -874,12 +898,12 @@ pub fn handle_series_select_mode(
                         database::get_entries().expect("Failed to get entries")
                     })
                 }
-                ViewContext::Series { series_id } => {
+                ViewContext::Series { series_id, .. } => {
                     database::get_entries_for_series(*series_id).unwrap_or_else(|_| {
                         database::get_entries().expect("Failed to get entries")
                     })
                 }
-                ViewContext::Season { season_id } => {
+                ViewContext::Season { season_id, .. } => {
                     database::get_entries_for_season(*season_id).unwrap_or_else(|_| {
                         database::get_entries().expect("Failed to get entries")
                     })
@@ -946,12 +970,12 @@ pub fn handle_series_create_mode(
                         database::get_entries().expect("Failed to get entries")
                     })
                 }
-                ViewContext::Series { series_id } => {
+                ViewContext::Series { series_id, .. } => {
                     database::get_entries_for_series(*series_id).unwrap_or_else(|_| {
                         database::get_entries().expect("Failed to get entries")
                     })
                 }
-                ViewContext::Season { season_id } => {
+                ViewContext::Season { season_id, .. } => {
                     database::get_entries_for_season(*season_id).unwrap_or_else(|_| {
                         database::get_entries().expect("Failed to get entries")
                     })
@@ -1225,9 +1249,9 @@ fn execute_menu_action(
                 // Reload entries based on current view context
                 *entries = match view_context {
                     ViewContext::TopLevel => database::get_entries().expect("Failed to get entries"),
-                    ViewContext::Series { series_id } => database::get_entries_for_series(*series_id)
+                    ViewContext::Series { series_id, .. } => database::get_entries_for_series(*series_id)
                         .expect("Failed to get entries for series"),
-                    ViewContext::Season { season_id } => database::get_entries_for_season(*season_id)
+                    ViewContext::Season { season_id, .. } => database::get_entries_for_season(*season_id)
                         .expect("Failed to get entries for season"),
                 };
                 *filtered_entries = entries.clone();
@@ -1274,11 +1298,11 @@ fn execute_menu_action(
                         ViewContext::TopLevel => {
                             database::get_entries().expect("Failed to get entries")
                         }
-                        ViewContext::Series { series_id } => {
+                        ViewContext::Series { series_id, .. } => {
                             database::get_entries_for_series(*series_id)
                                 .expect("Failed to get entries for series")
                         }
-                        ViewContext::Season { season_id } => {
+                        ViewContext::Season { season_id, .. } => {
                             database::get_entries_for_season(*season_id)
                                 .expect("Failed to get entries for season")
                         }
@@ -1362,9 +1386,9 @@ fn execute_menu_action(
                 // Reload entries based on current view context
                 *entries = match view_context {
                     ViewContext::TopLevel => database::get_entries().expect("Failed to get entries"),
-                    ViewContext::Series { series_id } => database::get_entries_for_series(*series_id)
+                    ViewContext::Series { series_id, .. } => database::get_entries_for_series(*series_id)
                         .expect("Failed to get entries for series"),
-                    ViewContext::Season { season_id } => database::get_entries_for_season(*season_id)
+                    ViewContext::Season { season_id, .. } => database::get_entries_for_season(*season_id)
                         .expect("Failed to get entries for season"),
                 };
                 *filtered_entries = entries.clone();
@@ -1381,9 +1405,9 @@ fn execute_menu_action(
                 // Reload entries based on current view context
                 *entries = match view_context {
                     ViewContext::TopLevel => database::get_entries().expect("Failed to get entries"),
-                    ViewContext::Series { series_id } => database::get_entries_for_series(*series_id)
+                    ViewContext::Series { series_id, .. } => database::get_entries_for_series(*series_id)
                         .expect("Failed to get entries for series"),
-                    ViewContext::Season { season_id } => database::get_entries_for_season(*season_id)
+                    ViewContext::Season { season_id, .. } => database::get_entries_for_season(*season_id)
                         .expect("Failed to get entries for season"),
                 };
                 *filtered_entries = entries.clone();
@@ -1394,11 +1418,11 @@ fn execute_menu_action(
         MenuAction::UnwatchAll => {
             // Determine scope based on view_context
             match view_context {
-                ViewContext::Season { season_id } => {
+                ViewContext::Season { season_id, .. } => {
                     database::unwatch_all_in_season(*season_id)
                         .expect("Failed to unwatch all episodes in season");
                 }
-                ViewContext::Series { series_id } => {
+                ViewContext::Series { series_id, .. } => {
                     database::unwatch_all_in_series(*series_id)
                         .expect("Failed to unwatch all episodes in series");
                 }
@@ -1411,9 +1435,9 @@ fn execute_menu_action(
             // Reload entries based on current view context
             *entries = match view_context {
                 ViewContext::TopLevel => database::get_entries().expect("Failed to get entries"),
-                ViewContext::Series { series_id } => database::get_entries_for_series(*series_id)
+                ViewContext::Series { series_id, .. } => database::get_entries_for_series(*series_id)
                     .expect("Failed to get entries for series"),
-                ViewContext::Season { season_id } => database::get_entries_for_season(*season_id)
+                ViewContext::Season { season_id, .. } => database::get_entries_for_season(*season_id)
                     .expect("Failed to get entries for season"),
             };
             *filtered_entries = entries.clone();
