@@ -12,6 +12,7 @@ use crate::display;
 use crate::dto::EpisodeDetail;
 use crate::dto::Series;
 use crate::episode_field::EpisodeField;
+use crate::logger;
 use crate::menu::{MenuAction, MenuItem};
 use crate::path_resolver::PathResolver;
 use crate::util::{run_video_player, Entry, Mode, ViewContext};
@@ -57,6 +58,7 @@ pub fn handle_entry_mode(
             
             // Initialize database (creates if doesn't exist, opens if exists)
             if let Err(e) = database::initialize_database(&db_path) {
+                logger::log_error(&format!("Failed to initialize database at {}: {}", db_path.display(), e));
                 eprintln!("\nError: Failed to initialize database: {}", e);
                 
                 // Check for common error types and provide specific guidance
@@ -237,18 +239,41 @@ pub fn handle_edit_mode(
 ) {
     match code {
         KeyCode::F(2) => {
+            logger::log_debug(&format!(
+                "Edit mode: Saving episode details, dirty_fields={:?}",
+                dirty_fields
+            ));
             // we can only be here if the current entry is an Episode
             let episode_id = match &filtered_entries[current_item] {
                 Entry::Episode { episode_id, .. } => *episode_id,
                 _ => 0,
             };
-            let _ = database::update_episode_detail(episode_id, edit_details);
+            
+            // Save episode details
+            if let Err(e) = database::update_episode_detail(episode_id, edit_details) {
+                logger::log_error(&format!("Failed to save episode details for episode {}: {}", episode_id, e));
+                eprintln!("Error: Failed to save episode details: {}", e);
+                return;
+            }
+            
+            // Log metadata changes
+            if !dirty_fields.is_empty() {
+                let changed_fields: Vec<String> = dirty_fields.iter()
+                    .map(|f| format!("{:?}", f))
+                    .collect();
+                logger::log_info(&format!("Saved metadata changes for episode {}: changed fields: {}", 
+                    episode_id, changed_fields.join(", ")));
+            }
             
             // Handle season creation if season_number is set
             if let Some(series) = &edit_details.series {
                 if let Some(season_num) = season_number {
                     let season_id = database::create_season_and_assign(series.id, *season_num, episode_id)
                         .expect("Failed to create season and assign");
+                    
+                    // Log season assignment
+                    logger::log_info(&format!("Assigned episode {} to series '{}' season {}", 
+                        episode_id, series.name, season_num));
                     
                     // Update last_action with the season assignment
                     *last_action = Some(crate::util::LastAction::SeasonAssignment {
@@ -437,6 +462,10 @@ pub fn handle_edit_mode(
         }
         KeyCode::Esc => {
             // Clear dirty fields when canceling
+            logger::log_debug(&format!(
+                "Edit mode: Canceling edit, discarding {} dirty field(s)",
+                dirty_fields.len()
+            ));
             dirty_fields.clear();
             *edit_field = EpisodeField::Title;
             *mode = Mode::Browse;
@@ -469,6 +498,10 @@ pub fn handle_edit_mode(
             )
             .unwrap_or(false)
             {
+                logger::log_debug(&format!(
+                    "Edit mode: Cannot increment season to {} (previous season doesn't exist), reverting to {:?}",
+                    season_number.unwrap(), original_season_number
+                ));
                 *season_number = original_season_number;
             }
             update_dirty_state(*edit_field, edit_details, original_edit_details, dirty_fields, season_number);
@@ -659,6 +692,10 @@ pub fn handle_browse_mode(
         }
         KeyCode::Enter if *filter_mode => {
             // Accept filter and exit filter mode
+            logger::log_debug(&format!(
+                "Browse mode: Accepting filter '{}', {} entries match",
+                search, filtered_entries.len()
+            ));
             *filter_mode = false;
             *edit_cursor_pos = 0;
             *redraw = true;
@@ -688,21 +725,19 @@ pub fn handle_browse_mode(
                             // Resolve relative path to absolute path for extraction
                             match database::get_episode_absolute_location(*episode_id, resolver) {
                                 Ok(absolute_location) => {
-                                    // Attempt to extract and update episode length
-                                    if let Err(e) = video_metadata::extract_and_update_episode_length(
+                                    // Attempt to extract and update episode length (fails silently with log warning)
+                                    if video_metadata::extract_and_update_episode_length(
                                         *episode_id,
                                         Path::new(&absolute_location)
-                                    ) {
-                                        eprintln!("Warning: Failed to extract video duration: {}", e);
-                                    } else {
+                                    ).is_ok() {
                                         // Reload episode details to get updated length
                                         if let Ok(updated_details) = database::get_episode_detail(*episode_id) {
                                             *edit_details = updated_details;
                                         }
                                     }
                                 }
-                                Err(e) => {
-                                    eprintln!("Warning: Failed to resolve video path for extraction: {}", e);
+                                Err(_e) => {
+                                    // Fail silently - error already logged
                                 }
                             }
                         }
@@ -710,25 +745,34 @@ pub fn handle_browse_mode(
                         // Resolve relative path to absolute path for video playback
                         match database::get_episode_absolute_location(*episode_id, resolver) {
                             Ok(absolute_location) => {
+                                // Log video playback
+                                logger::log_info(&format!("Playing video: {} ({})", name, absolute_location));
+                                
                                 // Set status message
                                 *status_message = format!("Playing video: {}", name);
                                 *redraw = true;
                                 
                                 // only play one video at a time
-                                let mut player_process =
-                                    Some(run_video_player(config, Path::new(&absolute_location))?);
-                                *playing_file = Some(location.to_string());
+                                match run_video_player(config, Path::new(&absolute_location)) {
+                                    Ok(mut player_process) => {
+                                        *playing_file = Some(location.to_string());
 
-                                // Spawn a thread to wait for the process to finish
-                                let tx = tx.clone();
-                                thread::spawn(move || {
-                                    if let Some(mut process) = player_process.take() {
-                                        process.wait().ok();
-                                        tx.send(()).ok();
+                                        // Spawn a thread to wait for the process to finish
+                                        let tx = tx.clone();
+                                        thread::spawn(move || {
+                                            player_process.wait().ok();
+                                            tx.send(()).ok();
+                                        });
                                     }
-                                });
+                                    Err(e) => {
+                                        logger::log_error(&format!("Failed to start video player for {}: {}", name, e));
+                                        eprintln!("Error: Failed to start video player: {}", e);
+                                        return Err(e);
+                                    }
+                                }
                             }
                             Err(e) => {
+                                logger::log_error(&format!("Failed to resolve video path for episode {}: {}", episode_id, e));
                                 eprintln!("Error resolving video path: {}", e);
                             }
                         }
@@ -769,6 +813,7 @@ pub fn handle_browse_mode(
         }
         KeyCode::Esc if *filter_mode => {
             // Cancel filter: clear search string and exit filter mode
+            logger::log_debug("Browse mode: Canceling filter, clearing search");
             search.clear();
             *filter_mode = false;
             *edit_cursor_pos = 0;
@@ -780,6 +825,10 @@ pub fn handle_browse_mode(
                 && edit_details.season.is_some() =>
         {
             //go back to the season view
+            logger::log_debug(&format!(
+                "Browse mode: Navigating from season view to series view (series_id={})",
+                edit_details.series.as_ref().unwrap().id
+            ));
             *current_item = 0;
             search.clear();
             let series_id = edit_details.series.as_ref().unwrap().id;
@@ -796,6 +845,7 @@ pub fn handle_browse_mode(
                 || matches!(filtered_entries[*current_item], Entry::Episode { .. })
                     && edit_details.series.is_some()) =>
         {
+            logger::log_debug("Browse mode: Navigating from series/season view to top level");
             *current_item = 0;
             search.clear();
             *entries = database::get_entries().expect("Failed to get entries");
@@ -912,6 +962,9 @@ pub fn handle_series_select_mode(
             *episode_detail =
                 database::assign_series(series_id, episode_id).expect("Failed to assign series");
             
+            // Log series assignment
+            logger::log_info(&format!("Assigned episode {} to series '{}'", episode_id, series_name));
+            
             // Update last_action with the series assignment
             *last_action = Some(crate::util::LastAction::SeriesAssignment {
                 series_id,
@@ -979,6 +1032,12 @@ pub fn handle_series_create_mode(
             // save the new series to the database
             *episode_detail = database::create_series_and_assign(new_series, episode_id)
                 .expect("Failed to create series");
+
+            // Log series creation
+            if let Some(series) = &episode_detail.series {
+                logger::log_info(&format!("Created new series '{}' and assigned episode {}", 
+                    series.name, episode_id));
+            }
 
             // Update last_action with the series assignment
             if let Some(series) = &episode_detail.series {
@@ -1235,8 +1294,14 @@ fn execute_menu_action(
             // Enter edit mode for the remembered episode
             if let Entry::Episode { episode_id, .. } = filtered_entries[remembered_item] {
                 *mode = Mode::Edit;
-                *edit_details = database::get_episode_detail(episode_id)
-                    .expect("Failed to get entry details");
+                *edit_details = match database::get_episode_detail(episode_id) {
+                    Ok(details) => details,
+                    Err(e) => {
+                        logger::log_error(&format!("Failed to get episode details for episode {}: {}", episode_id, e));
+                        eprintln!("Error: Failed to load episode details: {}", e);
+                        return;
+                    }
+                };
                 *season_number = edit_details.season.as_ref().map(|season| season.number);
 
                 // Check if episode has length = 0 or NULL, and extract if needed
@@ -1244,13 +1309,11 @@ fn execute_menu_action(
                     // Resolve relative path to absolute path for extraction
                     match database::get_episode_absolute_location(episode_id, resolver) {
                         Ok(absolute_location) => {
-                            // Attempt to extract and update episode length
-                            if let Err(e) = video_metadata::extract_and_update_episode_length(
+                            // Attempt to extract and update episode length (fails silently with log warning)
+                            if video_metadata::extract_and_update_episode_length(
                                 episode_id,
                                 Path::new(&absolute_location)
-                            ) {
-                                eprintln!("Warning: Failed to extract video duration: {}", e);
-                            } else {
+                            ).is_ok() {
                                 // Reload episode details to get updated length
                                 if let Ok(updated_details) = database::get_episode_detail(episode_id) {
                                     *edit_details = updated_details;
@@ -1258,8 +1321,8 @@ fn execute_menu_action(
                                 }
                             }
                         }
-                        Err(e) => {
-                            eprintln!("Warning: Failed to resolve video path for extraction: {}", e);
+                        Err(_e) => {
+                            // Fail silently - error already logged
                         }
                     }
                 }
@@ -1299,8 +1362,14 @@ fn execute_menu_action(
         MenuAction::ToggleWatched => {
             // Toggle watched status for the remembered episode
             if let Entry::Episode { episode_id, .. } = filtered_entries[remembered_item] {
-                database::toggle_watched_status(episode_id)
-                    .expect("Failed to toggle watched status");
+                if let Err(e) = database::toggle_watched_status(episode_id) {
+                    logger::log_error(&format!("Failed to toggle watched status for episode {}: {}", episode_id, e));
+                    eprintln!("Error: Failed to toggle watched status: {}", e);
+                    return;
+                }
+                
+                // Log watched status toggle
+                logger::log_info(&format!("Toggled watched status for episode {}", episode_id));
 
                 // Reload entries based on current view context
                 *entries = match view_context {
@@ -1381,6 +1450,9 @@ fn execute_menu_action(
                 // Get root directory from PathResolver and scan automatically
                 let scan_dir = resolver.get_root_dir();
                 
+                // Log rescan start
+                logger::log_info(&format!("Rescan started: {}", scan_dir.display()));
+                
                 // Set scanning status and force immediate display
                 *status_message = format!("Rescanning {}...", scan_dir.display());
                 
@@ -1435,8 +1507,12 @@ fn execute_menu_action(
                 // Update status after scan
                 if imported_count > 0 {
                     *status_message = format!("Rescan complete. Found {} new videos", imported_count);
+                    // Log rescan completion
+                    logger::log_info(&format!("Rescan completed: imported {} new videos", imported_count));
                 } else {
                     *status_message = "Rescan complete. No new videos found".to_string();
+                    // Log rescan completion
+                    logger::log_info("Rescan completed: no new videos found");
                 }
                 *redraw = true;
 
@@ -1510,8 +1586,11 @@ fn execute_menu_action(
         MenuAction::ClearSeriesData => {
             // Clear series, season, and episode number for the remembered episode
             if let Entry::Episode { episode_id, .. } = filtered_entries[remembered_item] {
-                database::clear_series_data(episode_id)
-                    .expect("Failed to clear series data");
+                if let Err(e) = database::clear_series_data(episode_id) {
+                    logger::log_error(&format!("Failed to clear series data for episode {}: {}", episode_id, e));
+                    eprintln!("Error: Failed to clear series data: {}", e);
+                    return;
+                }
 
                 // Reload entries based on current view context
                 *entries = match view_context {
@@ -1557,9 +1636,16 @@ fn execute_menu_action(
         }
         MenuAction::Delete => {
             // Delete the episode from the database
-            if let Entry::Episode { episode_id, .. } = filtered_entries[remembered_item] {
-                database::delete_episode(episode_id)
-                    .expect("Failed to delete episode");
+            if let Entry::Episode { episode_id, name, .. } = &filtered_entries[remembered_item] {
+                // Delete the episode
+                if let Err(e) = database::delete_episode(*episode_id) {
+                    logger::log_error(&format!("Failed to delete episode {} ({}): {}", episode_id, name, e));
+                    eprintln!("Error: Failed to delete episode: {}", e);
+                    return;
+                }
+                
+                // Log deletion with episode details
+                logger::log_info(&format!("Deleted episode {} ({})", episode_id, name));
 
                 // Reload entries based on current view context
                 *entries = match view_context {

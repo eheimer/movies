@@ -4,6 +4,7 @@ mod display;
 mod dto;
 mod episode_field;
 mod handlers;
+mod logger;
 mod menu;
 mod path_resolver;
 mod paths;
@@ -565,11 +566,59 @@ fn main() -> io::Result<()> {
         Err(e) => {
             eprintln!("Error: {}", e);
             eprintln!("Please ensure you have write permissions to your home directory.");
+            // Note: logger not initialized yet, so we can't log this error
             std::process::exit(1);
         }
     };
     
     let mut config = read_config(&app_paths.config_file);
+
+    // Initialize logger
+    // Determine log file path (custom from config or default)
+    let log_file_path = if let Some(ref custom_path) = config.log_file {
+        PathBuf::from(custom_path)
+    } else {
+        // Use default location: ~/.local/share/movies/movies.log
+        let proj_dirs = directories::ProjectDirs::from("", "", "movies")
+            .expect("Failed to determine application directories");
+        let data_dir = proj_dirs.data_dir();
+        std::fs::create_dir_all(data_dir)
+            .expect("Failed to create data directory");
+        data_dir.join("movies.log")
+    };
+
+    // Check if log file exists and prompt to save if it does
+    if log_file_path.exists() {
+        if let Ok(should_save) = logger::prompt_save_existing_log(&log_file_path) {
+            if !should_save {
+                // User chose not to save, file will be truncated by initialize_logger
+            }
+        }
+    }
+
+    // Parse log level from config
+    let log_level = config::parse_log_level(&config.log_level);
+    
+    // Check if the log level was invalid (will be Info if invalid)
+    let was_invalid = !["error", "warn", "info", "debug"].contains(&config.log_level.to_lowercase().as_str());
+
+    // Initialize the logger
+    if let Err(e) = logger::initialize_logger(log_file_path.clone(), log_level) {
+        eprintln!("Error: Failed to initialize logger: {}", e);
+        eprintln!("Continuing without logging...");
+        // Can't log this error since logger failed to initialize
+    } else {
+        // Log warning if invalid log level was provided
+        if was_invalid {
+            logger::log_warn(&format!(
+                "Invalid log level '{}' in configuration, defaulting to 'info'",
+                config.log_level
+            ));
+        }
+        
+        // Log application startup
+        logger::log_info("Application started");
+    }
 
     // Check if this is a first run (no database location configured)
     if config.is_first_run() {
@@ -603,6 +652,7 @@ fn main() -> io::Result<()> {
 
     // Initialize database
     if let Err(e) = database::initialize_database(&db_path) {
+        logger::log_error(&format!("Critical: Failed to initialize database at {}: {}", db_path.display(), e));
         eprintln!("Error: Failed to initialize database at {}", db_path.display());
         eprintln!("Details: {}", e);
         
@@ -627,6 +677,7 @@ fn main() -> io::Result<()> {
     let resolver = match PathResolver::from_database_path(&db_path) {
         Ok(r) => r,
         Err(e) => {
+            logger::log_error(&format!("Critical: Failed to initialize PathResolver from {}: {}", db_path.display(), e));
             match &e {
                 path_resolver::PathResolverError::DatabaseNotFound(path) => {
                     eprintln!("Error: Database not found at {}", path.display());

@@ -7,6 +7,7 @@ pub mod display;
 pub mod dto;
 pub mod episode_field;
 pub mod handlers;
+pub mod logger;
 pub mod menu;
 pub mod path_resolver;
 pub mod paths;

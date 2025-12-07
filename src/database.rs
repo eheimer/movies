@@ -23,22 +23,34 @@ static DB_CONN: OnceLock<Mutex<Connection>> = OnceLock::new();
 pub fn initialize_database(db_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
     // Create parent directory if it doesn't exist
     if let Some(parent) = db_path.parent() {
-        std::fs::create_dir_all(parent)?;
+        if let Err(e) = std::fs::create_dir_all(parent) {
+            crate::logger::log_error(&format!("Failed to create database directory {}: {}", parent.display(), e));
+            return Err(e.into());
+        }
     }
     
     // Open or create database connection
-    let conn = Connection::open(db_path)?;
+    let conn = match Connection::open(db_path) {
+        Ok(c) => c,
+        Err(e) => {
+            crate::logger::log_error(&format!("Failed to open database at {}: {}", db_path.display(), e));
+            return Err(e.into());
+        }
+    };
     
     // Initialize schema
-    conn.execute(
+    if let Err(e) = conn.execute(
         "CREATE TABLE IF NOT EXISTS series (
             id INTEGER PRIMARY KEY,
             name TEXT NOT NULL UNIQUE
         )",
         [],
-    )?;
+    ) {
+        crate::logger::log_error(&format!("Failed to create series table: {}", e));
+        return Err(e.into());
+    }
     
-    conn.execute(
+    if let Err(e) = conn.execute(
         "CREATE TABLE IF NOT EXISTS season (
             id INTEGER PRIMARY KEY,
             series_id INTEGER NOT NULL,
@@ -46,9 +58,12 @@ pub fn initialize_database(db_path: &Path) -> Result<(), Box<dyn std::error::Err
             FOREIGN KEY(series_id) REFERENCES series(id)
         )",
         [],
-    )?;
+    ) {
+        crate::logger::log_error(&format!("Failed to create season table: {}", e));
+        return Err(e.into());
+    }
     
-    conn.execute(
+    if let Err(e) = conn.execute(
         "CREATE TABLE IF NOT EXISTS episode (
             id INTEGER PRIMARY KEY,
             location TEXT NOT NULL,
@@ -63,7 +78,10 @@ pub fn initialize_database(db_path: &Path) -> Result<(), Box<dyn std::error::Err
             FOREIGN KEY(season_id) REFERENCES season(id)
         )",
         [],
-    )?;
+    ) {
+        crate::logger::log_error(&format!("Failed to create episode table: {}", e));
+        return Err(e.into());
+    }
     
     // Data cleanup operations
     conn.execute(
@@ -157,8 +175,17 @@ pub fn import_episode_relative(
     
     // Check if episode already exists with this relative path
     if episode_exists(relative_location)? {
+        crate::logger::log_debug(&format!(
+            "Skipping duplicate episode: '{}' (relative path: {})",
+            name, relative_location
+        ));
         return Ok(false); // Already exists, not inserted
     }
+
+    crate::logger::log_debug(&format!(
+        "Importing new episode: '{}' (relative path: {})",
+        name, relative_location
+    ));
 
     let conn = get_connection().lock().unwrap();
 
@@ -176,7 +203,13 @@ pub fn get_entries() -> Result<Vec<Entry>> {
     let mut entries = Vec::new();
 
     // Retrieve series
-    let mut stmt = conn.prepare("SELECT id, name FROM series ORDER BY name")?;
+    let mut stmt = match conn.prepare("SELECT id, name FROM series ORDER BY name") {
+        Ok(s) => s,
+        Err(e) => {
+            crate::logger::log_error(&format!("Failed to prepare query for series: {}", e));
+            return Err(e);
+        }
+    };
     let series_iter = stmt.query_map([], |row| {
         Ok(Entry::Series {
             series_id: row.get(0)?,
@@ -189,14 +222,20 @@ pub fn get_entries() -> Result<Vec<Entry>> {
     }
 
     // Retrieve episodes that are not part of a series
-    let mut stmt = conn.prepare(
+    let mut stmt = match conn.prepare(
         "SELECT id, name, location 
          FROM episode WHERE series_id IS NULL 
          ORDER BY 
            CASE WHEN episode_number IS NULL OR episode_number = '' THEN 1 ELSE 0 END,
            CAST(episode_number AS INTEGER),
            name",
-    )?;
+    ) {
+        Ok(s) => s,
+        Err(e) => {
+            crate::logger::log_error(&format!("Failed to prepare query for episodes: {}", e));
+            return Err(e);
+        }
+    };
     let episode_iter = stmt.query_map([], |row| {
         Ok(Entry::Episode {
             episode_id: row.get(0)?,
@@ -310,6 +349,8 @@ pub fn get_episode_detail(id: usize) -> Result<EpisodeDetail, Box<dyn std::error
     // Fetch details from the database for episode
     let conn = get_connection().lock().unwrap();
 
+    crate::logger::log_debug(&format!("Querying episode details for episode_id={}", id));
+
     let mut stmt = conn.prepare(
         "SELECT 
                 episode.name as title, 
@@ -329,6 +370,26 @@ pub fn get_episode_detail(id: usize) -> Result<EpisodeDetail, Box<dyn std::error
     let mut rows = stmt.query(params![id])?;
 
     if let Some(row) = rows.next()? {
+        let year: String = row.get(1)?;
+        let length: String = row.get(3)?;
+        
+        // Note: We don't log warnings here for missing metadata because this function
+        // is called frequently (e.g., on every cursor movement in Browse mode).
+        // Warnings for missing metadata should only be logged when attempting to
+        // extract/update the metadata (e.g., when playing a video or editing metadata).
+        
+        // Debug log for data validation
+        crate::logger::log_debug(&format!(
+            "Episode {} details: title='{}', year='{}', watched='{}', length='{}', has_series={}, has_season={}",
+            id,
+            row.get::<_, String>(0).unwrap_or_default(),
+            year,
+            row.get::<_, String>(2).unwrap_or_default(),
+            length,
+            row.get::<_, Option<usize>>(4).unwrap_or(None).is_some(),
+            row.get::<_, Option<usize>>(6).unwrap_or(None).is_some()
+        ));
+        
         let series = if let Some(series_id) = row.get::<_, Option<usize>>(4)? {
             Some(Series {
                 id: series_id,
@@ -349,9 +410,9 @@ pub fn get_episode_detail(id: usize) -> Result<EpisodeDetail, Box<dyn std::error
 
         Ok(EpisodeDetail {
             title: row.get(0)?,
-            year: row.get(1)?,
+            year,
             watched: row.get(2)?,
-            length: row.get(3)?,
+            length,
             series,
             season,
             episode_number: row.get(8)?,
@@ -367,7 +428,7 @@ pub fn update_episode_detail(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let conn = get_connection().lock().unwrap();
 
-    conn.execute(
+    if let Err(e) = conn.execute(
         "UPDATE episode SET name = ?1, year = ?2, watched = ?3, length = ?4, series_id = ?5, season_id = ?6, episode_number = ?7 WHERE id = ?8",
         params![
             details.title,
@@ -379,7 +440,10 @@ pub fn update_episode_detail(
             details.episode_number,
             id
         ],
-    )?;
+    ) {
+        crate::logger::log_error(&format!("Failed to update episode {}: {}", id, e));
+        return Err(e.into());
+    }
     Ok(())
 }
 
@@ -441,10 +505,13 @@ pub fn clear_series_data(episode_id: usize) -> Result<(), Box<dyn std::error::Er
 pub fn delete_episode(episode_id: usize) -> Result<(), Box<dyn std::error::Error>> {
     let conn = get_connection().lock().unwrap();
 
-    conn.execute(
+    if let Err(e) = conn.execute(
         "DELETE FROM episode WHERE id = ?1",
         params![episode_id],
-    )?;
+    ) {
+        crate::logger::log_error(&format!("Failed to delete episode {}: {}", episode_id, e));
+        return Err(e.into());
+    }
 
     Ok(())
 }
@@ -538,15 +605,26 @@ pub fn can_create_season(series_id: Option<usize>, season_number: usize) -> Resu
     let conn = get_connection().lock().unwrap();
 
     if series_id.is_none() {
+        crate::logger::log_debug("Cannot create season: no series_id provided");
         return Ok(false);
     }
 
     if season_number <= 1 {
+        crate::logger::log_debug(&format!(
+            "Can create season {} for series {}: season number <= 1",
+            season_number, series_id.unwrap()
+        ));
         return Ok(true);
     }
 
     let mut stmt = conn.prepare("SELECT 1 FROM season WHERE series_id = ?1 AND number = ?2")?;
     let exists: bool = stmt.query_row(params![series_id, season_number - 1], |row| row.get(0))?;
+    
+    crate::logger::log_debug(&format!(
+        "Can create season {} for series {}: previous season exists={}",
+        season_number, series_id.unwrap(), exists
+    ));
+    
     Ok(exists)
 }
 

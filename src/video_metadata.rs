@@ -4,6 +4,7 @@ use crate::database;
 
 /// Extract duration in seconds from a video file
 /// Supports MKV, MP4, and AVI formats
+/// Falls back to ffprobe if native parsing fails
 pub fn extract_duration_seconds(file_path: &Path) -> Result<u64, Box<dyn Error>> {
     // Detect format based on file extension
     let extension = file_path
@@ -12,12 +13,61 @@ pub fn extract_duration_seconds(file_path: &Path) -> Result<u64, Box<dyn Error>>
         .ok_or("File has no extension")?
         .to_lowercase();
     
-    match extension.as_str() {
+    // Try native parser first
+    let native_result = match extension.as_str() {
         "mkv" => extract_mkv_duration(file_path),
         "mp4" | "m4v" => extract_mp4_duration(file_path),
         "avi" => extract_avi_duration(file_path),
         _ => Err(format!("Unsupported video format: {}", extension).into()),
+    };
+    
+    // If native parser succeeds, return the result
+    if let Ok(duration) = native_result {
+        return Ok(duration);
     }
+    
+    // If native parser fails, try ffprobe as fallback
+    crate::logger::log_debug(&format!(
+        "Native parser failed for {}, trying ffprobe fallback",
+        file_path.display()
+    ));
+    
+    extract_duration_with_ffprobe(file_path)
+}
+
+/// Extract duration using ffprobe (fallback method)
+/// This requires ffprobe to be installed on the system
+fn extract_duration_with_ffprobe(file_path: &Path) -> Result<u64, Box<dyn Error>> {
+    use std::process::Command;
+    
+    // Try to run ffprobe
+    let output = Command::new("ffprobe")
+        .arg("-v")
+        .arg("error")
+        .arg("-show_entries")
+        .arg("format=duration")
+        .arg("-of")
+        .arg("default=noprint_wrappers=1:nokey=1")
+        .arg(file_path)
+        .output()
+        .map_err(|e| format!("Failed to run ffprobe (is it installed?): {}", e))?;
+    
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("ffprobe failed: {}", stderr).into());
+    }
+    
+    // Parse the duration from stdout
+    let duration_str = String::from_utf8_lossy(&output.stdout);
+    let duration_float: f64 = duration_str
+        .trim()
+        .parse()
+        .map_err(|e| format!("Failed to parse ffprobe output '{}': {}", duration_str.trim(), e))?;
+    
+    // Convert to seconds (round up)
+    let duration_seconds = duration_float.ceil() as u64;
+    
+    Ok(duration_seconds)
 }
 
 /// Extract duration from MKV files
@@ -53,18 +103,36 @@ fn extract_mp4_duration(file_path: &Path) -> Result<u64, Box<dyn Error>> {
     let reader = Mp4Reader::read_header(file, size)
         .map_err(|e| format!("Failed to parse MP4 file: {}", e))?;
     
-    // Get duration from the first video track
+    // Try to get duration from movie header first (mvhd)
+    if reader.duration().as_secs() > 0 {
+        return Ok(reader.duration().as_secs());
+    }
+    
+    // Fallback: Get duration from the first video track
     for track_id in reader.tracks().keys() {
         let track = reader.tracks().get(track_id)
             .ok_or("Failed to get track")?;
         
         if track.track_type()? == TrackType::Video {
             let duration_seconds = track.duration().as_secs();
+            if duration_seconds > 0 {
+                return Ok(duration_seconds);
+            }
+        }
+    }
+    
+    // If we get here, try any track with a duration
+    for track_id in reader.tracks().keys() {
+        let track = reader.tracks().get(track_id)
+            .ok_or("Failed to get track")?;
+        
+        let duration_seconds = track.duration().as_secs();
+        if duration_seconds > 0 {
             return Ok(duration_seconds);
         }
     }
     
-    Err("No video track found in MP4 file".into())
+    Err("No duration information found in MP4 file".into())
 }
 
 /// Extract duration from AVI files
@@ -191,7 +259,26 @@ pub fn extract_and_update_episode_length(
     file_path: &Path,
 ) -> Result<(), Box<dyn Error>> {
     // Extract duration in seconds
-    let duration_seconds = extract_duration_seconds(file_path)?;
+    let duration_seconds = match extract_duration_seconds(file_path) {
+        Ok(duration) => {
+            crate::logger::log_debug(&format!(
+                "Successfully extracted duration for episode {}: {} seconds ({})",
+                episode_id,
+                duration,
+                format_duration_hms(duration)
+            ));
+            duration
+        }
+        Err(e) => {
+            crate::logger::log_warn(&format!(
+                "Failed to extract duration for episode {} from {}: {}",
+                episode_id,
+                file_path.display(),
+                e
+            ));
+            return Err(e);
+        }
+    };
     
     // Update database
     let conn = database::get_connection().lock().unwrap();
@@ -199,6 +286,13 @@ pub fn extract_and_update_episode_length(
         "UPDATE episode SET length = ?1 WHERE id = ?2",
         rusqlite::params![duration_seconds as i64, episode_id],
     )?;
+    
+    crate::logger::log_info(&format!(
+        "Updated episode {} length to {} seconds ({})",
+        episode_id,
+        duration_seconds,
+        format_duration_hms(duration_seconds)
+    ));
     
     Ok(())
 }

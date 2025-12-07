@@ -65,6 +65,12 @@ pub struct Config {
     #[serde(default = "default_status_bg")]
     pub status_bg: String,
     
+    // Logging configuration
+    #[serde(default = "default_log_file")]
+    pub log_file: Option<String>,
+    #[serde(default = "default_log_level")]
+    pub log_level: String,
+    
     pub video_extensions: Vec<String>,
     pub video_player: String,
 }
@@ -149,6 +155,14 @@ fn default_status_bg() -> String {
     "DarkGray".to_string()
 }
 
+fn default_log_file() -> Option<String> {
+    None
+}
+
+fn default_log_level() -> String {
+    "info".to_string()
+}
+
 impl Default for Config {
     fn default() -> Self {
         Config {
@@ -175,6 +189,8 @@ impl Default for Config {
             episode_bg: "Reset".to_string(),
             status_fg: "White".to_string(),
             status_bg: "DarkGray".to_string(),
+            log_file: None,
+            log_level: "info".to_string(),
             video_extensions: vec![
                 "mp4".to_string(),
                 "mkv".to_string(),
@@ -236,6 +252,7 @@ pub fn read_config(config_path: &PathBuf) -> Config {
                             if updated_json != content {
                                 if let Err(e) = fs::write(config_path, updated_json) {
                                     eprintln!("Warning: Could not update config.json with default values: {}", e);
+                                    crate::logger::log_warn(&format!("Could not update config.json with default values: {}", e));
                                 }
                             }
                         }
@@ -243,6 +260,7 @@ pub fn read_config(config_path: &PathBuf) -> Config {
                     }
                     Err(e) => {
                         eprintln!("Error: Could not parse config.json: {}. Using default values.", e);
+                        crate::logger::log_warn(&format!("Could not parse config.json: {}. Using default values.", e));
                         let default_config = Config::default();
                         // Try to write the default config
                         save_config(&default_config, config_path);
@@ -250,8 +268,9 @@ pub fn read_config(config_path: &PathBuf) -> Config {
                     }
                 }
             }
-            Err(_) => {
+            Err(e) => {
                 eprintln!("Error: Could not read the config.json file. Using default values.");
+                crate::logger::log_warn(&format!("Could not read config.json file: {}. Using default values.", e));
                 Config::default()
             }
         }
@@ -272,7 +291,25 @@ pub fn save_config(config: &Config, config_path: &PathBuf) {
         if let Err(e) = fs::write(config_path, config_json) {
             eprintln!("Warning: Could not write config file at: {}", config_path.display());
             eprintln!("Error: {}", e);
+            crate::logger::log_warn(&format!("Could not write config file at {}: {}", config_path.display(), e));
         }
+    }
+}
+
+/// Parse log level string into LogLevel enum
+/// 
+/// # Arguments
+/// * `level_str` - Log level string (error, warn, info, debug)
+/// 
+/// # Returns
+/// * `crate::logger::LogLevel` - Parsed log level, defaults to Info for invalid values
+pub fn parse_log_level(level_str: &str) -> crate::logger::LogLevel {
+    match level_str.to_lowercase().as_str() {
+        "error" => crate::logger::LogLevel::Error,
+        "warn" => crate::logger::LogLevel::Warn,
+        "info" => crate::logger::LogLevel::Info,
+        "debug" => crate::logger::LogLevel::Debug,
+        _ => crate::logger::LogLevel::Info, // Default to Info for invalid values
     }
 }
 
@@ -325,6 +362,10 @@ mod tests {
         assert_eq!(config.episode_bg, "Reset");
         assert_eq!(config.status_fg, "White");
         assert_eq!(config.status_bg, "DarkGray");
+        
+        // Verify logging fields have their default values
+        assert_eq!(config.log_file, None);
+        assert_eq!(config.log_level, "info");
 
         // Verify existing fields are preserved
         assert_eq!(config.current_fg, "Black");
@@ -361,6 +402,8 @@ mod tests {
         assert_eq!(config.episode_bg, "Reset");
         assert_eq!(config.status_fg, "White");
         assert_eq!(config.status_bg, "DarkGray");
+        assert_eq!(config.log_file, None);
+        assert_eq!(config.log_level, "info");
     }
 
     /// Test Case 8: Config color loading
@@ -397,6 +440,8 @@ mod tests {
   "episode_bg": "Yellow",
   "status_fg": "Black",
   "status_bg": "Cyan",
+  "log_file": "/custom/path/app.log",
+  "log_level": "debug",
   "video_extensions": ["mp4"],
   "video_player": "/usr/bin/mpv"
 }"#;
@@ -428,6 +473,8 @@ mod tests {
         assert_eq!(config.episode_bg, "Yellow");
         assert_eq!(config.status_fg, "Black");
         assert_eq!(config.status_bg, "Cyan");
+        assert_eq!(config.log_file, Some("/custom/path/app.log".to_string()));
+        assert_eq!(config.log_level, "debug");
         assert_eq!(config.video_extensions, vec!["mp4"]);
         assert_eq!(config.video_player, "/usr/bin/mpv");
     }
@@ -474,6 +521,8 @@ mod tests {
         assert_eq!(config.episode_bg, "Reset");
         assert_eq!(config.status_fg, "White");
         assert_eq!(config.status_bg, "DarkGray");
+        assert_eq!(config.log_file, None);
+        assert_eq!(config.log_level, "info");
 
         // Verify the config file was updated with the new fields
         let updated_content = fs::read_to_string(&config_path)
@@ -482,6 +531,7 @@ mod tests {
         assert!(updated_content.contains("unwatched_indicator"));
         assert!(updated_content.contains("series_fg"));
         assert!(updated_content.contains("status_bg"));
+        assert!(updated_content.contains("log_level"));
     }
 
     #[test]
@@ -520,11 +570,125 @@ mod tests {
         assert!(saved_content.contains("episode_bg"));
         assert!(saved_content.contains("status_fg"));
         assert!(saved_content.contains("status_bg"));
+        assert!(saved_content.contains("log_file"));
+        assert!(saved_content.contains("log_level"));
 
         // Verify custom values are saved
         assert!(saved_content.contains("\"Magenta\""));
         assert!(saved_content.contains("\"●\""));
         assert!(saved_content.contains("\"○\""));
         assert!(saved_content.contains("\"Cyan\""));
+    }
+
+    /// Test Case: Default log file location when not configured
+    /// When no log_file is configured in config.json, the Config should have log_file as None.
+    /// Validates: Requirements 2.1, 2.3
+    #[test]
+    fn test_default_log_file_location() {
+        // Create a temporary directory for the test
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let config_path = temp_dir.path().join("config.json");
+
+        // Create a config file without log_file
+        let config_without_log = r#"{
+  "current_fg": "Black",
+  "current_bg": "White",
+  "video_extensions": ["mp4"],
+  "video_player": "/usr/bin/vlc"
+}"#;
+        fs::write(&config_path, config_without_log).expect("Failed to write test config");
+
+        // Load the config
+        let config = read_config(&config_path);
+
+        // Verify log_file is None (will use standard location)
+        assert_eq!(config.log_file, None);
+    }
+
+    /// Test Case: Custom log file location when configured
+    /// When a log_file path is specified in config.json, the Config should contain that path.
+    /// Validates: Requirements 2.1
+    #[test]
+    fn test_custom_log_file_location() {
+        // Create a temporary directory for the test
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let config_path = temp_dir.path().join("config.json");
+
+        // Create a config file with custom log_file
+        let config_with_log = r#"{
+  "current_fg": "Black",
+  "current_bg": "White",
+  "log_file": "/custom/logs/myapp.log",
+  "video_extensions": ["mp4"],
+  "video_player": "/usr/bin/vlc"
+}"#;
+        fs::write(&config_path, config_with_log).expect("Failed to write test config");
+
+        // Load the config
+        let config = read_config(&config_path);
+
+        // Verify log_file contains the custom path
+        assert_eq!(config.log_file, Some("/custom/logs/myapp.log".to_string()));
+    }
+
+    /// Test Case: Default log level when not configured
+    /// When no log_level is configured in config.json, the Config should default to "info".
+    /// Validates: Requirements 2.2, 2.4
+    #[test]
+    fn test_default_log_level() {
+        // Create a temporary directory for the test
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let config_path = temp_dir.path().join("config.json");
+
+        // Create a config file without log_level
+        let config_without_level = r#"{
+  "current_fg": "Black",
+  "current_bg": "White",
+  "video_extensions": ["mp4"],
+  "video_player": "/usr/bin/vlc"
+}"#;
+        fs::write(&config_path, config_without_level).expect("Failed to write test config");
+
+        // Load the config
+        let config = read_config(&config_path);
+
+        // Verify log_level defaults to "info"
+        assert_eq!(config.log_level, "info");
+    }
+
+    /// Test Case: Valid log level parsing
+    /// When valid log level values (error, warn, info, debug) are provided,
+    /// parse_log_level should return the correct LogLevel enum variant.
+    /// Validates: Requirements 2.2
+    #[test]
+    fn test_valid_log_level_parsing() {
+        use crate::logger::LogLevel;
+
+        // Test all valid log levels
+        assert_eq!(parse_log_level("error"), LogLevel::Error);
+        assert_eq!(parse_log_level("warn"), LogLevel::Warn);
+        assert_eq!(parse_log_level("info"), LogLevel::Info);
+        assert_eq!(parse_log_level("debug"), LogLevel::Debug);
+
+        // Test case insensitivity
+        assert_eq!(parse_log_level("ERROR"), LogLevel::Error);
+        assert_eq!(parse_log_level("Warn"), LogLevel::Warn);
+        assert_eq!(parse_log_level("INFO"), LogLevel::Info);
+        assert_eq!(parse_log_level("DeBuG"), LogLevel::Debug);
+    }
+
+    /// Test Case: Invalid log level defaults to info
+    /// When an invalid log_level value is provided, parse_log_level should default to Info.
+    /// Validates: Requirements 2.5
+    #[test]
+    fn test_invalid_log_level_defaults_to_info() {
+        use crate::logger::LogLevel;
+
+        // Test various invalid values
+        assert_eq!(parse_log_level("invalid"), LogLevel::Info);
+        assert_eq!(parse_log_level("trace"), LogLevel::Info);
+        assert_eq!(parse_log_level(""), LogLevel::Info);
+        assert_eq!(parse_log_level("123"), LogLevel::Info);
+        assert_eq!(parse_log_level("warning"), LogLevel::Info);
     }
 }
