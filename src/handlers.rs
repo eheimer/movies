@@ -27,6 +27,7 @@ pub fn handle_entry_mode(
     config: &mut Config,
     config_path: &std::path::PathBuf,
     resolver: &mut Option<PathResolver>,
+    status_message: &mut String,
 ) {
     match code {
         KeyCode::Enter => {
@@ -45,13 +46,13 @@ pub fn handle_entry_mode(
             let db_path = canonical_path.join("videos.sqlite");
             let db_exists = db_path.exists();
             
+            // Set status message based on whether database exists
             if db_exists {
-                display::load_videos(&format!("Connected to existing database at {}", db_path.display()), 0)
-                    .expect("Failed to display message");
+                *status_message = format!("Connected to existing database at {}", db_path.display());
             } else {
-                display::load_videos("Creating new database...", 0)
-                    .expect("Failed to display message");
+                *status_message = "Creating new database...".to_string();
             }
+            *redraw = true;
             
             // Initialize database (creates if doesn't exist, opens if exists)
             if let Err(e) = database::initialize_database(&db_path) {
@@ -80,11 +81,9 @@ pub fn handle_entry_mode(
                 Ok(new_resolver) => {
                     *resolver = Some(new_resolver);
                     
-                    // Display scanning status
-                    display::load_videos(
-                        &format!("Scanning {}...", canonical_path.display()),
-                        0
-                    ).expect("Failed to display scanning message");
+                    // Set scanning status
+                    *status_message = format!("Scanning {}...", canonical_path.display());
+                    *redraw = true;
                     
                     // Perform scan of the directory
                     let new_entries: Vec<_> = WalkDir::new(&canonical_path)
@@ -125,30 +124,17 @@ pub fn handle_entry_mode(
                         }
                     }
                     
+                    // Update status after scan
                     if db_exists {
-                        display::load_videos(
-                            &format!("Connected to existing database at {}", db_path.display()),
-                            0
-                        ).expect("Failed to display message");
                         if imported_count > 0 {
-                            display::load_videos(
-                                &format!("Found {} new videos", imported_count),
-                                imported_count
-                            ).expect("Failed to display message");
+                            *status_message = format!("Connected to existing database. Found {} new videos", imported_count);
+                        } else {
+                            *status_message = format!("Connected to existing database at {}", db_path.display());
                         }
                     } else {
-                        display::load_videos(
-                            &format!("Created new database and imported {} videos", imported_count),
-                            imported_count
-                        ).expect("Failed to display message");
+                        *status_message = format!("Created new database and imported {} videos", imported_count);
                     }
-                    
-                    if skipped_count > 0 {
-                        display::load_videos(
-                            &format!("Note: {} files were skipped (outside root directory)", skipped_count),
-                            0
-                        ).expect("Failed to display message");
-                    }
+                    *redraw = true;
 
                     // Load entries and switch to Browse mode
                     *entries = database::get_entries().expect("Failed to get entries");
@@ -561,6 +547,7 @@ pub fn handle_browse_mode(
     series_selection: &mut Option<usize>,
     filter_mode: &mut bool,
     first_series: &mut usize,
+    status_message: &mut String,
 ) -> io::Result<bool> {
     // Check for context menu hotkeys first (F2-F5) - but not in filter mode
     // Build menu context to check if actions are available
@@ -597,6 +584,7 @@ pub fn handle_browse_mode(
                         first_series,
                         config,
                         resolver,
+                        status_message,
                     );
                     return Ok(true);
                 }
@@ -690,12 +678,16 @@ pub fn handle_browse_mode(
                     };
                     *redraw = true;
                 }
-                Entry::Episode { location, episode_id, .. } => {
+                Entry::Episode { location, episode_id, name, .. } => {
                     // If an episode is selected, play the video
                     if playing_file.is_none() {
                         // Resolve relative path to absolute path for video playback
                         match database::get_episode_absolute_location(*episode_id, resolver) {
                             Ok(absolute_location) => {
+                                // Set status message
+                                *status_message = format!("Playing video: {}", name);
+                                *redraw = true;
+                                
                                 // only play one video at a time
                                 let mut player_process =
                                     Some(run_video_player(config, Path::new(&absolute_location))?);
@@ -1096,6 +1088,7 @@ pub fn handle_menu_mode(
     first_series: &mut usize,
     config: &Config,
     resolver: &PathResolver,
+    status_message: &mut String,
 ) {
     // Handle navigation
     match code {
@@ -1143,6 +1136,7 @@ pub fn handle_menu_mode(
                 first_series,
                 config,
                 resolver,
+                status_message,
             );
         }
         KeyCode::Esc => {
@@ -1176,6 +1170,7 @@ pub fn handle_menu_mode(
                             first_series,
                             config,
                             resolver,
+                            status_message,
                         );
                         // Update menu selection to match the executed item
                         *menu_selection = index;
@@ -1207,6 +1202,7 @@ fn execute_menu_action(
     first_series: &mut usize,
     config: &Config,
     resolver: &PathResolver,
+    status_message: &mut String,
 ) {
     match action {
         MenuAction::Edit => {
@@ -1334,11 +1330,9 @@ fn execute_menu_action(
                 // Get root directory from PathResolver and scan automatically
                 let scan_dir = resolver.get_root_dir();
                 
-                // Display message showing scan directory
-                display::load_videos(
-                    &format!("Rescanning {}...", scan_dir.display()),
-                    0
-                ).expect("Failed to display rescan message");
+                // Set scanning status
+                *status_message = format!("Rescanning {}...", scan_dir.display());
+                *redraw = true;
                 
                 // Scan the directory for video files
                 let new_entries: Vec<_> = WalkDir::new(scan_dir)
@@ -1376,24 +1370,13 @@ fn execute_menu_action(
                     }
                 }
                 
+                // Update status after scan
                 if imported_count > 0 {
-                    display::load_videos(
-                        &format!("Rescan complete. Found {} new videos", imported_count),
-                        imported_count
-                    ).expect("Failed to display rescan result");
+                    *status_message = format!("Rescan complete. Found {} new videos", imported_count);
                 } else {
-                    display::load_videos(
-                        "Rescan complete. No new videos found",
-                        0
-                    ).expect("Failed to display rescan result");
+                    *status_message = "Rescan complete. No new videos found".to_string();
                 }
-                
-                if skipped_count > 0 {
-                    display::load_videos(
-                        &format!("Note: {} files were skipped", skipped_count),
-                        0
-                    ).expect("Failed to display message");
-                }
+                *redraw = true;
 
                 // Reload entries based on current view context
                 *entries = match view_context {

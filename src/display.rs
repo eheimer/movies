@@ -220,6 +220,7 @@ pub fn draw_screen(
     filter_mode: bool,
     first_series: &mut usize,
     view_context: &ViewContext,
+    status_message: &str,
 ) -> io::Result<()> {
     clear_screen()?;
 
@@ -408,6 +409,9 @@ pub fn draw_screen(
         show_cursor()?;
         move_cursor(8 + edit_cursor_pos, 3)?; // "filter: " is 8 chars, row 3 is filter line
     }
+
+    // Draw status line at the bottom
+    draw_status_line(status_message)?;
 
     Ok(())
 }
@@ -744,19 +748,36 @@ fn draw_window(
     Ok(())
 }
 
-pub fn load_videos(message: &str, count: usize) -> io::Result<()> {
-    // Display status message on the status line (last line of terminal)
-    let (_, rows) = get_terminal_size()?;
+/// Draw the status line at the bottom of the terminal
+/// 
+/// # Arguments
+/// * `message` - The status message to display
+/// 
+/// # Returns
+/// * `io::Result<()>` - Ok if successful, error otherwise
+fn draw_status_line(message: &str) -> io::Result<()> {
+    let (cols, rows) = get_terminal_size()?;
     let status_row = rows - 1; // Last row (0-indexed)
     
+    // Clear the status line
     clear_line(status_row)?;
-    if count > 0 {
-        print_at(0, status_row, &format!("{} ({} videos)", message, count))?;
+    
+    // Truncate message if it's too long for the terminal width
+    let truncated_message = if message.len() > cols {
+        &message[..cols]
     } else {
-        print_at(0, status_row, &message)?;
+        message
+    };
+    
+    // Display the message
+    if !truncated_message.is_empty() {
+        print_at(0, status_row, &truncated_message)?;
     }
+    
     Ok(())
 }
+
+
 
 pub fn get_max_displayed_items() -> io::Result<usize> {
     let (_, rows) = get_terminal_size()?;

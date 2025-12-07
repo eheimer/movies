@@ -38,11 +38,11 @@ use walkdir::WalkDir;
 /// * `config_path` - Path to the config file for saving
 /// 
 /// # Returns
-/// * `io::Result<(Vec<Entry>, PathResolver)>` - Loaded entries and PathResolver on success
+/// * `io::Result<(Vec<Entry>, PathResolver, String)>` - Loaded entries, PathResolver, and initial status message on success
 fn first_run_flow(
     config: &mut Config,
     config_path: &Path,
-) -> io::Result<(Vec<Entry>, PathResolver)> {
+) -> io::Result<(Vec<Entry>, PathResolver, String)> {
     let mut entry_path = String::new();
     let mut redraw = true;
     
@@ -195,7 +195,18 @@ fn first_run_flow(
                         // Load entries from database
                         let entries = get_entries().expect("Failed to get entries");
                         
-                        return Ok((entries, resolver));
+                        // Calculate appropriate status message based on whether DB existed and how many videos were imported
+                        let status_message = if db_exists {
+                            if imported_count > 0 {
+                                format!("Connected to existing database. Found {} new videos", imported_count)
+                            } else {
+                                format!("Connected to existing database at {}", db_path.display())
+                            }
+                        } else {
+                            format!("Created new database and imported {} videos", imported_count)
+                        };
+                        
+                        return Ok((entries, resolver, status_message));
                     }
                     KeyCode::Esc => {
                         println!("\nSetup cancelled. Exiting...");
@@ -216,7 +227,7 @@ fn first_run_flow(
     }
 }
 
-fn main_loop(mut entries: Vec<Entry>, mut config: Config, mut resolver: Option<PathResolver>, config_path: PathBuf) -> io::Result<()> {
+fn main_loop(mut entries: Vec<Entry>, mut config: Config, mut resolver: Option<PathResolver>, config_path: PathBuf, mut status_message: String) -> io::Result<()> {
     let mut current_item = 0;
     let mut redraw = true;
     let mut search: String = String::new();
@@ -339,6 +350,7 @@ fn main_loop(mut entries: Vec<Entry>, mut config: Config, mut resolver: Option<P
                 filter_mode,
                 &mut first_series,
                 &view_context,
+                &status_message,
             )?;
             redraw = false;
         }
@@ -367,6 +379,7 @@ fn main_loop(mut entries: Vec<Entry>, mut config: Config, mut resolver: Option<P
                             &mut config,
                             &config_path,
                             &mut resolver,
+                            &mut status_message,
                         );
                     }
                     Mode::Edit => {
@@ -430,6 +443,7 @@ fn main_loop(mut entries: Vec<Entry>, mut config: Config, mut resolver: Option<P
                                 &mut series_selection,
                                 &mut filter_mode,
                                 &mut first_series,
+                                &mut status_message,
                             )? {
                                 break Ok(());
                             }
@@ -514,6 +528,7 @@ fn main_loop(mut entries: Vec<Entry>, mut config: Config, mut resolver: Option<P
                                 &mut first_series,
                                 &config,
                                 res,
+                                &mut status_message,
                             );
                         } else {
                             // If resolver is None, exit menu and enter Entry mode
@@ -556,11 +571,11 @@ fn main() -> io::Result<()> {
     // Check if this is a first run (no database location configured)
     if config.is_first_run() {
         // First run - handle setup before initializing terminal
-        let (entries, resolver) = first_run_flow(&mut config, &app_paths.config_file)?;
+        let (entries, resolver, initial_status) = first_run_flow(&mut config, &app_paths.config_file)?;
         
         // Now start the main loop with the configured database
         initialize_terminal()?;
-        let result = main_loop(entries, config, Some(resolver), app_paths.config_file.clone());
+        let result = main_loop(entries, config, Some(resolver), app_paths.config_file.clone(), initial_status);
         restore_terminal()?;
         return result;
     }
@@ -639,10 +654,13 @@ fn main() -> io::Result<()> {
 
     // Load entries from database
     let entries = get_entries().expect("Failed to get entries");
+    
+    // Create empty initial status for non-first-run path
+    let initial_status = String::new();
 
     // Start main loop
     initialize_terminal()?;
-    let result = main_loop(entries, config, Some(resolver), app_paths.config_file);
+    let result = main_loop(entries, config, Some(resolver), app_paths.config_file, initial_status);
     restore_terminal()?;
     result
 }
