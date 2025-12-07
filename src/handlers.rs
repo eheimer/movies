@@ -144,7 +144,10 @@ pub fn handle_entry_mode(
                     }
                     
                     if skipped_count > 0 {
-                        eprintln!("Skipped {} files outside configured root directory", skipped_count);
+                        display::load_videos(
+                            &format!("Note: {} files were skipped (outside root directory)", skipped_count),
+                            0
+                        ).expect("Failed to display message");
                     }
 
                     // Load entries and switch to Browse mode
@@ -1386,7 +1389,10 @@ fn execute_menu_action(
                 }
                 
                 if skipped_count > 0 {
-                    eprintln!("Skipped {} files", skipped_count);
+                    display::load_videos(
+                        &format!("Note: {} files were skipped", skipped_count),
+                        0
+                    ).expect("Failed to display message");
                 }
 
                 // Reload entries based on current view context
