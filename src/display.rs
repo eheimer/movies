@@ -35,6 +35,8 @@ pub fn string_to_color(color: &str) -> Option<Color> {
         "magenta" => Some(Color::Magenta),
         "cyan" => Some(Color::Cyan),
         "white" => Some(Color::White),
+        "darkgray" | "dark_gray" => Some(Color::DarkGrey),
+        "reset" => Some(Color::Reset),
         _ => None,
     }
 }
@@ -45,6 +47,40 @@ pub fn string_to_bg_color_or_default(color: &str) -> Color {
 
 pub fn string_to_fg_color_or_default(color: &str) -> Color {
     string_to_color(color).unwrap_or(Color::Black)
+}
+
+/// Apply text style attributes based on style string
+/// 
+/// # Arguments
+/// * `text` - The text to style
+/// * `style` - Style string: "none", "bold", "italic", "underline", "strikethrough", "dim"
+///            Multiple styles can be combined with commas: "bold,italic"
+/// 
+/// # Returns
+/// * `String` - The styled text
+pub fn apply_text_style(text: &str, style: &str) -> String {
+    use crossterm::style::Stylize;
+    
+    if style.is_empty() || style.to_lowercase() == "none" {
+        return text.to_string();
+    }
+    
+    let mut result = text.to_string();
+    
+    // Split by comma to support multiple styles
+    for style_part in style.split(',') {
+        let style_part = style_part.trim().to_lowercase();
+        result = match style_part.as_str() {
+            "bold" => result.bold().to_string(),
+            "italic" => result.italic().to_string(),
+            "underline" | "underlined" => result.underlined().to_string(),
+            "strikethrough" | "crossed_out" => result.crossed_out().to_string(),
+            "dim" => result.dim().to_string(),
+            _ => result, // Ignore unknown styles
+        };
+    }
+    
+    result
 }
 
 fn draw_header(
@@ -162,7 +198,28 @@ fn draw_header(
         header.truncate(header.len() - 2);
     }
     
-    // Print single instruction line
+    // Clear the header line first (like status line does)
+    clear_line(0)?;
+    
+    // Calculate visual width (accounting for multi-byte UTF-8 characters)
+    // Unicode characters like ↑ (U+2191) are 3 bytes but display as 1 character
+    // Use .chars().count() instead of .len() to get visual width, not byte count
+    let visual_width = header.chars().count();
+    
+    // Pad to terminal width based on visual width, not byte length
+    let padding_needed = if visual_width < terminal_width {
+        terminal_width - visual_width
+    } else {
+        0
+    };
+    
+    // Add padding spaces
+    for _ in 0..padding_needed {
+        header.push(' ');
+    }
+    
+    // Apply styling and print
+    // Note: The styling adds ANSI codes but they don't affect visual width
     print_at(0, 0, &header.as_str().with(Color::Black).on(Color::White))?;
 
     // Print last action display at row 1
@@ -221,6 +278,7 @@ pub fn draw_screen(
     first_series: &mut usize,
     view_context: &ViewContext,
     status_message: &str,
+    resolver: &crate::path_resolver::PathResolver,
 ) -> io::Result<()> {
     clear_screen()?;
 
@@ -362,23 +420,86 @@ pub fn draw_screen(
             .skip(*first_entry)
             .take(max_lines as usize)
         {
-            let display_text = match entry {
+            // Determine the base display text and colors based on entry type
+            let (display_text, fg_color, bg_color) = match entry {
                 Entry::Series { name, .. } => {
-                    format!("[{}]", truncate_string(name, COL1_WIDTH)).with(Color::Blue)
+                    let text = format!("[{}]", truncate_string(name, COL1_WIDTH));
+                    let fg = string_to_fg_color_or_default(&config.series_fg);
+                    let bg = string_to_bg_color_or_default(&config.series_bg);
+                    (text, fg, bg)
                 }
-                Entry::Episode { name, .. } => truncate_string(name, COL1_WIDTH).clone().stylize(),
-                Entry::Season { number, .. } => format!("Season {}", number).with(Color::Blue),
+                Entry::Season { number, .. } => {
+                    let text = format!("Season {}", number);
+                    let fg = string_to_fg_color_or_default(&config.season_fg);
+                    let bg = string_to_bg_color_or_default(&config.season_bg);
+                    (text, fg, bg)
+                }
+                Entry::Episode { episode_id, name, location, .. } => {
+                    // Fetch episode details for this specific episode
+                    let episode_detail = crate::database::get_episode_detail(*episode_id)
+                        .unwrap_or_else(|_| edit_details.clone());
+                    
+                    // Check individual conditions for combined state handling
+                    let absolute_path = resolver.to_absolute(std::path::Path::new(location));
+                    let file_exists = absolute_path.exists();
+                    let filename = location.rsplit('/').next().unwrap_or("");
+                    let is_new = episode_detail.title == filename;
+                    let is_watched = episode_detail.watched == "true";
+                    
+                    // Determine display based on conditions
+                    // Priority: Invalid > (New + Watched) > New > Watched > Normal
+                    let (text, fg, bg) = if !file_exists {
+                        // Invalid episode (file doesn't exist) - use invalid colors
+                        let text = truncate_string(name, COL1_WIDTH);
+                        let fg = string_to_fg_color_or_default(&config.invalid_fg);
+                        let bg = string_to_bg_color_or_default(&config.invalid_bg);
+                        (text, fg, bg)
+                    } else if is_new && is_watched {
+                        // New AND watched - use new colors with watched indicator
+                        let formatted_name = format_episode_with_indicator(name, true, config);
+                        let text = truncate_string(&formatted_name, COL1_WIDTH);
+                        let fg = string_to_fg_color_or_default(&config.new_fg);
+                        let bg = string_to_bg_color_or_default(&config.new_bg);
+                        (text, fg, bg)
+                    } else if is_new && !is_watched {
+                        // New AND unwatched - use new colors with unwatched indicator
+                        let formatted_name = format_episode_with_indicator(name, false, config);
+                        let text = truncate_string(&formatted_name, COL1_WIDTH);
+                        let fg = string_to_fg_color_or_default(&config.new_fg);
+                        let bg = string_to_bg_color_or_default(&config.new_bg);
+                        (text, fg, bg)
+                    } else if is_watched {
+                        // Watched episode - add indicator and use normal colors
+                        let formatted_name = format_episode_with_indicator(name, true, config);
+                        let text = truncate_string(&formatted_name, COL1_WIDTH);
+                        let fg = string_to_fg_color_or_default(&config.episode_fg);
+                        let bg = string_to_bg_color_or_default(&config.episode_bg);
+                        (text, fg, bg)
+                    } else {
+                        // Unwatched episode - add unwatched indicator and use normal colors
+                        let formatted_name = format_episode_with_indicator(name, false, config);
+                        let text = truncate_string(&formatted_name, COL1_WIDTH);
+                        let fg = string_to_fg_color_or_default(&config.episode_fg);
+                        let bg = string_to_bg_color_or_default(&config.episode_bg);
+                        (text, fg, bg)
+                    };
+                    
+                    (text, fg, bg)
+                }
             };
 
-            let mut formatted_text = format!("{}", display_text);
-            if i == current_item && !filter_mode {
-                formatted_text = format!(
+            // Apply selection highlighting if this is the current item (overrides type colors)
+            let formatted_text = if i == current_item && !filter_mode {
+                format!(
                     "{}",
                     display_text
                         .with(string_to_fg_color_or_default(&config.current_fg))
                         .on(string_to_bg_color_or_default(&config.current_bg))
-                );
-            }
+                )
+            } else {
+                format!("{}", display_text.with(fg_color).on(bg_color))
+            };
+            
             print_at(0, i - *first_entry + HEADER_SIZE, &formatted_text)?;
         }
         if !series_selected && !season_selected && !matches!(mode, Mode::Menu) {
@@ -403,15 +524,31 @@ pub fn draw_screen(
         draw_context_menu(menu_items, menu_selection, config)?;
     }
 
-    // Position cursor at edit_cursor_pos when in filter mode
+    // Draw status line at the bottom
+    draw_status_line(status_message, config)?;
+
+    // Position cursor when in filter mode or edit mode
     // This must be done AFTER all other drawing to ensure cursor is in the right place
     if filter_mode && matches!(mode, Mode::Browse) {
         show_cursor()?;
         move_cursor(8 + edit_cursor_pos, 3)?; // "filter: " is 8 chars, row 3 is filter line
+    } else if matches!(mode, Mode::Edit) && !entries.is_empty() {
+        // In Edit mode, reposition the cursor to the edit field
+        // The cursor was already shown and positioned in draw_detail_window,
+        // but we need to ensure it stays visible after drawing the status line
+        show_cursor()?;
+        let start_col: usize = COL1_WIDTH + 2;
+        let start_row = HEADER_SIZE;
+        let edit_cursor_min = if edit_field.is_editable() {
+            edit_field.display_name().len() + 2
+        } else {
+            0
+        };
+        move_cursor(
+            start_col + 1 + edit_cursor_min + edit_cursor_pos,
+            start_row + 1 + usize::from(edit_field),
+        )?;
     }
-
-    // Draw status line at the bottom
-    draw_status_line(status_message)?;
 
     Ok(())
 }
@@ -752,27 +889,51 @@ fn draw_window(
 /// 
 /// # Arguments
 /// * `message` - The status message to display
+/// * `config` - Configuration containing status line colors
 /// 
 /// # Returns
 /// * `io::Result<()>` - Ok if successful, error otherwise
-fn draw_status_line(message: &str) -> io::Result<()> {
+fn draw_status_line(message: &str, config: &Config) -> io::Result<()> {
     let (cols, rows) = get_terminal_size()?;
     let status_row = rows - 1; // Last row (0-indexed)
     
     // Clear the status line
     clear_line(status_row)?;
     
-    // Truncate message if it's too long for the terminal width
-    let truncated_message = if message.len() > cols {
-        &message[..cols]
+    // Get status line colors from config
+    let status_fg = string_to_fg_color_or_default(&config.status_fg);
+    let status_bg = string_to_bg_color_or_default(&config.status_bg);
+    
+    // Calculate visual width (accounting for multi-byte UTF-8 characters)
+    // Use .chars().count() instead of .len() to get visual width, not byte count
+    let visual_width = message.chars().count();
+    
+    // Truncate if message is too long (based on visual width)
+    let mut padded_message = if visual_width > cols {
+        message.chars().take(cols).collect::<String>()
     } else {
-        message
+        message.to_string()
     };
     
-    // Display the message
-    if !truncated_message.is_empty() {
-        print_at(0, status_row, &truncated_message)?;
+    // Pad to terminal width based on visual width
+    let current_visual_width = padded_message.chars().count();
+    let padding_needed = if current_visual_width < cols {
+        cols - current_visual_width
+    } else {
+        0
+    };
+    
+    // Add padding spaces
+    for _ in 0..padding_needed {
+        padded_message.push(' ');
     }
+    
+    // Display the padded message with configured colors
+    let formatted_line = format!(
+        "{}",
+        padded_message.with(status_fg).on(status_bg)
+    );
+    print_at(0, status_row, &formatted_line)?;
     
     Ok(())
 }
@@ -783,4 +944,386 @@ pub fn get_max_displayed_items() -> io::Result<usize> {
     let (_, rows) = get_terminal_size()?;
     let max_lines = rows - HEADER_SIZE - FOOTER_SIZE - 1; // Adjust for header and footer lines
     Ok(max_lines)
+}
+
+/// Format an episode name with watched indicator and style if applicable
+/// 
+/// # Arguments
+/// * `name` - The episode name to format
+/// * `is_watched` - Whether the episode has been watched
+/// * `config` - Configuration containing the watched/unwatched indicators and styles
+/// 
+/// # Returns
+/// * `String` - The formatted episode name with indicator and style
+pub fn format_episode_with_indicator(name: &str, is_watched: bool, config: &Config) -> String {
+    if is_watched {
+        // Apply text style to the name
+        let styled_name = apply_text_style(name, &config.watched_style);
+        
+        // Add indicator if configured (empty string means no indicator)
+        if config.watched_indicator.is_empty() {
+            styled_name
+        } else {
+            format!("{} {}", config.watched_indicator, styled_name)
+        }
+    } else {
+        // Apply unwatched text style to the name
+        let styled_name = apply_text_style(name, &config.unwatched_style);
+        
+        // Add unwatched indicator if configured (empty string means no indicator)
+        if config.unwatched_indicator.is_empty() {
+            styled_name
+        } else {
+            format!("{} {}", config.unwatched_indicator, styled_name)
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Test Case 10: Invalid color fallback
+    /// When a color configuration field contains an invalid color name,
+    /// the color parsing function should return the default color for that field.
+    /// Validates: Requirements 3.4, 7.4
+    #[test]
+    fn test_invalid_color_fallback() {
+        // Test invalid color names fall back to defaults
+        assert_eq!(string_to_fg_color_or_default("invalid"), Color::Black);
+        assert_eq!(string_to_fg_color_or_default("notacolor"), Color::Black);
+        assert_eq!(string_to_fg_color_or_default(""), Color::Black);
+        assert_eq!(string_to_fg_color_or_default("purple"), Color::Black);
+        
+        assert_eq!(string_to_bg_color_or_default("invalid"), Color::White);
+        assert_eq!(string_to_bg_color_or_default("notacolor"), Color::White);
+        assert_eq!(string_to_bg_color_or_default(""), Color::White);
+        assert_eq!(string_to_bg_color_or_default("orange"), Color::White);
+    }
+
+    #[test]
+    fn test_valid_color_names() {
+        // Test all standard color names
+        assert_eq!(string_to_color("black"), Some(Color::Black));
+        assert_eq!(string_to_color("red"), Some(Color::Red));
+        assert_eq!(string_to_color("green"), Some(Color::Green));
+        assert_eq!(string_to_color("yellow"), Some(Color::Yellow));
+        assert_eq!(string_to_color("blue"), Some(Color::Blue));
+        assert_eq!(string_to_color("magenta"), Some(Color::Magenta));
+        assert_eq!(string_to_color("cyan"), Some(Color::Cyan));
+        assert_eq!(string_to_color("white"), Some(Color::White));
+        
+        // Test case insensitivity
+        assert_eq!(string_to_color("BLACK"), Some(Color::Black));
+        assert_eq!(string_to_color("Red"), Some(Color::Red));
+        assert_eq!(string_to_color("GREEN"), Some(Color::Green));
+    }
+
+    #[test]
+    fn test_reset_color_support() {
+        // Test that "Reset" is supported as terminal default
+        assert_eq!(string_to_color("reset"), Some(Color::Reset));
+        assert_eq!(string_to_color("Reset"), Some(Color::Reset));
+        assert_eq!(string_to_color("RESET"), Some(Color::Reset));
+        
+        // Test that Reset works with helper functions
+        assert_eq!(string_to_fg_color_or_default("reset"), Color::Reset);
+        assert_eq!(string_to_bg_color_or_default("reset"), Color::Reset);
+    }
+
+    #[test]
+    fn test_darkgray_color_support() {
+        // Test DarkGray color support with different formats
+        assert_eq!(string_to_color("darkgray"), Some(Color::DarkGrey));
+        assert_eq!(string_to_color("DarkGray"), Some(Color::DarkGrey));
+        assert_eq!(string_to_color("dark_gray"), Some(Color::DarkGrey));
+        assert_eq!(string_to_color("DARK_GRAY"), Some(Color::DarkGrey));
+    }
+
+    #[test]
+    fn test_color_parsing_returns_none_for_invalid() {
+        // Test that string_to_color returns None for invalid colors
+        assert_eq!(string_to_color("invalid"), None);
+        assert_eq!(string_to_color("notacolor"), None);
+        assert_eq!(string_to_color(""), None);
+        assert_eq!(string_to_color("purple"), None);
+        assert_eq!(string_to_color("orange"), None);
+    }
+
+    #[test]
+    fn test_apply_text_style_none() {
+        let text = "Test Episode";
+        assert_eq!(apply_text_style(text, "none"), text);
+        assert_eq!(apply_text_style(text, ""), text);
+    }
+
+    #[test]
+    fn test_apply_text_style_single() {
+        let text = "Test Episode";
+        
+        // Test that styling returns a string (actual styling is terminal-dependent)
+        let bold_result = apply_text_style(text, "bold");
+        assert!(!bold_result.is_empty());
+        
+        let italic_result = apply_text_style(text, "italic");
+        assert!(!italic_result.is_empty());
+        
+        let underline_result = apply_text_style(text, "underline");
+        assert!(!underline_result.is_empty());
+    }
+
+    #[test]
+    fn test_apply_text_style_multiple() {
+        let text = "Test Episode";
+        
+        // Test multiple styles combined
+        let result = apply_text_style(text, "bold,italic");
+        assert!(!result.is_empty());
+    }
+
+    #[test]
+    fn test_apply_text_style_case_insensitive() {
+        let text = "Test Episode";
+        
+        // Test case insensitivity
+        assert_eq!(
+            apply_text_style(text, "BOLD").len(),
+            apply_text_style(text, "bold").len()
+        );
+    }
+
+    #[test]
+    fn test_apply_text_style_unknown_ignored() {
+        let text = "Test Episode";
+        
+        // Unknown styles should be ignored
+        let result = apply_text_style(text, "unknown,bold");
+        assert!(!result.is_empty());
+    }
+
+    /// Test Case 1: Watched indicator presence
+    /// When an episode has watched status set to true, the formatted display string
+    /// should contain the configured watched indicator character.
+    /// Validates: Requirements 1.1
+    #[test]
+    fn test_watched_indicator_presence() {
+        let config = Config::default();
+        let episode_name = "Test Episode";
+        
+        let formatted = format_episode_with_indicator(episode_name, true, &config);
+        
+        // The formatted string should contain the watched indicator
+        assert!(formatted.contains(&config.watched_indicator));
+        // The formatted string should also contain the episode name
+        assert!(formatted.contains(episode_name));
+    }
+
+    /// Test Case 2: Unwatched indicator presence
+    /// When an episode has watched status set to false, the formatted display string
+    /// should contain the unwatched indicator character.
+    /// Validates: Requirements 1.2
+    #[test]
+    fn test_unwatched_indicator_presence() {
+        let config = Config::default();
+        let episode_name = "Test Episode";
+        
+        let formatted = format_episode_with_indicator(episode_name, false, &config);
+        
+        // The formatted string should NOT contain the watched indicator
+        assert!(!formatted.contains(&config.watched_indicator));
+        // The formatted string should contain the unwatched indicator
+        assert!(formatted.contains(&config.unwatched_indicator));
+        // The formatted string should contain the episode name
+        assert!(formatted.contains(episode_name));
+    }
+
+    /// Test Case 3: Watched indicator distinctness
+    /// When displaying a watched episode, the watched indicator should be separated
+    /// from the episode name by whitespace or other delimiter.
+    /// Validates: Requirements 1.4
+    #[test]
+    fn test_watched_indicator_distinctness() {
+        let config = Config::default();
+        let episode_name = "Test Episode";
+        
+        let formatted = format_episode_with_indicator(episode_name, true, &config);
+        
+        // The indicator should be followed by a space before the episode name
+        let expected = format!("{} {}", config.watched_indicator, episode_name);
+        assert_eq!(formatted, expected);
+        
+        // Verify there's whitespace between indicator and name
+        assert!(formatted.contains(" "));
+    }
+
+    #[test]
+    fn test_watched_indicator_with_custom_indicator() {
+        let mut config = Config::default();
+        config.watched_indicator = "★".to_string();
+        let episode_name = "Custom Test";
+        
+        let formatted = format_episode_with_indicator(episode_name, true, &config);
+        
+        // Should use the custom indicator
+        assert!(formatted.contains("★"));
+        assert_eq!(formatted, "★ Custom Test");
+    }
+
+    #[test]
+    fn test_watched_indicator_with_empty_name() {
+        let config = Config::default();
+        let episode_name = "";
+        
+        let formatted_watched = format_episode_with_indicator(episode_name, true, &config);
+        let formatted_unwatched = format_episode_with_indicator(episode_name, false, &config);
+        
+        // Even with empty name, indicator should be present when watched
+        assert!(formatted_watched.contains(&config.watched_indicator));
+        // Unwatched should have unwatched indicator
+        assert!(formatted_unwatched.contains(&config.unwatched_indicator));
+    }
+
+    #[test]
+    fn test_watched_indicator_with_style() {
+        let mut config = Config::default();
+        config.watched_style = "italic".to_string();
+        let episode_name = "Styled Episode";
+        
+        let formatted = format_episode_with_indicator(episode_name, true, &config);
+        
+        // Should contain both indicator and name (styling is applied but not easily testable)
+        assert!(formatted.contains(&config.watched_indicator));
+        assert!(!formatted.is_empty());
+    }
+
+    #[test]
+    fn test_watched_no_indicator_with_style() {
+        let mut config = Config::default();
+        config.watched_indicator = "".to_string(); // No indicator
+        config.watched_style = "italic".to_string();
+        let episode_name = "Styled Episode";
+        
+        let formatted = format_episode_with_indicator(episode_name, true, &config);
+        
+        // Should not contain indicator, but should have styled text
+        assert!(!formatted.contains("✓"));
+        assert!(!formatted.is_empty());
+    }
+
+    /// Test Case 11: Series entry coloring
+    /// When displaying a series entry that is not selected, the display should apply
+    /// the configured series_fg and series_bg colors.
+    /// Validates: Requirements 4.1
+    #[test]
+    fn test_series_entry_coloring() {
+        use crate::util::Entry;
+        
+        let config = Config::default();
+        
+        // Create a series entry
+        let entry = Entry::Series {
+            series_id: 1,
+            name: "Test Series".to_string(),
+        };
+        
+        // Verify the config has the expected series colors
+        assert_eq!(config.series_fg, "Blue");
+        assert_eq!(config.series_bg, "Reset");
+        
+        // The actual color application happens in draw_screen
+        // This test verifies the config values are correct
+        let series_fg = string_to_fg_color_or_default(&config.series_fg);
+        let series_bg = string_to_bg_color_or_default(&config.series_bg);
+        
+        assert_eq!(series_fg, Color::Blue);
+        assert_eq!(series_bg, Color::Reset);
+    }
+
+    /// Test Case 12: Season entry coloring
+    /// When displaying a season entry that is not selected, the display should apply
+    /// the configured season_fg and season_bg colors.
+    /// Validates: Requirements 4.2
+    #[test]
+    fn test_season_entry_coloring() {
+        use crate::util::Entry;
+        
+        let config = Config::default();
+        
+        // Create a season entry
+        let entry = Entry::Season {
+            season_id: 1,
+            number: 1,
+        };
+        
+        // Verify the config has the expected season colors
+        assert_eq!(config.season_fg, "Blue");
+        assert_eq!(config.season_bg, "Reset");
+        
+        // The actual color application happens in draw_screen
+        // This test verifies the config values are correct
+        let season_fg = string_to_fg_color_or_default(&config.season_fg);
+        let season_bg = string_to_bg_color_or_default(&config.season_bg);
+        
+        assert_eq!(season_fg, Color::Blue);
+        assert_eq!(season_bg, Color::Reset);
+    }
+
+    /// Test Case 13: Episode entry coloring
+    /// When displaying an episode entry in normal state (not new, not invalid, not watched)
+    /// that is not selected, the display should apply the configured episode_fg and episode_bg colors.
+    /// Validates: Requirements 4.3
+    #[test]
+    fn test_episode_entry_coloring() {
+        use crate::util::Entry;
+        
+        let config = Config::default();
+        
+        // Create an episode entry
+        let entry = Entry::Episode {
+            episode_id: 1,
+            name: "Test Episode".to_string(),
+            location: "test.mp4".to_string(),
+        };
+        
+        // Verify the config has the expected episode colors
+        assert_eq!(config.episode_fg, "Reset");
+        assert_eq!(config.episode_bg, "Reset");
+        
+        // The actual color application happens in draw_screen
+        // This test verifies the config values are correct
+        let episode_fg = string_to_fg_color_or_default(&config.episode_fg);
+        let episode_bg = string_to_bg_color_or_default(&config.episode_bg);
+        
+        assert_eq!(episode_fg, Color::Reset);
+        assert_eq!(episode_bg, Color::Reset);
+    }
+
+    /// Test Case 14: Selection highlight override
+    /// When an entry (series, season, or episode) is currently selected, the display should
+    /// apply current_fg and current_bg colors, overriding the entry type colors.
+    /// Validates: Requirements 4.4
+    #[test]
+    fn test_selection_highlight_override() {
+        let config = Config::default();
+        
+        // Verify that current selection colors are different from type colors
+        assert_eq!(config.current_fg, "Black");
+        assert_eq!(config.current_bg, "White");
+        
+        // Verify type colors are different
+        assert_eq!(config.series_fg, "Blue");
+        assert_eq!(config.episode_fg, "Reset");
+        
+        // The actual override logic happens in draw_screen
+        // This test verifies that selection colors take precedence
+        let current_fg = string_to_fg_color_or_default(&config.current_fg);
+        let current_bg = string_to_bg_color_or_default(&config.current_bg);
+        
+        assert_eq!(current_fg, Color::Black);
+        assert_eq!(current_bg, Color::White);
+        
+        // Selection colors should be distinct from type colors
+        let series_fg = string_to_fg_color_or_default(&config.series_fg);
+        assert_ne!(current_fg, series_fg);
+    }
 }

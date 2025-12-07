@@ -139,12 +139,12 @@ pub fn episode_exists(location: &str) -> Result<bool> {
 /// * `resolver` - PathResolver for converting to relative paths and validation
 /// 
 /// # Returns
-/// * `Result<(), Box<dyn std::error::Error>>` - Ok if successful, error otherwise
+/// * `Result<bool, Box<dyn std::error::Error>>` - Ok(true) if inserted, Ok(false) if already exists, Err on error
 pub fn import_episode_relative(
     absolute_location: &str,
     name: &str,
     resolver: &PathResolver,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<bool, Box<dyn std::error::Error>> {
     let absolute_path = Path::new(absolute_location);
     
     // Validate that the path is under the configured root directory
@@ -157,7 +157,7 @@ pub fn import_episode_relative(
     
     // Check if episode already exists with this relative path
     if episode_exists(relative_location)? {
-        return Ok(());
+        return Ok(false); // Already exists, not inserted
     }
 
     let conn = get_connection().lock().unwrap();
@@ -167,7 +167,7 @@ pub fn import_episode_relative(
          VALUES (?1, ?2, false, 0, null, null, null, null)",
         params![relative_location, name],
     )?;
-    Ok(())
+    Ok(true) // Successfully inserted
 }
 
 pub fn get_entries() -> Result<Vec<Entry>> {

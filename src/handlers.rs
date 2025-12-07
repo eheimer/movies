@@ -115,7 +115,8 @@ pub fn handle_entry_mode(
                         // Use import_episode_relative with error handling for files outside root
                         if let Some(ref res) = resolver {
                             match database::import_episode_relative(&location, &name, res) {
-                                Ok(_) => imported_count += 1,
+                                Ok(true) => imported_count += 1,  // Only count if actually inserted
+                                Ok(false) => {},  // Already exists, don't count
                                 Err(e) => {
                                     eprintln!("Warning: Skipping file outside configured root directory: {} - {}", location, e);
                                     skipped_count += 1;
@@ -1362,7 +1363,8 @@ fn execute_menu_action(
                         .to_string();
 
                     match database::import_episode_relative(&location, &name, resolver) {
-                        Ok(_) => imported_count += 1,
+                        Ok(true) => imported_count += 1,  // Only count if actually inserted
+                        Ok(false) => {},  // Already exists, don't count
                         Err(e) => {
                             eprintln!("Warning: Skipping file: {} - {}", location, e);
                             skipped_count += 1;

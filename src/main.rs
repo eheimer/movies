@@ -174,7 +174,8 @@ fn first_run_flow(
                                 .to_string();
                             
                             match database::import_episode_relative(&location, &name, &resolver) {
-                                Ok(_) => imported_count += 1,
+                                Ok(true) => imported_count += 1,  // Only count if actually inserted
+                                Ok(false) => {},  // Already exists, don't count
                                 Err(_) => skipped_count += 1,
                             }
                         }
@@ -351,6 +352,7 @@ fn main_loop(mut entries: Vec<Entry>, mut config: Config, mut resolver: Option<P
                 &mut first_series,
                 &view_context,
                 &status_message,
+                resolver.as_ref().expect("PathResolver should be initialized"),
             )?;
             redraw = false;
         }
