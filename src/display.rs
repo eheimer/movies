@@ -13,7 +13,7 @@ use std::convert::From;
 use std::io;
 
 const HEADER_SIZE: usize = 5;
-const FOOTER_SIZE: usize = 0;
+const FOOTER_SIZE: usize = 1; // Reserve 1 line for status line at bottom
 const COL1_WIDTH: usize = 45;
 const MIN_COL2_WIDTH: usize = 20;
 const DETAIL_HEIGHT: usize = 11;
@@ -745,13 +745,16 @@ fn draw_window(
 }
 
 pub fn load_videos(message: &str, count: usize) -> io::Result<()> {
-    // clear_line(HEADER_SIZE + 1)?;
-    // if count > 0 {
-    //     print!("{} ({} videos)", message, count);
-    // } else {
-    //     print!("{}", message);
-    // }
-    // io::Write::flush(&mut io::stdout())?;
+    // Display status message on the status line (last line of terminal)
+    let (_, rows) = get_terminal_size()?;
+    let status_row = rows - 1; // Last row (0-indexed)
+    
+    clear_line(status_row)?;
+    if count > 0 {
+        print_at(0, status_row, &format!("{} ({} videos)", message, count))?;
+    } else {
+        print_at(0, status_row, &message)?;
+    }
     Ok(())
 }
 
