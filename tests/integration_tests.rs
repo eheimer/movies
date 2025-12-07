@@ -26,29 +26,29 @@ use tempfile::TempDir;
 fn test_config_reload_with_custom_colors() {
     // Create a temporary directory for the test
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    let config_path = temp_dir.path().join("config.json");
+    let config_path = temp_dir.path().join("config.yaml");
 
     // Create initial config with custom colors
-    let initial_config = r#"{
-  "current_fg": "Red",
-  "current_bg": "Blue",
-  "watched_indicator": "★",
-  "watched_fg": "Cyan",
-  "new_fg": "Yellow",
-  "new_bg": "Black",
-  "invalid_fg": "Magenta",
-  "invalid_bg": "White",
-  "series_fg": "Green",
-  "series_bg": "Black",
-  "season_fg": "Red",
-  "season_bg": "White",
-  "episode_fg": "Blue",
-  "episode_bg": "Yellow",
-  "status_fg": "Black",
-  "status_bg": "Cyan",
-  "video_extensions": ["mp4"],
-  "video_player": "/usr/bin/vlc"
-}"#;
+    let initial_config = r#"current_fg: Red
+current_bg: Blue
+watched_indicator: "★"
+watched_fg: Cyan
+new_fg: Yellow
+new_bg: Black
+invalid_fg: Magenta
+invalid_bg: White
+series_fg: Green
+series_bg: Black
+season_fg: Red
+season_bg: White
+episode_fg: Blue
+episode_bg: Yellow
+status_fg: Black
+status_bg: Cyan
+video_extensions:
+  - mp4
+video_player: /usr/bin/vlc
+"#;
     fs::write(&config_path, initial_config).expect("Failed to write initial config");
 
     // Load the config
@@ -73,26 +73,26 @@ fn test_config_reload_with_custom_colors() {
     assert_eq!(config.status_bg, "Cyan");
 
     // Modify the config file with different colors
-    let modified_config = r#"{
-  "current_fg": "Green",
-  "current_bg": "Red",
-  "watched_indicator": "●",
-  "watched_fg": "Yellow",
-  "new_fg": "Cyan",
-  "new_bg": "Magenta",
-  "invalid_fg": "White",
-  "invalid_bg": "Black",
-  "series_fg": "Magenta",
-  "series_bg": "Yellow",
-  "season_fg": "Cyan",
-  "season_bg": "Green",
-  "episode_fg": "White",
-  "episode_bg": "Red",
-  "status_fg": "Yellow",
-  "status_bg": "Blue",
-  "video_extensions": ["mkv"],
-  "video_player": "/usr/bin/mpv"
-}"#;
+    let modified_config = r#"current_fg: Green
+current_bg: Red
+watched_indicator: "●"
+watched_fg: Yellow
+new_fg: Cyan
+new_bg: Magenta
+invalid_fg: White
+invalid_bg: Black
+series_fg: Magenta
+series_bg: Yellow
+season_fg: Cyan
+season_bg: Green
+episode_fg: White
+episode_bg: Red
+status_fg: Yellow
+status_bg: Blue
+video_extensions:
+  - mkv
+video_player: /usr/bin/mpv
+"#;
     fs::write(&config_path, modified_config).expect("Failed to write modified config");
 
     // Reload the config

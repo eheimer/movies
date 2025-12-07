@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use serde_yaml;
 use std::fs;
 use std::path::PathBuf;
 
@@ -232,35 +233,31 @@ impl Config {
 }
 
 /// Read configuration from file
-/// If the config file has missing optional fields, they will be filled with defaults
-/// and the file will be updated.
+/// If the config file has missing optional fields, they will be filled with defaults.
 /// 
 /// # Arguments
-/// * `config_path` - Path to the config.json file
+/// * `config_path` - Path to the config.yaml file
 /// 
 /// # Returns
 /// * `Config` - Loaded configuration or default if file doesn't exist
+/// 
+/// # Behavior
+/// 1. If config.yaml exists, parse with serde_yaml
+/// 2. If config.yaml missing, create default config.yaml
+/// 3. Handle YAML parsing errors: display error, log warning, fall back to defaults
+/// 4. Unknown fields are ignored (serde default behavior)
+/// 5. Missing optional fields use default values (serde defaults)
 pub fn read_config(config_path: &PathBuf) -> Config {
     if config_path.exists() {
         match fs::read_to_string(config_path) {
             Ok(content) => {
-                match serde_json::from_str::<Config>(&content) {
+                match serde_yaml::from_str::<Config>(&content) {
                     Ok(config) => {
-                        // Write back the config to ensure any missing optional fields are added
-                        if let Ok(updated_json) = serde_json::to_string_pretty(&config) {
-                            // Only write if the content has changed
-                            if updated_json != content {
-                                if let Err(e) = fs::write(config_path, updated_json) {
-                                    eprintln!("Warning: Could not update config.json with default values: {}", e);
-                                    crate::logger::log_warn(&format!("Could not update config.json with default values: {}", e));
-                                }
-                            }
-                        }
                         config
                     }
                     Err(e) => {
-                        eprintln!("Error: Could not parse config.json: {}. Using default values.", e);
-                        crate::logger::log_warn(&format!("Could not parse config.json: {}. Using default values.", e));
+                        eprintln!("Error: Could not parse config.yaml: {}. Using default values.", e);
+                        crate::logger::log_warn(&format!("Could not parse config.yaml: {}. Using default values.", e));
                         let default_config = Config::default();
                         // Try to write the default config
                         save_config(&default_config, config_path);
@@ -269,30 +266,163 @@ pub fn read_config(config_path: &PathBuf) -> Config {
                 }
             }
             Err(e) => {
-                eprintln!("Error: Could not read the config.json file. Using default values.");
-                crate::logger::log_warn(&format!("Could not read config.json file: {}. Using default values.", e));
+                eprintln!("Error: Could not read the config.yaml file. Using default values.");
+                crate::logger::log_warn(&format!("Could not read config.yaml file: {}. Using default values.", e));
                 Config::default()
             }
         }
     } else {
+        // config.yaml doesn't exist, create default config.yaml
         let default_config = Config::default();
         save_config(&default_config, config_path);
         default_config
     }
 }
 
+/// Generate YAML configuration string with inline documentation
+/// 
+/// # Arguments
+/// * `config` - Configuration to serialize
+/// 
+/// # Returns
+/// * `String` - YAML string with inline comments documenting each setting
+fn generate_yaml_with_comments(config: &Config) -> String {
+    let mut yaml = String::new();
+    
+    // Database configuration
+    yaml.push_str("# === Database Configuration ===\n");
+    yaml.push_str("# Path to the SQLite database file\n");
+    yaml.push_str("# Set to null to use default location in executable directory\n");
+    if let Some(ref db_loc) = config.db_location {
+        yaml.push_str(&format!("db_location: \"{}\"\n", db_loc));
+    } else {
+        yaml.push_str("db_location: null\n");
+    }
+    yaml.push_str("\n");
+    
+    // Color documentation header
+    yaml.push_str("# === Color Configuration ===\n");
+    yaml.push_str("# Valid colors: Black, Red, Green, Yellow, Blue, Magenta, Cyan, White, DarkGray, Reset\n");
+    yaml.push_str("# Reset means use the terminal's default color\n");
+    yaml.push_str("\n");
+    
+    // Current selection colors
+    yaml.push_str("# Current selection colors (highlighted item in browse mode)\n");
+    yaml.push_str(&format!("current_fg: {}\n", config.current_fg));
+    yaml.push_str(&format!("current_bg: {}\n", config.current_bg));
+    yaml.push_str("\n");
+    
+    // Dirty state colors
+    yaml.push_str("# Dirty state colors (items with unsaved changes)\n");
+    yaml.push_str(&format!("dirty_fg: {}\n", config.dirty_fg));
+    yaml.push_str(&format!("dirty_bg: {}\n", config.dirty_bg));
+    yaml.push_str("\n");
+    
+    // Watched indicator
+    yaml.push_str("# Watched episode indicator\n");
+    yaml.push_str("# Unicode character displayed for watched episodes\n");
+    yaml.push_str(&format!("watched_indicator: \"{}\"\n", config.watched_indicator));
+    yaml.push_str("# Foreground color for watched indicator\n");
+    yaml.push_str(&format!("watched_fg: {}\n", config.watched_fg));
+    yaml.push_str("# Style for watched indicator (none, bold, dim, italic, underline)\n");
+    yaml.push_str(&format!("watched_style: {}\n", config.watched_style));
+    yaml.push_str("\n");
+    
+    // Unwatched indicator
+    yaml.push_str("# Unwatched episode indicator\n");
+    yaml.push_str("# Unicode character displayed for unwatched episodes\n");
+    yaml.push_str(&format!("unwatched_indicator: \"{}\"\n", config.unwatched_indicator));
+    yaml.push_str("# Foreground color for unwatched indicator\n");
+    yaml.push_str(&format!("unwatched_fg: {}\n", config.unwatched_fg));
+    yaml.push_str("# Style for unwatched indicator (none, bold, dim, italic, underline)\n");
+    yaml.push_str(&format!("unwatched_style: {}\n", config.unwatched_style));
+    yaml.push_str("\n");
+    
+    // New episode colors
+    yaml.push_str("# New episode colors (when title matches filename)\n");
+    yaml.push_str(&format!("new_fg: {}\n", config.new_fg));
+    yaml.push_str(&format!("new_bg: {}\n", config.new_bg));
+    yaml.push_str("\n");
+    
+    // Invalid episode colors
+    yaml.push_str("# Invalid episode colors (when video file doesn't exist)\n");
+    yaml.push_str(&format!("invalid_fg: {}\n", config.invalid_fg));
+    yaml.push_str(&format!("invalid_bg: {}\n", config.invalid_bg));
+    yaml.push_str("\n");
+    
+    // Series entry colors
+    yaml.push_str("# Series entry colors (for series items in browse mode)\n");
+    yaml.push_str(&format!("series_fg: {}\n", config.series_fg));
+    yaml.push_str(&format!("series_bg: {}\n", config.series_bg));
+    yaml.push_str("\n");
+    
+    // Season entry colors
+    yaml.push_str("# Season entry colors (for season items in browse mode)\n");
+    yaml.push_str(&format!("season_fg: {}\n", config.season_fg));
+    yaml.push_str(&format!("season_bg: {}\n", config.season_bg));
+    yaml.push_str("\n");
+    
+    // Episode entry colors
+    yaml.push_str("# Episode entry colors (for episode items in normal state)\n");
+    yaml.push_str(&format!("episode_fg: {}\n", config.episode_fg));
+    yaml.push_str(&format!("episode_bg: {}\n", config.episode_bg));
+    yaml.push_str("\n");
+    
+    // Status line colors
+    yaml.push_str("# Status line colors (bottom status bar)\n");
+    yaml.push_str(&format!("status_fg: {}\n", config.status_fg));
+    yaml.push_str(&format!("status_bg: {}\n", config.status_bg));
+    yaml.push_str("\n");
+    
+    // Logging configuration
+    yaml.push_str("# === Logging Configuration ===\n");
+    yaml.push_str("# Log file location\n");
+    yaml.push_str("# Set to null to use default location (app.log in executable directory)\n");
+    if let Some(ref log_file) = config.log_file {
+        yaml.push_str(&format!("log_file: \"{}\"\n", log_file));
+    } else {
+        yaml.push_str("log_file: null\n");
+    }
+    yaml.push_str("\n");
+    
+    yaml.push_str("# Log level - controls verbosity of logging\n");
+    yaml.push_str("# Valid levels:\n");
+    yaml.push_str("#   error - Only log errors\n");
+    yaml.push_str("#   warn  - Log warnings and errors\n");
+    yaml.push_str("#   info  - Log informational messages, warnings, and errors (default)\n");
+    yaml.push_str("#   debug - Log all messages including detailed debugging information\n");
+    yaml.push_str("# Invalid values will default to info\n");
+    yaml.push_str(&format!("log_level: {}\n", config.log_level));
+    yaml.push_str("\n");
+    
+    // Video configuration
+    yaml.push_str("# === Video Configuration ===\n");
+    yaml.push_str("# File extensions recognized as video files\n");
+    yaml.push_str("video_extensions:\n");
+    for ext in &config.video_extensions {
+        yaml.push_str(&format!("  - {}\n", ext));
+    }
+    yaml.push_str("\n");
+    
+    yaml.push_str("# Path to external video player executable\n");
+    yaml.push_str(&format!("video_player: {}\n", config.video_player));
+    
+    yaml
+}
+
+
+
 /// Save configuration to file
 /// 
 /// # Arguments
 /// * `config` - Configuration to save
-/// * `config_path` - Path to the config.json file
+/// * `config_path` - Path to the config.yaml file
 pub fn save_config(config: &Config, config_path: &PathBuf) {
-    if let Ok(config_json) = serde_json::to_string_pretty(config) {
-        if let Err(e) = fs::write(config_path, config_json) {
-            eprintln!("Warning: Could not write config file at: {}", config_path.display());
-            eprintln!("Error: {}", e);
-            crate::logger::log_warn(&format!("Could not write config file at {}: {}", config_path.display(), e));
-        }
+    let yaml_content = generate_yaml_with_comments(config);
+    if let Err(e) = fs::write(config_path, yaml_content) {
+        eprintln!("Warning: Could not write config.yaml file at: {}", config_path.display());
+        eprintln!("Error: {}", e);
+        crate::logger::log_warn(&format!("Could not write config.yaml file at {}: {}", config_path.display(), e));
     }
 }
 
@@ -329,19 +459,20 @@ mod tests {
     fn test_missing_config_field_defaults() {
         // Create a temporary directory for the test
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
-        let config_path = temp_dir.path().join("config.json");
+        let yaml_path = temp_dir.path().join("config.yaml");
 
-        // Create a minimal config file with only required fields (missing all new color fields)
-        let minimal_config = r#"{
-  "current_fg": "Black",
-  "current_bg": "Yellow",
-  "video_extensions": ["mp4", "mkv"],
-  "video_player": "/usr/bin/vlc"
-}"#;
-        fs::write(&config_path, minimal_config).expect("Failed to write test config");
+        // Create a minimal YAML config file with only required fields (missing all new color fields)
+        let minimal_config = r#"current_fg: Black
+current_bg: Yellow
+video_extensions:
+  - mp4
+  - mkv
+video_player: /usr/bin/vlc
+"#;
+        fs::write(&yaml_path, minimal_config).expect("Failed to write test config");
 
         // Load the config
-        let config = read_config(&config_path);
+        let config = read_config(&yaml_path);
 
         // Verify all new color fields have their default values
         assert_eq!(config.watched_indicator, "●");
@@ -414,41 +545,41 @@ mod tests {
     fn test_config_with_all_fields_loads_correctly() {
         // Create a temporary directory for the test
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
-        let config_path = temp_dir.path().join("config.json");
+        let yaml_path = temp_dir.path().join("config.yaml");
 
-        // Create a complete config file with custom values for all fields
-        let complete_config = r#"{
-  "current_fg": "Red",
-  "current_bg": "Blue",
-  "dirty_fg": "Yellow",
-  "dirty_bg": "Magenta",
-  "watched_indicator": "●",
-  "watched_fg": "Green",
-  "watched_style": "none",
-  "unwatched_indicator": "○",
-  "unwatched_fg": "Reset",
-  "unwatched_style": "none",
-  "new_fg": "Yellow",
-  "new_bg": "Black",
-  "invalid_fg": "Magenta",
-  "invalid_bg": "White",
-  "series_fg": "Green",
-  "series_bg": "Black",
-  "season_fg": "Red",
-  "season_bg": "White",
-  "episode_fg": "Blue",
-  "episode_bg": "Yellow",
-  "status_fg": "Black",
-  "status_bg": "Cyan",
-  "log_file": "/custom/path/app.log",
-  "log_level": "debug",
-  "video_extensions": ["mp4"],
-  "video_player": "/usr/bin/mpv"
-}"#;
-        fs::write(&config_path, complete_config).expect("Failed to write test config");
+        // Create a complete YAML config file with custom values for all fields
+        let complete_config = r#"current_fg: Red
+current_bg: Blue
+dirty_fg: Yellow
+dirty_bg: Magenta
+watched_indicator: "●"
+watched_fg: Green
+watched_style: none
+unwatched_indicator: "○"
+unwatched_fg: Reset
+unwatched_style: none
+new_fg: Yellow
+new_bg: Black
+invalid_fg: Magenta
+invalid_bg: White
+series_fg: Green
+series_bg: Black
+season_fg: Red
+season_bg: White
+episode_fg: Blue
+episode_bg: Yellow
+status_fg: Black
+status_bg: Cyan
+log_file: "/custom/path/app.log"
+log_level: debug
+video_extensions:
+  - mp4
+video_player: /usr/bin/mpv
+"#;
+        fs::write(&yaml_path, complete_config).expect("Failed to write test config");
 
         // Load the config
-        let config = read_config(&config_path);
+        let config = read_config(&yaml_path);
 
         // Verify all custom values are loaded correctly
         assert_eq!(config.current_fg, "Red");
@@ -479,66 +610,13 @@ mod tests {
         assert_eq!(config.video_player, "/usr/bin/mpv");
     }
 
-    #[test]
-    fn test_backward_compatibility_with_old_config() {
-        // Create a temporary directory for the test
-        let temp_dir = TempDir::new().expect("Failed to create temp dir");
-        let config_path = temp_dir.path().join("config.json");
 
-        // Create an old-style config file (before color enhancements were added)
-        // This simulates a user upgrading from an older version
-        let old_config = r#"{
-  "current_fg": "Black",
-  "current_bg": "Yellow",
-  "video_extensions": ["mp4", "mkv", "avi"],
-  "video_player": "/usr/bin/vlc"
-}"#;
-        fs::write(&config_path, old_config).expect("Failed to write test config");
-
-        // Load the config
-        let config = read_config(&config_path);
-
-        // Verify old fields are preserved
-        assert_eq!(config.current_fg, "Black");
-        assert_eq!(config.current_bg, "Yellow");
-        assert_eq!(config.video_extensions, vec!["mp4", "mkv", "avi"]);
-        assert_eq!(config.video_player, "/usr/bin/vlc");
-
-        // Verify new fields have defaults
-        assert_eq!(config.watched_indicator, "●");
-        assert_eq!(config.watched_fg, "Green");
-        assert_eq!(config.unwatched_indicator, "○");
-        assert_eq!(config.unwatched_fg, "Reset");
-        assert_eq!(config.new_fg, "Green");
-        assert_eq!(config.new_bg, "Reset");
-        assert_eq!(config.invalid_fg, "Red");
-        assert_eq!(config.invalid_bg, "Reset");
-        assert_eq!(config.series_fg, "Blue");
-        assert_eq!(config.series_bg, "Reset");
-        assert_eq!(config.season_fg, "Blue");
-        assert_eq!(config.season_bg, "Reset");
-        assert_eq!(config.episode_fg, "Reset");
-        assert_eq!(config.episode_bg, "Reset");
-        assert_eq!(config.status_fg, "White");
-        assert_eq!(config.status_bg, "DarkGray");
-        assert_eq!(config.log_file, None);
-        assert_eq!(config.log_level, "info");
-
-        // Verify the config file was updated with the new fields
-        let updated_content = fs::read_to_string(&config_path)
-            .expect("Failed to read updated config");
-        assert!(updated_content.contains("watched_indicator"));
-        assert!(updated_content.contains("unwatched_indicator"));
-        assert!(updated_content.contains("series_fg"));
-        assert!(updated_content.contains("status_bg"));
-        assert!(updated_content.contains("log_level"));
-    }
 
     #[test]
     fn test_save_config_includes_all_fields() {
         // Create a temporary directory for the test
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
-        let config_path = temp_dir.path().join("config.json");
+        let config_path = temp_dir.path().join("config.yaml");
 
         // Create a config with custom values
         let mut config = Config::default();
@@ -553,104 +631,108 @@ mod tests {
         let saved_content = fs::read_to_string(&config_path)
             .expect("Failed to read saved config");
         
-        // Check that all new color fields are in the saved file
-        assert!(saved_content.contains("watched_indicator"));
-        assert!(saved_content.contains("watched_fg"));
-        assert!(saved_content.contains("unwatched_indicator"));
-        assert!(saved_content.contains("unwatched_fg"));
-        assert!(saved_content.contains("new_fg"));
-        assert!(saved_content.contains("new_bg"));
-        assert!(saved_content.contains("invalid_fg"));
-        assert!(saved_content.contains("invalid_bg"));
-        assert!(saved_content.contains("series_fg"));
-        assert!(saved_content.contains("series_bg"));
-        assert!(saved_content.contains("season_fg"));
-        assert!(saved_content.contains("season_bg"));
-        assert!(saved_content.contains("episode_fg"));
-        assert!(saved_content.contains("episode_bg"));
-        assert!(saved_content.contains("status_fg"));
-        assert!(saved_content.contains("status_bg"));
-        assert!(saved_content.contains("log_file"));
-        assert!(saved_content.contains("log_level"));
+        // Check that all new color fields are in the saved file (YAML format)
+        assert!(saved_content.contains("watched_indicator:"));
+        assert!(saved_content.contains("watched_fg:"));
+        assert!(saved_content.contains("unwatched_indicator:"));
+        assert!(saved_content.contains("unwatched_fg:"));
+        assert!(saved_content.contains("new_fg:"));
+        assert!(saved_content.contains("new_bg:"));
+        assert!(saved_content.contains("invalid_fg:"));
+        assert!(saved_content.contains("invalid_bg:"));
+        assert!(saved_content.contains("series_fg:"));
+        assert!(saved_content.contains("series_bg:"));
+        assert!(saved_content.contains("season_fg:"));
+        assert!(saved_content.contains("season_bg:"));
+        assert!(saved_content.contains("episode_fg:"));
+        assert!(saved_content.contains("episode_bg:"));
+        assert!(saved_content.contains("status_fg:"));
+        assert!(saved_content.contains("status_bg:"));
+        assert!(saved_content.contains("log_file:"));
+        assert!(saved_content.contains("log_level:"));
 
-        // Verify custom values are saved
-        assert!(saved_content.contains("\"Magenta\""));
-        assert!(saved_content.contains("\"●\""));
-        assert!(saved_content.contains("\"○\""));
-        assert!(saved_content.contains("\"Cyan\""));
+        // Verify custom values are saved (YAML format without JSON quotes for simple values)
+        assert!(saved_content.contains("current_fg: Magenta"));
+        assert!(saved_content.contains("watched_indicator: \"●\""));
+        assert!(saved_content.contains("unwatched_indicator: \"○\""));
+        assert!(saved_content.contains("series_fg: Cyan"));
+        
+        // Verify inline documentation is present
+        assert!(saved_content.contains("=== Color Configuration ==="));
+        assert!(saved_content.contains("=== Logging Configuration ==="));
     }
 
     /// Test Case: Default log file location when not configured
-    /// When no log_file is configured in config.json, the Config should have log_file as None.
+    /// When no log_file is configured in config.yaml, the Config should have log_file as None.
     /// Validates: Requirements 2.1, 2.3
     #[test]
     fn test_default_log_file_location() {
         // Create a temporary directory for the test
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
-        let config_path = temp_dir.path().join("config.json");
+        let yaml_path = temp_dir.path().join("config.yaml");
 
-        // Create a config file without log_file
-        let config_without_log = r#"{
-  "current_fg": "Black",
-  "current_bg": "White",
-  "video_extensions": ["mp4"],
-  "video_player": "/usr/bin/vlc"
-}"#;
-        fs::write(&config_path, config_without_log).expect("Failed to write test config");
+        // Create a YAML config file without log_file
+        let config_without_log = r#"current_fg: Black
+current_bg: White
+video_extensions:
+  - mp4
+video_player: /usr/bin/vlc
+"#;
+        fs::write(&yaml_path, config_without_log).expect("Failed to write test config");
 
         // Load the config
-        let config = read_config(&config_path);
+        let config = read_config(&yaml_path);
 
         // Verify log_file is None (will use standard location)
         assert_eq!(config.log_file, None);
     }
 
     /// Test Case: Custom log file location when configured
-    /// When a log_file path is specified in config.json, the Config should contain that path.
+    /// When a log_file path is specified in config.yaml, the Config should contain that path.
     /// Validates: Requirements 2.1
     #[test]
     fn test_custom_log_file_location() {
         // Create a temporary directory for the test
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
-        let config_path = temp_dir.path().join("config.json");
+        let yaml_path = temp_dir.path().join("config.yaml");
 
-        // Create a config file with custom log_file
-        let config_with_log = r#"{
-  "current_fg": "Black",
-  "current_bg": "White",
-  "log_file": "/custom/logs/myapp.log",
-  "video_extensions": ["mp4"],
-  "video_player": "/usr/bin/vlc"
-}"#;
-        fs::write(&config_path, config_with_log).expect("Failed to write test config");
+        // Create a YAML config file with custom log_file
+        let config_with_log = r#"current_fg: Black
+current_bg: White
+log_file: "/custom/logs/myapp.log"
+video_extensions:
+  - mp4
+video_player: /usr/bin/vlc
+"#;
+        fs::write(&yaml_path, config_with_log).expect("Failed to write test config");
 
         // Load the config
-        let config = read_config(&config_path);
+        let config = read_config(&yaml_path);
 
         // Verify log_file contains the custom path
         assert_eq!(config.log_file, Some("/custom/logs/myapp.log".to_string()));
     }
 
     /// Test Case: Default log level when not configured
-    /// When no log_level is configured in config.json, the Config should default to "info".
+    /// When no log_level is configured in config.yaml, the Config should default to "info".
     /// Validates: Requirements 2.2, 2.4
     #[test]
     fn test_default_log_level() {
         // Create a temporary directory for the test
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
-        let config_path = temp_dir.path().join("config.json");
+        let yaml_path = temp_dir.path().join("config.yaml");
 
-        // Create a config file without log_level
-        let config_without_level = r#"{
-  "current_fg": "Black",
-  "current_bg": "White",
-  "video_extensions": ["mp4"],
-  "video_player": "/usr/bin/vlc"
-}"#;
-        fs::write(&config_path, config_without_level).expect("Failed to write test config");
+        // Create a YAML config file without log_level
+        let config_without_level = r#"current_fg: Black
+current_bg: White
+video_extensions:
+  - mp4
+video_player: /usr/bin/vlc
+"#;
+        fs::write(&yaml_path, config_without_level).expect("Failed to write test config");
 
         // Load the config
-        let config = read_config(&config_path);
+        let config = read_config(&yaml_path);
 
         // Verify log_level defaults to "info"
         assert_eq!(config.log_level, "info");
@@ -691,4 +773,100 @@ mod tests {
         assert_eq!(parse_log_level("123"), LogLevel::Info);
         assert_eq!(parse_log_level("warning"), LogLevel::Info);
     }
+
+    /// Test Case: YAML generation includes all required comments
+    /// When generate_yaml_with_comments is called, the output should include
+    /// comprehensive inline documentation for all settings.
+    /// Validates: Requirements 1.5, 3.1, 4.1, 7.1, 7.2, 7.3
+    #[test]
+    fn test_yaml_generation_includes_comments() {
+        let config = Config::default();
+        let yaml = generate_yaml_with_comments(&config);
+
+        // Verify section headers are present
+        assert!(yaml.contains("=== Database Configuration ==="));
+        assert!(yaml.contains("=== Color Configuration ==="));
+        assert!(yaml.contains("=== Logging Configuration ==="));
+        assert!(yaml.contains("=== Video Configuration ==="));
+
+        // Verify color documentation
+        assert!(yaml.contains("Valid colors: Black, Red, Green, Yellow, Blue, Magenta, Cyan, White, DarkGray, Reset"));
+
+        // Verify log level documentation
+        assert!(yaml.contains("error - Only log errors"));
+        assert!(yaml.contains("warn  - Log warnings and errors"));
+        assert!(yaml.contains("info  - Log informational messages, warnings, and errors"));
+        assert!(yaml.contains("debug - Log all messages including detailed debugging information"));
+
+        // Verify specific setting comments
+        assert!(yaml.contains("Path to the SQLite database file"));
+        assert!(yaml.contains("Current selection colors"));
+        assert!(yaml.contains("Watched episode indicator"));
+        assert!(yaml.contains("Unwatched episode indicator"));
+        assert!(yaml.contains("New episode colors"));
+        assert!(yaml.contains("Invalid episode colors"));
+        assert!(yaml.contains("Series entry colors"));
+        assert!(yaml.contains("Season entry colors"));
+        assert!(yaml.contains("Episode entry colors"));
+        assert!(yaml.contains("Status line colors"));
+        assert!(yaml.contains("Log file location"));
+        assert!(yaml.contains("File extensions recognized as video files"));
+        assert!(yaml.contains("Path to external video player executable"));
+    }
+
+    /// Test Case: YAML generation has proper formatting
+    /// When generate_yaml_with_comments is called, the output should use
+    /// consistent 2-space indentation and group related settings.
+    /// Validates: Requirements 7.1, 7.2, 7.3, 7.4
+    #[test]
+    fn test_yaml_generation_formatting() {
+        let config = Config::default();
+        let yaml = generate_yaml_with_comments(&config);
+
+        // Verify 2-space indentation for list items
+        assert!(yaml.contains("  - mp4"));
+        assert!(yaml.contains("  - mkv"));
+
+        // Verify blank lines between groups (check for double newlines)
+        assert!(yaml.contains("\n\n"));
+
+        // Verify comments are placed above settings (# followed by setting name)
+        assert!(yaml.contains("# Current selection colors"));
+        assert!(yaml.contains("current_fg:"));
+
+        // Verify null values are properly formatted
+        assert!(yaml.contains("db_location: null") || yaml.contains("db_location: \""));
+        assert!(yaml.contains("log_file: null") || yaml.contains("log_file: \""));
+    }
+
+    /// Test Case: YAML generation preserves all config values
+    /// When generate_yaml_with_comments is called with custom config values,
+    /// the output should include all those values correctly.
+    /// Validates: Requirements 1.5, 7.4, 7.5
+    #[test]
+    fn test_yaml_generation_preserves_values() {
+        let mut config = Config::default();
+        config.current_fg = "Magenta".to_string();
+        config.current_bg = "Cyan".to_string();
+        config.watched_indicator = "✓".to_string();
+        config.unwatched_indicator = "✗".to_string();
+        config.log_level = "debug".to_string();
+        config.video_player = "/usr/bin/mpv".to_string();
+        config.db_location = Some("/custom/path/db.sqlite".to_string());
+        config.log_file = Some("/var/log/app.log".to_string());
+
+        let yaml = generate_yaml_with_comments(&config);
+
+        // Verify custom values are in the output
+        assert!(yaml.contains("current_fg: Magenta"));
+        assert!(yaml.contains("current_bg: Cyan"));
+        assert!(yaml.contains("watched_indicator: \"✓\""));
+        assert!(yaml.contains("unwatched_indicator: \"✗\""));
+        assert!(yaml.contains("log_level: debug"));
+        assert!(yaml.contains("video_player: /usr/bin/mpv"));
+        assert!(yaml.contains("db_location: \"/custom/path/db.sqlite\""));
+        assert!(yaml.contains("log_file: \"/var/log/app.log\""));
+    }
+
+
 }

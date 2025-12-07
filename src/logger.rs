@@ -170,11 +170,29 @@ mod tests {
     use std::time::Duration;
     use tempfile::TempDir;
 
+    /// Helper function to clean up logger state before each test
+    fn cleanup_logger() {
+        {
+            let mut guard = LOG_FILE.lock().unwrap();
+            if let Some(ref mut file) = *guard {
+                let _ = file.flush();
+                let _ = file.sync_all();
+            }
+            *guard = None;
+        }
+        {
+            let mut guard = LOG_LEVEL.lock().unwrap();
+            *guard = LogLevel::Info;
+        }
+    }
+
     /// Test log level filtering - error level only logs errors
     /// Validates: Requirements 3.1
     #[test]
     #[serial_test::serial]
     fn test_log_level_error_filtering() {
+        cleanup_logger();
+        
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
         let log_file = temp_dir.path().join("test_error.log");
 
@@ -214,6 +232,8 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn test_log_level_warn_filtering() {
+        cleanup_logger();
+        
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
         let log_file = temp_dir.path().join("test_warn.log");
 
@@ -253,6 +273,8 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn test_log_level_info_filtering() {
+        cleanup_logger();
+        
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
         let log_file = temp_dir.path().join("test_info.log");
 
@@ -292,6 +314,8 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn test_log_level_debug_filtering() {
+        cleanup_logger();
+        
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
         let log_file = temp_dir.path().join("test_debug.log");
 
@@ -331,6 +355,8 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn test_timestamp_formatting() {
+        cleanup_logger();
+        
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
         let log_file = temp_dir.path().join("test_timestamp.log");
 
@@ -396,6 +422,8 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn test_log_entry_formatting() {
+        cleanup_logger();
+        
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
         let log_file = temp_dir.path().join("test_format.log");
 
@@ -436,6 +464,8 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn test_log_file_creation() {
+        cleanup_logger();
+        
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
         let log_file = temp_dir.path().join("test_create.log");
 
@@ -455,6 +485,8 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn test_log_directory_creation() {
+        cleanup_logger();
+        
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
         let log_dir = temp_dir.path().join("nested").join("log").join("directory");
         let log_file = log_dir.join("test.log");

@@ -34,7 +34,7 @@ A terminal-based video library manager written in Rust. Browse, organize, and pl
 - **crossterm** (0.23): Terminal manipulation and event handling
 - **colored** (2.0): Terminal color output
 - **rusqlite** (0.26.0): SQLite database interface
-- **serde** (1.0) + **serde_json**: Configuration serialization
+- **serde** (1.0) + **serde_yaml**: Configuration serialization
 - **walkdir** (2.3): Recursive directory traversal
 - **lazy_static** (1.4): Global database connection management
 
@@ -50,29 +50,41 @@ cargo build --release
 
 ## Configuration
 
-The application uses a `config.json` file in the project root. If it doesn't exist, it will be created with default values on first run.
+The application uses a `config.yaml` file in the project root. If it doesn't exist, it will be created with default values on first run.
 
-Example `config.json`:
+Example `config.yaml`:
 
-```json
-{
-  "root_dir": "/home/user/Videos",
-  "path": "./videos",
-  "current_fg": "Black",
-  "current_bg": "White",
-  "video_extensions": ["mp4", "mkv", "avi", "mov", "flv", "wmv", "webm"],
-  "video_player": "/usr/bin/vlc"
-}
+```yaml
+# === Database Configuration ===
+db_location: null
+
+# === Color Configuration ===
+current_fg: Black
+current_bg: White
+
+# === Video Configuration ===
+video_extensions:
+  - mp4
+  - mkv
+  - avi
+  - mov
+  - flv
+  - wmv
+  - webm
+video_player: /usr/bin/vlc
 ```
 
 ### Configuration Options
 
-- **root_dir**: Base directory for video files (used for relative path storage)
-- **path**: Default directory to scan for videos
-- **current_fg**: Foreground color for selected items
-- **current_bg**: Background color for selected items
+The `config.yaml` file includes inline documentation for all settings. Key options include:
+
+- **db_location**: Path to the SQLite database file (null uses default location)
+- **current_fg/current_bg**: Colors for selected items
 - **video_extensions**: Supported video file formats
 - **video_player**: Path to your video player executable (e.g., VLC, mpv)
+- **log_level**: Logging verbosity (error, warn, info, debug)
+
+See the generated `config.yaml` file for complete documentation of all available settings.
 
 ### Database
 

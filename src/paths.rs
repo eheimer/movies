@@ -18,7 +18,7 @@ impl AppPaths {
                 config_dir.display(), e))?;
         
         Ok(AppPaths {
-            config_file: config_dir.join("config.json"),
+            config_file: config_dir.join("config.yaml"),
         })
     }
 }

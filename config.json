@@ -1,8 +1,0 @@
-{
-  "root_dir": "/mnt/bigguy/movies",
-  "path": ".",
-  "current_fg": "Black",
-  "current_bg": "Yellow",
-  "video_extensions": ["mp4", "mkv", "avi", "mov", "flv", "wmv", "webm"],
-  "video_player": "/usr/bin/vlc"
-}
