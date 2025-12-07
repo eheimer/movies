@@ -13,7 +13,7 @@ use std::convert::From;
 use std::io;
 
 const HEADER_SIZE: usize = 5;
-const FOOTER_SIZE: usize = 0;
+const FOOTER_SIZE: usize = 1; // Reserve 1 line for status line at bottom
 const COL1_WIDTH: usize = 45;
 const MIN_COL2_WIDTH: usize = 20;
 const DETAIL_HEIGHT: usize = 11;
@@ -745,14 +745,15 @@ fn draw_window(
 }
 
 pub fn load_videos(message: &str, count: usize) -> io::Result<()> {
-    // Display status message on the status line (row 1)
-    // This temporarily overrides the last_action_display during operations.
-    // When the screen redraws after the operation completes, the last action will reappear.
-    clear_line(1)?;
+    // Display status message on the status line (last line of terminal)
+    let (_, rows) = get_terminal_size()?;
+    let status_row = rows - 1; // Last row (0-indexed)
+    
+    clear_line(status_row)?;
     if count > 0 {
-        print_at(0, 1, &format!("{} ({} videos)", message, count))?;
+        print_at(0, status_row, &format!("{} ({} videos)", message, count))?;
     } else {
-        print_at(0, 1, &message)?;
+        print_at(0, status_row, &message)?;
     }
     Ok(())
 }
