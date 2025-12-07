@@ -9,6 +9,7 @@ mod path_resolver;
 mod paths;
 mod terminal;
 mod util;
+mod video_metadata;
 
 use config::{read_config, save_config, Config};
 use crossterm::event::{self, Event, KeyCode, KeyEvent};

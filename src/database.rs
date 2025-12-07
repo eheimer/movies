@@ -722,3 +722,28 @@ pub fn get_next_available_episode_number(
     // No gaps found, return the next sequential number
     Ok(expected)
 }
+
+/// Get episodes with missing length (NULL or 0)
+/// 
+/// Returns a list of (episode_id, file_path) tuples for episodes that need
+/// duration extraction. This includes episodes where length IS NULL or length = 0.
+/// 
+/// # Returns
+/// * `Result<Vec<(usize, String)>, Box<dyn std::error::Error>>` - List of (episode_id, location) tuples or error
+pub fn get_episodes_with_missing_length() -> Result<Vec<(usize, String)>, Box<dyn std::error::Error>> {
+    let conn = get_connection().lock().unwrap();
+    
+    let mut stmt = conn.prepare(
+        "SELECT id, location FROM episode WHERE length IS NULL OR length = 0"
+    )?;
+    
+    let episodes = stmt.query_map([], |row| {
+        Ok((
+            row.get::<_, usize>(0)?,
+            row.get::<_, String>(1)?,
+        ))
+    })?
+    .collect::<Result<Vec<_>>>()?;
+    
+    Ok(episodes)
+}

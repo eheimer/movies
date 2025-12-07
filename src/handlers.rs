@@ -15,6 +15,7 @@ use crate::episode_field::EpisodeField;
 use crate::menu::{MenuAction, MenuItem};
 use crate::path_resolver::PathResolver;
 use crate::util::{run_video_player, Entry, Mode, ViewContext};
+use crate::video_metadata;
 use display::get_max_displayed_items;
 
 pub fn handle_entry_mode(
@@ -682,6 +683,30 @@ pub fn handle_browse_mode(
                 Entry::Episode { location, episode_id, name, .. } => {
                     // If an episode is selected, play the video
                     if playing_file.is_none() {
+                        // Check if episode has length = 0 or NULL, and extract if needed
+                        if edit_details.length.is_empty() || edit_details.length == "0" {
+                            // Resolve relative path to absolute path for extraction
+                            match database::get_episode_absolute_location(*episode_id, resolver) {
+                                Ok(absolute_location) => {
+                                    // Attempt to extract and update episode length
+                                    if let Err(e) = video_metadata::extract_and_update_episode_length(
+                                        *episode_id,
+                                        Path::new(&absolute_location)
+                                    ) {
+                                        eprintln!("Warning: Failed to extract video duration: {}", e);
+                                    } else {
+                                        // Reload episode details to get updated length
+                                        if let Ok(updated_details) = database::get_episode_detail(*episode_id) {
+                                            *edit_details = updated_details;
+                                        }
+                                    }
+                                }
+                                Err(e) => {
+                                    eprintln!("Warning: Failed to resolve video path for extraction: {}", e);
+                                }
+                            }
+                        }
+                        
                         // Resolve relative path to absolute path for video playback
                         match database::get_episode_absolute_location(*episode_id, resolver) {
                             Ok(absolute_location) => {
@@ -1214,6 +1239,31 @@ fn execute_menu_action(
                     .expect("Failed to get entry details");
                 *season_number = edit_details.season.as_ref().map(|season| season.number);
 
+                // Check if episode has length = 0 or NULL, and extract if needed
+                if edit_details.length.is_empty() || edit_details.length == "0" {
+                    // Resolve relative path to absolute path for extraction
+                    match database::get_episode_absolute_location(episode_id, resolver) {
+                        Ok(absolute_location) => {
+                            // Attempt to extract and update episode length
+                            if let Err(e) = video_metadata::extract_and_update_episode_length(
+                                episode_id,
+                                Path::new(&absolute_location)
+                            ) {
+                                eprintln!("Warning: Failed to extract video duration: {}", e);
+                            } else {
+                                // Reload episode details to get updated length
+                                if let Ok(updated_details) = database::get_episode_detail(episode_id) {
+                                    *edit_details = updated_details;
+                                    *season_number = edit_details.season.as_ref().map(|season| season.number);
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!("Warning: Failed to resolve video path for extraction: {}", e);
+                        }
+                    }
+                }
+
                 // Initialize dirty state when entering EDIT mode
                 *original_edit_details = Some(edit_details.clone());
                 dirty_fields.clear();
@@ -1331,8 +1381,18 @@ fn execute_menu_action(
                 // Get root directory from PathResolver and scan automatically
                 let scan_dir = resolver.get_root_dir();
                 
-                // Set scanning status
+                // Set scanning status and force immediate display
                 *status_message = format!("Rescanning {}...", scan_dir.display());
+                
+                // Force immediate terminal update to show "Rescanning..." message
+                use crossterm::{cursor, terminal, ExecutableCommand};
+                use std::io::{stdout, Write};
+                let mut stdout = stdout();
+                let _ = stdout.execute(cursor::MoveTo(0, terminal::size().unwrap_or((80, 24)).1 - 1));
+                let _ = stdout.execute(terminal::Clear(terminal::ClearType::CurrentLine));
+                print!("{}", status_message);
+                let _ = stdout.flush();
+                
                 *redraw = true;
                 
                 // Scan the directory for video files
@@ -1379,6 +1439,60 @@ fn execute_menu_action(
                     *status_message = "Rescan complete. No new videos found".to_string();
                 }
                 *redraw = true;
+
+                // Extract missing lengths for episodes with NULL or 0 length
+                match database::get_episodes_with_missing_length() {
+                    Ok(episodes_to_process) => {
+                        let mut extracted_count = 0;
+                        let mut unsupported_extensions = std::collections::HashSet::new();
+                        
+                        for (episode_id, relative_location) in episodes_to_process {
+                            // Convert relative path to absolute path
+                            let relative_path = Path::new(&relative_location);
+                            let absolute_path = resolver.to_absolute(relative_path);
+                            
+                            // Attempt to extract and update episode length
+                            match video_metadata::extract_and_update_episode_length(episode_id, &absolute_path) {
+                                Ok(_) => {
+                                    extracted_count += 1;
+                                }
+                                Err(e) => {
+                                    // Check if error is due to unsupported format
+                                    let error_msg = e.to_string();
+                                    if error_msg.contains("Unsupported video format:") {
+                                        // Extract the extension from the error message
+                                        if let Some(ext) = absolute_path.extension().and_then(|e| e.to_str()) {
+                                            unsupported_extensions.insert(ext.to_lowercase());
+                                        }
+                                    }
+                                    // Suppress warnings - don't print to stderr
+                                }
+                            }
+                        }
+                        
+                        // Update status message with extraction results
+                        if extracted_count > 0 || !unsupported_extensions.is_empty() {
+                            let mut status_parts = vec![status_message.clone()];
+                            
+                            if extracted_count > 0 {
+                                status_parts.push(format!("Extracted {} video lengths", extracted_count));
+                            }
+                            
+                            if !unsupported_extensions.is_empty() {
+                                let mut exts: Vec<_> = unsupported_extensions.into_iter().collect();
+                                exts.sort();
+                                status_parts.push(format!("{} unsupported format(s): [{}]", 
+                                    exts.len(), 
+                                    exts.join(", ")));
+                            }
+                            
+                            *status_message = status_parts.join(". ");
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("Warning: Failed to query episodes with missing length: {}", e);
+                    }
+                }
 
                 // Reload entries based on current view context
                 *entries = match view_context {

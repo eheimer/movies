@@ -12,6 +12,9 @@ walkdir = "2.3"
 rusqlite = { version = "0.26.0", features = ["bundled"] }
 lazy_static = "1.4"
 directories = "5.0"
+matroska = "0.16"
+mp4 = "0.14"
+riff = "2.0"
 
 [dev-dependencies]
 tempfile = "3.0"

@@ -12,3 +12,4 @@ pub mod path_resolver;
 pub mod paths;
 pub mod terminal;
 pub mod util;
+pub mod video_metadata;
