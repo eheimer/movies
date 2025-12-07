@@ -80,6 +80,12 @@ pub fn handle_entry_mode(
                 Ok(new_resolver) => {
                     *resolver = Some(new_resolver);
                     
+                    // Display scanning status
+                    display::load_videos(
+                        &format!("Scanning {}...", canonical_path.display()),
+                        0
+                    ).expect("Failed to display scanning message");
+                    
                     // Perform scan of the directory
                     let new_entries: Vec<_> = WalkDir::new(&canonical_path)
                         .into_iter()
