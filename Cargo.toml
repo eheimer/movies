@@ -16,6 +16,7 @@ matroska = "0.16"
 mp4 = "0.14"
 riff = "2.0"
 chrono = "0.4"
+unicode-width = "0.1"
 
 [dev-dependencies]
 tempfile = "3.0"

@@ -9,6 +9,7 @@ mod menu;
 mod path_resolver;
 mod paths;
 mod scrollbar;
+mod splash;
 mod terminal;
 mod util;
 mod video_metadata;
@@ -635,6 +636,9 @@ fn main() -> io::Result<()> {
         
         // Now start the main loop with the configured database
         initialize_terminal()?;
+        splash::show_splash_screen()
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+        terminal::clear_screen()?;
         let result = main_loop(entries, config, Some(resolver), app_paths.config_file.clone(), initial_status);
         restore_terminal()?;
         return result;
@@ -722,6 +726,9 @@ fn main() -> io::Result<()> {
 
     // Start main loop
     initialize_terminal()?;
+    splash::show_splash_screen()
+        .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+    terminal::clear_screen()?;
     let result = main_loop(entries, config, Some(resolver), app_paths.config_file, initial_status);
     restore_terminal()?;
     result
