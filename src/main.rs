@@ -8,6 +8,7 @@ mod logger;
 mod menu;
 mod path_resolver;
 mod paths;
+mod scrollbar;
 mod terminal;
 mod util;
 mod video_metadata;
@@ -366,9 +367,17 @@ fn main_loop(mut entries: Vec<Entry>, mut config: Config, mut resolver: Option<P
 
         // Poll for events with a timeout
         if event::poll(Duration::from_millis(100))? {
+            let event = event::read()?;
+            
+            // Handle terminal resize events
+            if matches!(event, Event::Resize(..)) {
+                redraw = true;
+                continue;
+            }
+            
             if let Event::Key(KeyEvent {
                 code, modifiers, ..
-            }) = event::read()?
+            }) = event
             {
                 match mode {
                     Mode::Entry => {

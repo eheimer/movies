@@ -78,6 +78,8 @@ Use the **arrow keys** (up and down) to move through your videos. You'll see:
 - TV series (which you can enter to see seasons)
 - Seasons (which you can enter to see episodes)
 
+When you have more items than fit on screen, a scroll bar appears on the right side showing your position in the list. The indicator moves as you scroll, helping you understand how much content is above and below your current position.
+
 Press **Enter** to:
 - Play a video
 - Open a series to see its seasons
@@ -162,6 +164,23 @@ By default: MP4, MKV, AVI, MOV, FLV, WMV, and WebM. You can add more formats in 
 ### Can I customize the colors?
 
 Yes! Edit the `config.yaml` file and change the `current_fg` and `current_bg` settings to your preferred colors.
+
+### Can I customize the scroll bar?
+
+Yes! When you have long lists that don't fit on screen, a scroll bar appears on the right side. You can customize its appearance in `config.yaml`:
+
+- `scrollbar_track_char`: The character used for the scroll bar track (default: "│")
+- `scrollbar_indicator_char`: The character used for the scroll position indicator (default: "█")
+- `scrollbar_fg`: Foreground color for the scroll bar (default: "White")
+- `scrollbar_bg`: Background color for the scroll bar (default: "Reset")
+
+Example configuration:
+```yaml
+scrollbar_track_char: "│"
+scrollbar_indicator_char: "█"
+scrollbar_fg: "Cyan"
+scrollbar_bg: "Reset"
+```
 
 ### I moved/deleted some videos. How do I update the library?
 

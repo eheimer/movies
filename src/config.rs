@@ -66,6 +66,16 @@ pub struct Config {
     #[serde(default = "default_status_bg")]
     pub status_bg: String,
     
+    // Scroll bar configuration
+    #[serde(default = "default_scrollbar_track_char")]
+    pub scrollbar_track_char: String,
+    #[serde(default = "default_scrollbar_indicator_char")]
+    pub scrollbar_indicator_char: String,
+    #[serde(default = "default_scrollbar_fg")]
+    pub scrollbar_fg: String,
+    #[serde(default = "default_scrollbar_bg")]
+    pub scrollbar_bg: String,
+    
     // Logging configuration
     #[serde(default = "default_log_file")]
     pub log_file: Option<String>,
@@ -156,6 +166,22 @@ fn default_status_bg() -> String {
     "DarkGray".to_string()
 }
 
+fn default_scrollbar_track_char() -> String {
+    "│".to_string()
+}
+
+fn default_scrollbar_indicator_char() -> String {
+    "█".to_string()
+}
+
+fn default_scrollbar_fg() -> String {
+    "White".to_string()
+}
+
+fn default_scrollbar_bg() -> String {
+    "Reset".to_string()
+}
+
 fn default_log_file() -> Option<String> {
     None
 }
@@ -190,6 +216,10 @@ impl Default for Config {
             episode_bg: "Reset".to_string(),
             status_fg: "White".to_string(),
             status_bg: "DarkGray".to_string(),
+            scrollbar_track_char: "│".to_string(),
+            scrollbar_indicator_char: "█".to_string(),
+            scrollbar_fg: "White".to_string(),
+            scrollbar_bg: "Reset".to_string(),
             log_file: None,
             log_level: "info".to_string(),
             video_extensions: vec![
@@ -374,6 +404,18 @@ fn generate_yaml_with_comments(config: &Config) -> String {
     yaml.push_str(&format!("status_bg: {}\n", config.status_bg));
     yaml.push_str("\n");
     
+    // Scroll bar configuration
+    yaml.push_str("# Scroll bar configuration\n");
+    yaml.push_str("# Character used for the scroll bar track\n");
+    yaml.push_str(&format!("scrollbar_track_char: \"{}\"\n", config.scrollbar_track_char));
+    yaml.push_str("# Character used for the scroll bar indicator\n");
+    yaml.push_str(&format!("scrollbar_indicator_char: \"{}\"\n", config.scrollbar_indicator_char));
+    yaml.push_str("# Foreground color for scroll bar\n");
+    yaml.push_str(&format!("scrollbar_fg: {}\n", config.scrollbar_fg));
+    yaml.push_str("# Background color for scroll bar\n");
+    yaml.push_str(&format!("scrollbar_bg: {}\n", config.scrollbar_bg));
+    yaml.push_str("\n");
+    
     // Logging configuration
     yaml.push_str("# === Logging Configuration ===\n");
     yaml.push_str("# Log file location\n");
@@ -494,6 +536,12 @@ video_player: /usr/bin/vlc
         assert_eq!(config.status_fg, "White");
         assert_eq!(config.status_bg, "DarkGray");
         
+        // Verify scrollbar fields have their default values
+        assert_eq!(config.scrollbar_track_char, "│");
+        assert_eq!(config.scrollbar_indicator_char, "█");
+        assert_eq!(config.scrollbar_fg, "White");
+        assert_eq!(config.scrollbar_bg, "Reset");
+        
         // Verify logging fields have their default values
         assert_eq!(config.log_file, None);
         assert_eq!(config.log_level, "info");
@@ -533,6 +581,10 @@ video_player: /usr/bin/vlc
         assert_eq!(config.episode_bg, "Reset");
         assert_eq!(config.status_fg, "White");
         assert_eq!(config.status_bg, "DarkGray");
+        assert_eq!(config.scrollbar_track_char, "│");
+        assert_eq!(config.scrollbar_indicator_char, "█");
+        assert_eq!(config.scrollbar_fg, "White");
+        assert_eq!(config.scrollbar_bg, "Reset");
         assert_eq!(config.log_file, None);
         assert_eq!(config.log_level, "info");
     }
@@ -570,6 +622,10 @@ episode_fg: Blue
 episode_bg: Yellow
 status_fg: Black
 status_bg: Cyan
+scrollbar_track_char: "┃"
+scrollbar_indicator_char: "▓"
+scrollbar_fg: Cyan
+scrollbar_bg: Black
 log_file: "/custom/path/app.log"
 log_level: debug
 video_extensions:
@@ -604,6 +660,10 @@ video_player: /usr/bin/mpv
         assert_eq!(config.episode_bg, "Yellow");
         assert_eq!(config.status_fg, "Black");
         assert_eq!(config.status_bg, "Cyan");
+        assert_eq!(config.scrollbar_track_char, "┃");
+        assert_eq!(config.scrollbar_indicator_char, "▓");
+        assert_eq!(config.scrollbar_fg, "Cyan");
+        assert_eq!(config.scrollbar_bg, "Black");
         assert_eq!(config.log_file, Some("/custom/path/app.log".to_string()));
         assert_eq!(config.log_level, "debug");
         assert_eq!(config.video_extensions, vec!["mp4"]);
@@ -648,6 +708,10 @@ video_player: /usr/bin/mpv
         assert!(saved_content.contains("episode_bg:"));
         assert!(saved_content.contains("status_fg:"));
         assert!(saved_content.contains("status_bg:"));
+        assert!(saved_content.contains("scrollbar_track_char:"));
+        assert!(saved_content.contains("scrollbar_indicator_char:"));
+        assert!(saved_content.contains("scrollbar_fg:"));
+        assert!(saved_content.contains("scrollbar_bg:"));
         assert!(saved_content.contains("log_file:"));
         assert!(saved_content.contains("log_level:"));
 
@@ -656,10 +720,13 @@ video_player: /usr/bin/mpv
         assert!(saved_content.contains("watched_indicator: \"●\""));
         assert!(saved_content.contains("unwatched_indicator: \"○\""));
         assert!(saved_content.contains("series_fg: Cyan"));
+        assert!(saved_content.contains("scrollbar_track_char: \"│\""));
+        assert!(saved_content.contains("scrollbar_indicator_char: \"█\""));
         
         // Verify inline documentation is present
         assert!(saved_content.contains("=== Color Configuration ==="));
         assert!(saved_content.contains("=== Logging Configuration ==="));
+        assert!(saved_content.contains("Scroll bar configuration"));
     }
 
     /// Test Case: Default log file location when not configured

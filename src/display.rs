@@ -2,6 +2,7 @@ use crate::config::Config;
 use crate::dto::{EpisodeDetail, Series};
 use crate::episode_field::EpisodeField;
 use crate::menu::{MenuItem, MenuContext};
+use crate::scrollbar::{calculate_scrollbar_state, render_scrollbar};
 use crate::terminal::{
     clear_line, clear_screen, get_terminal_size, hide_cursor, move_cursor, print_at, show_cursor,
 };
@@ -456,6 +457,23 @@ pub fn draw_screen(
             *first_entry = current_item - max_lines as usize + 1;
         }
 
+        // Calculate scroll bar state for the episode browser
+        let scrollbar_state = calculate_scrollbar_state(
+            entries.len(),           // total_items
+            max_lines,               // visible_items
+            *first_entry,            // first_visible_index
+            HEADER_SIZE,             // start_row
+            max_lines,               // available_height
+            COL1_WIDTH - 1,          // column (rightmost column of list area)
+        );
+
+        // Calculate effective column width (reduce by 1 if scroll bar is visible)
+        let effective_col_width = if scrollbar_state.visible {
+            COL1_WIDTH - 1
+        } else {
+            COL1_WIDTH
+        };
+
         for (i, entry) in entries
             .iter()
             .enumerate()
@@ -466,14 +484,14 @@ pub fn draw_screen(
             let (display_text, fg_color, bg_color) = match entry {
                 Entry::Series { name, series_id } => {
                     let formatted = format_series_display(name, *series_id);
-                    let text = truncate_string(&formatted, COL1_WIDTH);
+                    let text = truncate_string(&formatted, effective_col_width);
                     let fg = string_to_fg_color_or_default(&config.series_fg);
                     let bg = string_to_bg_color_or_default(&config.series_bg);
                     (text, fg, bg)
                 }
                 Entry::Season { number, season_id } => {
                     let formatted = format_season_display(*number, *season_id);
-                    let text = truncate_string(&formatted, COL1_WIDTH);
+                    let text = truncate_string(&formatted, effective_col_width);
                     let fg = string_to_fg_color_or_default(&config.season_fg);
                     let bg = string_to_bg_color_or_default(&config.season_bg);
                     (text, fg, bg)
@@ -494,35 +512,35 @@ pub fn draw_screen(
                     // Priority: Invalid > (New + Watched) > New > Watched > Normal
                     let (text, fg, bg) = if !file_exists {
                         // Invalid episode (file doesn't exist) - use invalid colors
-                        let text = truncate_string(name, COL1_WIDTH);
+                        let text = truncate_string(name, effective_col_width);
                         let fg = string_to_fg_color_or_default(&config.invalid_fg);
                         let bg = string_to_bg_color_or_default(&config.invalid_bg);
                         (text, fg, bg)
                     } else if is_new && is_watched {
                         // New AND watched - use new colors with watched indicator
                         let formatted_name = format_episode_with_indicator(name, true, config);
-                        let text = truncate_string(&formatted_name, COL1_WIDTH);
+                        let text = truncate_string(&formatted_name, effective_col_width);
                         let fg = string_to_fg_color_or_default(&config.new_fg);
                         let bg = string_to_bg_color_or_default(&config.new_bg);
                         (text, fg, bg)
                     } else if is_new && !is_watched {
                         // New AND unwatched - use new colors with unwatched indicator
                         let formatted_name = format_episode_with_indicator(name, false, config);
-                        let text = truncate_string(&formatted_name, COL1_WIDTH);
+                        let text = truncate_string(&formatted_name, effective_col_width);
                         let fg = string_to_fg_color_or_default(&config.new_fg);
                         let bg = string_to_bg_color_or_default(&config.new_bg);
                         (text, fg, bg)
                     } else if is_watched {
                         // Watched episode - add indicator and use normal colors
                         let formatted_name = format_episode_with_indicator(name, true, config);
-                        let text = truncate_string(&formatted_name, COL1_WIDTH);
+                        let text = truncate_string(&formatted_name, effective_col_width);
                         let fg = string_to_fg_color_or_default(&config.episode_fg);
                         let bg = string_to_bg_color_or_default(&config.episode_bg);
                         (text, fg, bg)
                     } else {
                         // Unwatched episode - add unwatched indicator and use normal colors
                         let formatted_name = format_episode_with_indicator(name, false, config);
-                        let text = truncate_string(&formatted_name, COL1_WIDTH);
+                        let text = truncate_string(&formatted_name, effective_col_width);
                         let fg = string_to_fg_color_or_default(&config.episode_fg);
                         let bg = string_to_bg_color_or_default(&config.episode_bg);
                         (text, fg, bg)
@@ -546,6 +564,9 @@ pub fn draw_screen(
             
             print_at(0, i - *first_entry + HEADER_SIZE, &formatted_text)?;
         }
+
+        // Render the scroll bar after list items but before detail window
+        render_scrollbar(&scrollbar_state, config)?;
         if !series_selected && !season_selected && !matches!(mode, Mode::Menu) {
             draw_detail_window(
                 &entries[current_item],
@@ -791,6 +812,23 @@ fn draw_series_window(
         // Calculate maximum visible series items (subtract borders and title)
         let max_visible_series = series_window_height.saturating_sub(3).max(1);
         
+        // Calculate scroll bar state for the series select window
+        let scrollbar_state = calculate_scrollbar_state(
+            series.len(),                           // total_items
+            max_visible_series,                     // visible_items
+            *first_series,                          // first_visible_index
+            start_row + 2,                          // start_row (after border and title)
+            max_visible_series,                     // available_height
+            series_window_start_col + series_window_width - 1, // column (rightmost column)
+        );
+        
+        // Calculate effective series width (reduce by 1 if scroll bar is visible)
+        let effective_series_width = if scrollbar_state.visible {
+            SERIES_WIDTH - 1
+        } else {
+            SERIES_WIDTH
+        };
+        
         // Implement viewport adjustment logic
         if let Some(selection) = series_selection {
             if *selection < *first_series {
@@ -809,7 +847,7 @@ fn draw_series_window(
             let display_text = format!(
                 "[{}] {}",
                 i + 1,
-                truncate_string(&series_item.name, SERIES_WIDTH)
+                truncate_string(&series_item.name, effective_series_width)
             );
             let formatted_text = if Some(i) == *series_selection {
                 format!(
@@ -828,6 +866,9 @@ fn draw_series_window(
                 &formatted_text,
             )?;
         }
+        
+        // Render the scroll bar after rendering series items
+        render_scrollbar(&scrollbar_state, config)?;
     }
     Ok(())
 }

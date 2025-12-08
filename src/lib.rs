@@ -11,6 +11,7 @@ pub mod logger;
 pub mod menu;
 pub mod path_resolver;
 pub mod paths;
+pub mod scrollbar;
 pub mod terminal;
 pub mod util;
 pub mod video_metadata;
