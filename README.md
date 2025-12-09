@@ -1,6 +1,29 @@
 # Video Library Manager
 
+```
+                                                           ██                         ██████
+     ████                                                  ██                       ███   ██
+  █ ██████              ██████        ███        █                     ███        ████    ██
+██████ ███ ████        ████ ███       ███       ███       ███       ███████       ███     ██
+██████ ████████       ███ █████       ████     █████     ████      ████  ██       ████            ████
+█████  █████████     ████  ███████████████     ██  ██████████      ███████       ███████      ██████
+█████  ████ ███     █████    ███ ██    ███    ███        ████     ████          ███  ███████████
+████   ███  ███    ██████    ██        ███    ██         ████    █████        ███      █████
+████   ███  ███    ██ ███    ██        ████   ██         ████   ██████       ███     ████████
+████        ███  ███   ███████          ███  ██           ███  ███  ████ █████     ███    ████
+███         ██████       ███             ██████           ███ ███     █████       ███     ███
+             ███                           ██               ███                   ██     ███
+                                                                                  █████████
+                -- written by Eric Heimerman (with a little help from Kiro)         ███
+```
+
 Your personal video collection, organized and accessible from your terminal.
+
+## Important: Your Videos Are Safe
+
+**This program does not modify your video files.** It only reads file information and writes to its own `videos.sqlite` database. The program does not need write access to your video files themselves - only to the database file in your video folder.
+
+That said, this software is provided as-is with no guarantees. Always maintain backups of important files.
 
 ## What is this?
 
@@ -54,16 +77,22 @@ The first time you run it, the program will create a configuration file and data
 
 ### First-time setup
 
-When you first run the program, you'll need to tell it where your videos are:
+The first time you run the program, it will:
 
-1. The program will create a `config.yaml` file
-2. Open this file in any text editor
-3. Find the line that says `root_dir:` and set it to your video folder path
-   - Example: `root_dir: /home/yourname/Videos`
-4. Make sure `video_player:` points to your video player
-   - Example: `video_player: /usr/bin/vlc`
+1. Create a `config.yaml` file in your system's config directory:
+   - Linux: `~/.config/movies/config.yaml`
+   - macOS: `~/Library/Application Support/movies/config.yaml`
+   - Windows: `%APPDATA%\movies\config.yaml`
+2. Create a `movies.log` file in your system's data directory:
+   - Linux: `~/.local/share/movies/movies.log`
+   - macOS: `~/Library/Application Support/movies/movies.log`
+   - Windows: `%APPDATA%\movies\movies.log`
+3. Prompt you to enter the path to your video folder
+4. Create a `videos.sqlite` database file in your video folder
 
-Save the file and run the program again.
+Just enter the path where your videos are stored (e.g., `/home/yourname/Videos`) and the program will be ready to use!
+
+**Note:** The video player defaults to `/usr/bin/vlc`. If you use a different player, edit the `video_player:` setting in `config.yaml`. See the [Configuration Guide](docs/CONFIGURATION.md) for all available options.
 
 ## How to use it
 
@@ -151,36 +180,26 @@ Use the arrow keys to move between fields, type to edit, and press **F2** again 
 
 ### Where is my data stored?
 
-The program creates a `videos.db` file in the same folder as the program. This database remembers all your organization and watched status. Your actual video files stay exactly where they are - the program just keeps track of them.
+The program creates a `videos.sqlite` file in your video folder (the `db_location` you specified). This database remembers all your organization and watched status. 
+
+**Your actual video files are never modified** - the program only reads them and stores metadata in the database. The program only needs write access to the `videos.sqlite` database file, not to your video files.
+
+Configuration is stored in your system's config directory (`~/.config/movies` on Linux), and logs are in your system's data directory (`~/.local/share/movies` on Linux).
 
 ### Can I move my video files?
 
-Yes! The program stores file locations relative to your `root_dir`, so as long as you update the `root_dir` in `config.yaml` when you move files, everything will still work.
+Yes! The program stores file locations relative to your `db_location`. When you move your video collection:
+1. Move the entire folder (including the `videos.sqlite` database file)
+2. Update `db_location` in `config.yaml` to the new path
+3. All your organization and watched status will be preserved
 
 ### What video formats are supported?
 
-By default: MP4, MKV, AVI, MOV, FLV, WMV, and WebM. You can add more formats in the `config.yaml` file.
+By default: MP4, MKV, AVI, MOV, FLV, WMV, and WebM. You can add more in `config.yaml`.
 
-### Can I customize the colors?
+### Can I customize colors and appearance?
 
-Yes! Edit the `config.yaml` file and change the `current_fg` and `current_bg` settings to your preferred colors.
-
-### Can I customize the scroll bar?
-
-Yes! When you have long lists that don't fit on screen, a scroll bar appears on the right side. You can customize its appearance in `config.yaml`:
-
-- `scrollbar_track_char`: The character used for the scroll bar track (default: "│")
-- `scrollbar_indicator_char`: The character used for the scroll position indicator (default: "█")
-- `scrollbar_fg`: Foreground color for the scroll bar (default: "White")
-- `scrollbar_bg`: Background color for the scroll bar (default: "Reset")
-
-Example configuration:
-```yaml
-scrollbar_track_char: "│"
-scrollbar_indicator_char: "█"
-scrollbar_fg: "Cyan"
-scrollbar_bg: "Reset"
-```
+Yes! Edit `config.yaml` to change colors, scrollbar characters, and the watched indicator. See the [Configuration Guide](docs/CONFIGURATION.md) for details.
 
 ### I moved/deleted some videos. How do I update the library?
 
@@ -188,22 +207,13 @@ Press **F1** to open the menu, then press **S** to rescan. The program will upda
 
 ## Troubleshooting
 
-**Problem:** The program won't start
-- Make sure you've built it with `cargo build --release`
-- Check that you have Rust installed correctly
+Having issues? Check the [Troubleshooting Guide](docs/TROUBLESHOOTING.md) for solutions to common problems:
 
-**Problem:** Videos won't play
-- Check that `video_player` in `config.yaml` points to the correct path
-- Make sure your video player (like VLC) is installed
-
-**Problem:** The program can't find my videos
-- Check that `root_dir` in `config.yaml` points to the right folder
-- Press **F1** then **S** to rescan for videos
-- Make sure your video files have supported extensions (mp4, mkv, etc.)
-
-**Problem:** The interface looks weird
-- Make sure your terminal window is large enough (at least 80 characters wide)
-- Try a different terminal emulator if colors don't display correctly
+- Installation and build issues
+- Video playback problems
+- Library scanning issues
+- Display and terminal problems
+- Database and performance issues
 
 ## For developers
 

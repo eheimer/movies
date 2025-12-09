@@ -140,13 +140,11 @@ The application uses a SQLite database with three main tables:
 
 ### Path Resolution Strategy
 
-Video file paths are stored relative to the configured `root_dir` for portability:
+Video file paths are stored relative to the configured `db_location` for portability:
 
 - Database stores relative paths (e.g., `TV Shows/Series/episode.mp4`)
 - PathResolver converts between relative and absolute paths at runtime
-- This allows the database to be portable across different systems
-- Files outside the `root_dir` are skipped during import with a warning
-- The database file itself is always stored in the executable directory
+- This allows the video collection to be portable across different systems
 
 ### View Contexts
 
@@ -207,10 +205,9 @@ Each module has a single, focused responsibility:
 
 ### Configuration
 
-The `config.yaml` file in the project root contains:
+The `config.yaml` file in the system config directory contains:
 
-- `root_dir`: Base directory for video files
-- `db_location`: Path to SQLite database (null uses default)
+- `db_location`: Base directory for video files (also where `videos.sqlite` database is stored)
 - `current_fg/current_bg`: Colors for selected items
 - `video_extensions`: Supported video file formats
 - `video_player`: Path to video player executable
