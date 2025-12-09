@@ -596,15 +596,6 @@ fn main() -> io::Result<()> {
         data_dir.join("movies.log")
     };
 
-    // Check if log file exists and prompt to save if it does
-    if log_file_path.exists() {
-        if let Ok(should_save) = logger::prompt_save_existing_log(&log_file_path) {
-            if !should_save {
-                // User chose not to save, file will be truncated by initialize_logger
-            }
-        }
-    }
-
     // Parse log level from config
     let log_level = config::parse_log_level(&config.log_level);
     

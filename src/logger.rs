@@ -1,10 +1,9 @@
 use std::fs::{File, OpenOptions};
 use std::io::{self, Write};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Mutex;
 use chrono::Local;
 use lazy_static::lazy_static;
-use crossterm::event::{self, Event, KeyCode, KeyEvent};
 
 /// Log levels in hierarchical order
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -88,74 +87,6 @@ pub fn log_info(message: &str) {
 /// Log a debug message
 pub fn log_debug(message: &str) {
     write_log(LogLevel::Debug, message);
-}
-
-
-
-/// Prompt the user to save an existing log file
-/// Returns Ok(true) if user wants to save, Ok(false) if not, or an error
-pub fn prompt_save_existing_log(log_path: &Path) -> io::Result<bool> {
-    use std::time::Duration;
-    
-    // Display prompt
-    print!("Save existing log file? (Y/n): ");
-    io::stdout().flush()?;
-
-    // Read user input
-    let result = loop {
-        if let Event::Key(KeyEvent { code, .. }) = event::read()? {
-            match code {
-                // Yes: Y, y, or Enter
-                KeyCode::Char('Y') | KeyCode::Char('y') | KeyCode::Enter => {
-                    println!("Y");
-                    
-                    // Generate timestamp for archived filename
-                    let timestamp = Local::now().format("%Y-%m-%d_%H-%M-%S");
-                    
-                    // Get the original filename
-                    let filename = log_path
-                        .file_name()
-                        .and_then(|n| n.to_str())
-                        .ok_or_else(|| io::Error::new(
-                            io::ErrorKind::InvalidInput,
-                            "Invalid log file path"
-                        ))?;
-                    
-                    // Create new filename with timestamp
-                    let archived_filename = format!("{}-{}", timestamp, filename);
-                    
-                    // Get the parent directory
-                    let parent = log_path.parent().ok_or_else(|| io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        "Log file has no parent directory"
-                    ))?;
-                    
-                    // Create full path for archived file
-                    let archived_path = parent.join(archived_filename);
-                    
-                    // Rename the file
-                    std::fs::rename(log_path, &archived_path)?;
-                    
-                    break Ok(true);
-                }
-                // No: N, n, or Esc
-                KeyCode::Char('N') | KeyCode::Char('n') | KeyCode::Esc => {
-                    println!("n");
-                    break Ok(false);
-                }
-                // Ignore other keys
-                _ => continue,
-            }
-        }
-    };
-    
-    // Clear any pending events from the buffer to prevent them from being
-    // processed by the main application loop
-    while event::poll(Duration::from_millis(0))? {
-        event::read()?;
-    }
-    
-    result
 }
 
 #[cfg(test)]
