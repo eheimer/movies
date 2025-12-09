@@ -69,8 +69,20 @@ pub enum Mode {
 }
 
 pub fn truncate_string(s: &str, max_length: usize) -> String {
+    // Handle edge case where max_length is too small for ellipsis
+    if max_length < 3 {
+        // If max_length is 0, return empty string
+        if max_length == 0 {
+            return String::new();
+        }
+        // If max_length is 1 or 2, just truncate without ellipsis
+        return s.chars().take(max_length).collect();
+    }
+    
     if s.len() > max_length {
-        format!("{}...", &s[..max_length - 3])
+        // Use saturating_sub to prevent underflow
+        let truncate_at = max_length.saturating_sub(3);
+        format!("{}...", &s[..truncate_at])
     } else {
         s.to_string()
     }

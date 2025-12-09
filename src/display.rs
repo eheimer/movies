@@ -31,17 +31,45 @@ fn get_sidebar_width() -> io::Result<usize> {
 /// # Arguments
 /// * `name` - The series name
 /// * `series_id` - The series ID for querying counts
+/// * `terminal_width` - The available width for display
+/// * `config` - Configuration containing count styling
 /// 
 /// # Returns
-/// * `String` - Formatted string as "[<series title>] <x> episodes (<y> unwatched)"
+/// * `String` - Formatted string with right-justified count as "[<series title>]  <watched>/<total> watched"
 ///              or fallback format on error
-pub fn format_series_display(name: &str, series_id: usize) -> String {
+pub fn format_series_display(name: &str, series_id: usize, terminal_width: usize, config: &Config) -> String {
     match crate::database::get_series_episode_counts(series_id) {
         Ok((total, unwatched)) => {
-            format!("[{}] {} episodes ({} unwatched)", name, total, unwatched)
+            let watched = total.saturating_sub(unwatched);
+            let count_text = format!("{}/{} watched", watched, total);
+            
+            // Apply styling to count
+            let styled_count = apply_text_style(&count_text, &config.count_style);
+            let colored_count = styled_count
+                .with(string_to_fg_color_or_default(&config.count_fg));
+            
+            // Calculate available space for name (reserve space for count + spacing)
+            let count_visual_len = count_text.len(); // Visual length without ANSI codes
+            let min_spacing = 1;
+            let available_for_name = terminal_width
+                .saturating_sub(count_visual_len)
+                .saturating_sub(min_spacing);
+            
+            // Truncate name if needed (with brackets)
+            let name_part = format!("[{}]", name);
+            let truncated_name = truncate_string(&name_part, available_for_name);
+            
+            // Calculate actual spacing needed
+            let spacing = terminal_width
+                .saturating_sub(truncated_name.len())
+                .saturating_sub(count_visual_len)
+                .max(1); // Ensure at least 1 space
+            
+            format!("{}{}{}", truncated_name, " ".repeat(spacing), colored_count)
         }
-        Err(_) => {
-            // Fallback format on database error
+        Err(e) => {
+            // Log database error and use fallback format
+            crate::logger::log_warn(&format!("Failed to get episode counts for series '{}' (id: {}): {}", name, series_id, e));
             format!("[{}] ? episodes", name)
         }
     }
@@ -52,17 +80,45 @@ pub fn format_series_display(name: &str, series_id: usize) -> String {
 /// # Arguments
 /// * `number` - The season number
 /// * `season_id` - The season ID for querying counts
+/// * `terminal_width` - The available width for display
+/// * `config` - Configuration containing count styling
 /// 
 /// # Returns
-/// * `String` - Formatted string as "<season title> - <x> episodes (<y> unwatched)"
+/// * `String` - Formatted string with right-justified count as "Season <number>  <watched>/<total> watched"
 ///              or fallback format on error
-pub fn format_season_display(number: usize, season_id: usize) -> String {
+pub fn format_season_display(number: usize, season_id: usize, terminal_width: usize, config: &Config) -> String {
     match crate::database::get_season_episode_counts(season_id) {
         Ok((total, unwatched)) => {
-            format!("Season {} - {} episodes ({} unwatched)", number, total, unwatched)
+            let watched = total.saturating_sub(unwatched);
+            let count_text = format!("{}/{} watched", watched, total);
+            
+            // Apply styling to count
+            let styled_count = apply_text_style(&count_text, &config.count_style);
+            let colored_count = styled_count
+                .with(string_to_fg_color_or_default(&config.count_fg));
+            
+            // Calculate available space for name (reserve space for count + spacing)
+            let count_visual_len = count_text.len(); // Visual length without ANSI codes
+            let min_spacing = 1;
+            let available_for_name = terminal_width
+                .saturating_sub(count_visual_len)
+                .saturating_sub(min_spacing);
+            
+            // Truncate name if needed
+            let name_part = format!("Season {}", number);
+            let truncated_name = truncate_string(&name_part, available_for_name);
+            
+            // Calculate actual spacing needed
+            let spacing = terminal_width
+                .saturating_sub(truncated_name.len())
+                .saturating_sub(count_visual_len)
+                .max(1); // Ensure at least 1 space
+            
+            format!("{}{}{}", truncated_name, " ".repeat(spacing), colored_count)
         }
-        Err(_) => {
-            // Fallback format on database error
+        Err(e) => {
+            // Log database error and use fallback format
+            crate::logger::log_warn(&format!("Failed to get episode counts for season {} (id: {}): {}", number, season_id, e));
             format!("Season {} - ? episodes", number)
         }
     }
@@ -119,7 +175,11 @@ pub fn apply_text_style(text: &str, style: &str) -> String {
             "underline" | "underlined" => result.underlined().to_string(),
             "strikethrough" | "crossed_out" => result.crossed_out().to_string(),
             "dim" => result.dim().to_string(),
-            _ => result, // Ignore unknown styles
+            _ => {
+                // Log warning for unknown style values
+                crate::logger::log_warn(&format!("Invalid style value '{}' ignored. Valid styles: none, bold, italic, underline, strikethrough, dim", style_part));
+                result
+            }
         };
     }
     
@@ -250,11 +310,8 @@ fn draw_header(
     let visual_width = header.chars().count();
     
     // Pad to terminal width based on visual width, not byte length
-    let padding_needed = if visual_width < terminal_width {
-        terminal_width - visual_width
-    } else {
-        0
-    };
+    // Use saturating_sub to prevent underflow when header is longer than terminal
+    let padding_needed = terminal_width.saturating_sub(visual_width);
     
     // Add padding spaces
     for _ in 0..padding_needed {
@@ -468,8 +525,9 @@ pub fn draw_screen(
         );
 
         // Calculate effective column width (reduce by 1 if scroll bar is visible)
+        // Use saturating_sub to prevent underflow
         let effective_col_width = if scrollbar_state.visible {
-            COL1_WIDTH - 1
+            COL1_WIDTH.saturating_sub(1)
         } else {
             COL1_WIDTH
         };
@@ -483,18 +541,22 @@ pub fn draw_screen(
             // Determine the base display text and colors based on entry type
             let (display_text, fg_color, bg_color) = match entry {
                 Entry::Series { name, series_id } => {
-                    let formatted = format_series_display(name, *series_id);
-                    let text = truncate_string(&formatted, effective_col_width);
+                    // Format with new signature: pass terminal_width and config
+                    // Note: format_series_display already handles width and includes ANSI color codes
+                    // for the count text, so we don't truncate it (would break the ANSI codes)
+                    let formatted = format_series_display(name, *series_id, effective_col_width, config);
                     let fg = string_to_fg_color_or_default(&config.series_fg);
                     let bg = string_to_bg_color_or_default(&config.series_bg);
-                    (text, fg, bg)
+                    (formatted, fg, bg)
                 }
                 Entry::Season { number, season_id } => {
-                    let formatted = format_season_display(*number, *season_id);
-                    let text = truncate_string(&formatted, effective_col_width);
+                    // Format with new signature: pass terminal_width and config
+                    // Note: format_season_display already handles width and includes ANSI color codes
+                    // for the count text, so we don't truncate it (would break the ANSI codes)
+                    let formatted = format_season_display(*number, *season_id, effective_col_width, config);
                     let fg = string_to_fg_color_or_default(&config.season_fg);
                     let bg = string_to_bg_color_or_default(&config.season_bg);
-                    (text, fg, bg)
+                    (formatted, fg, bg)
                 }
                 Entry::Episode { episode_id, name, location, .. } => {
                     // Fetch episode details for this specific episode
@@ -690,10 +752,11 @@ fn draw_detail_window(
         let line = format!("{} {}", field_name, value);
         
         // Truncate the plain text line
+        // Use saturating_sub to prevent underflow when sidebar is very narrow
         let max_width = if edit_mode && edit_field.is_editable() {
-            sidebar_width - 4
+            sidebar_width.saturating_sub(4)
         } else {
-            sidebar_width - 2
+            sidebar_width.saturating_sub(2)
         };
         
         let truncated_line = truncate_string(&line, max_width);
@@ -823,8 +886,9 @@ fn draw_series_window(
         );
         
         // Calculate effective series width (reduce by 1 if scroll bar is visible)
+        // Use saturating_sub to prevent underflow
         let effective_series_width = if scrollbar_state.visible {
-            SERIES_WIDTH - 1
+            SERIES_WIDTH.saturating_sub(1)
         } else {
             SERIES_WIDTH
         };
@@ -910,7 +974,8 @@ fn draw_context_menu(
     // Draw each menu item with left-justified label and right-justified hotkey
     for (i, item) in menu_items.iter().enumerate() {
         let hotkey_str = format_hotkey(&item.hotkey);
-        let content_width = menu_width - 2; // Subtract borders
+        // Use saturating_sub to prevent underflow when menu is very narrow
+        let content_width = menu_width.saturating_sub(2); // Subtract borders
         
         // Create the display text with label left-justified and hotkey right-justified
         let spacing = content_width.saturating_sub(item.label.len() + hotkey_str.len());
@@ -960,24 +1025,26 @@ fn draw_window(
 
     // Draw top border
     print_at(left, top, &top_left)?;
-    for _ in 1..width - 1 {
+    // Use saturating_sub to prevent underflow when width is very small
+    for _ in 1..width.saturating_sub(1) {
         print!("{}", horizontal);
     }
     print!("{}", top_right);
 
     // Draw side borders and clear interior
-    for row in (top + 1)..(top + height - 1) {
+    // Use saturating_sub to prevent underflow when height is very small
+    for row in (top + 1)..(top + height.saturating_sub(1)) {
         print_at(left, row, &vertical)?;
         // Clear the interior space
-        for _ in 1..width - 1 {
+        for _ in 1..width.saturating_sub(1) {
             print!(" ");
         }
         print!("{}", vertical);
     }
 
     // Draw bottom border
-    print_at(left, top + height - 1, &bottom_left)?;
-    for _ in 1..width - 1 {
+    print_at(left, top + height.saturating_sub(1), &bottom_left)?;
+    for _ in 1..width.saturating_sub(1) {
         print!("{}", horizontal);
     }
     println!("{}", bottom_right);
@@ -1016,12 +1083,9 @@ fn draw_status_line(message: &str, config: &Config) -> io::Result<()> {
     };
     
     // Pad to terminal width based on visual width
+    // Use saturating_sub to prevent underflow when message is longer than terminal
     let current_visual_width = padded_message.chars().count();
-    let padding_needed = if current_visual_width < cols {
-        cols - current_visual_width
-    } else {
-        0
-    };
+    let padding_needed = cols.saturating_sub(current_visual_width);
     
     // Add padding spaces
     for _ in 0..padding_needed {
@@ -1200,6 +1264,44 @@ mod tests {
         let result = apply_text_style(text, "unknown,bold");
         assert!(!result.is_empty());
     }
+
+    /// Test Case: Invalid style values trigger warning logs
+    /// When apply_text_style receives an invalid style value,
+    /// it should log a warning and continue processing.
+    /// Validates: Requirements 2.4
+    #[test]
+    #[serial_test::serial]
+    fn test_invalid_style_logs_warning() {
+        use tempfile::TempDir;
+        use std::fs;
+        
+        // Set up logger
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let log_file = temp_dir.path().join("test_invalid_style.log");
+        crate::logger::initialize_logger(log_file.clone(), crate::logger::LogLevel::Warn)
+            .expect("Failed to initialize logger");
+        
+        let text = "Test Episode";
+        
+        // Apply an invalid style
+        let result = apply_text_style(text, "invalid_style");
+        
+        // Result should still be the text (invalid style ignored)
+        assert!(!result.is_empty());
+        
+        // Log a final message to ensure flush
+        crate::logger::log_warn("test_complete");
+        
+        // Give time for log to flush
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        
+        // Check that warning was logged
+        let log_contents = fs::read_to_string(&log_file)
+            .expect("Failed to read log file");
+        assert!(log_contents.contains("Invalid style value 'invalid_style' ignored"));
+    }
+
+
 
     /// Test Case 1: Watched indicator presence
     /// When an episode has watched status set to true, the formatted display string

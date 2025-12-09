@@ -76,6 +76,24 @@ pub struct Config {
     #[serde(default = "default_scrollbar_bg")]
     pub scrollbar_bg: String,
     
+    // Count display styling
+    #[serde(default = "default_count_fg")]
+    pub count_fg: String,
+    #[serde(default = "default_count_style")]
+    pub count_style: String,
+    
+    // Header text styling
+    #[serde(default = "default_header_fg")]
+    pub header_fg: String,
+    #[serde(default = "default_header_style")]
+    pub header_style: String,
+    
+    // Help text styling
+    #[serde(default = "default_help_fg")]
+    pub help_fg: String,
+    #[serde(default = "default_help_style")]
+    pub help_style: String,
+    
     // Logging configuration
     #[serde(default = "default_log_file")]
     pub log_file: Option<String>,
@@ -182,6 +200,30 @@ fn default_scrollbar_bg() -> String {
     "Reset".to_string()
 }
 
+fn default_count_fg() -> String {
+    "DarkGray".to_string()
+}
+
+fn default_count_style() -> String {
+    "italic".to_string()
+}
+
+fn default_header_fg() -> String {
+    "Black".to_string()
+}
+
+fn default_header_style() -> String {
+    "none".to_string()
+}
+
+fn default_help_fg() -> String {
+    "Reset".to_string()
+}
+
+fn default_help_style() -> String {
+    "none".to_string()
+}
+
 fn default_log_file() -> Option<String> {
     None
 }
@@ -220,6 +262,12 @@ impl Default for Config {
             scrollbar_indicator_char: "█".to_string(),
             scrollbar_fg: "White".to_string(),
             scrollbar_bg: "Reset".to_string(),
+            count_fg: "DarkGray".to_string(),
+            count_style: "italic".to_string(),
+            header_fg: "Black".to_string(),
+            header_style: "none".to_string(),
+            help_fg: "Reset".to_string(),
+            help_style: "none".to_string(),
             log_file: None,
             log_level: "info".to_string(),
             video_extensions: vec![
@@ -416,6 +464,30 @@ fn generate_yaml_with_comments(config: &Config) -> String {
     yaml.push_str(&format!("scrollbar_bg: {}\n", config.scrollbar_bg));
     yaml.push_str("\n");
     
+    // Count display styling
+    yaml.push_str("# Count display styling (watched/unwatched counts for series and seasons)\n");
+    yaml.push_str("# Foreground color for count text\n");
+    yaml.push_str(&format!("count_fg: {}\n", config.count_fg));
+    yaml.push_str("# Style for count text (none, bold, dim, italic, underline)\n");
+    yaml.push_str(&format!("count_style: {}\n", config.count_style));
+    yaml.push_str("\n");
+    
+    // Header text styling
+    yaml.push_str("# Header text styling\n");
+    yaml.push_str("# Foreground color for header text\n");
+    yaml.push_str(&format!("header_fg: {}\n", config.header_fg));
+    yaml.push_str("# Style for header text (none, bold, dim, italic, underline)\n");
+    yaml.push_str(&format!("header_style: {}\n", config.header_style));
+    yaml.push_str("\n");
+    
+    // Help text styling
+    yaml.push_str("# Help text styling\n");
+    yaml.push_str("# Foreground color for help text\n");
+    yaml.push_str(&format!("help_fg: {}\n", config.help_fg));
+    yaml.push_str("# Style for help text (none, bold, dim, italic, underline)\n");
+    yaml.push_str(&format!("help_style: {}\n", config.help_style));
+    yaml.push_str("\n");
+    
     // Logging configuration
     yaml.push_str("# === Logging Configuration ===\n");
     yaml.push_str("# Log file location\n");
@@ -542,6 +614,14 @@ video_player: /usr/bin/vlc
         assert_eq!(config.scrollbar_fg, "White");
         assert_eq!(config.scrollbar_bg, "Reset");
         
+        // Verify new count and text styling fields have their default values
+        assert_eq!(config.count_fg, "DarkGray");
+        assert_eq!(config.count_style, "italic");
+        assert_eq!(config.header_fg, "Black");
+        assert_eq!(config.header_style, "none");
+        assert_eq!(config.help_fg, "Reset");
+        assert_eq!(config.help_style, "none");
+        
         // Verify logging fields have their default values
         assert_eq!(config.log_file, None);
         assert_eq!(config.log_level, "info");
@@ -585,6 +665,12 @@ video_player: /usr/bin/vlc
         assert_eq!(config.scrollbar_indicator_char, "█");
         assert_eq!(config.scrollbar_fg, "White");
         assert_eq!(config.scrollbar_bg, "Reset");
+        assert_eq!(config.count_fg, "DarkGray");
+        assert_eq!(config.count_style, "italic");
+        assert_eq!(config.header_fg, "Black");
+        assert_eq!(config.header_style, "none");
+        assert_eq!(config.help_fg, "Reset");
+        assert_eq!(config.help_style, "none");
         assert_eq!(config.log_file, None);
         assert_eq!(config.log_level, "info");
     }
@@ -626,6 +712,12 @@ scrollbar_track_char: "┃"
 scrollbar_indicator_char: "▓"
 scrollbar_fg: Cyan
 scrollbar_bg: Black
+count_fg: Yellow
+count_style: bold
+header_fg: Magenta
+header_style: underline
+help_fg: Green
+help_style: italic
 log_file: "/custom/path/app.log"
 log_level: debug
 video_extensions:
@@ -664,6 +756,12 @@ video_player: /usr/bin/mpv
         assert_eq!(config.scrollbar_indicator_char, "▓");
         assert_eq!(config.scrollbar_fg, "Cyan");
         assert_eq!(config.scrollbar_bg, "Black");
+        assert_eq!(config.count_fg, "Yellow");
+        assert_eq!(config.count_style, "bold");
+        assert_eq!(config.header_fg, "Magenta");
+        assert_eq!(config.header_style, "underline");
+        assert_eq!(config.help_fg, "Green");
+        assert_eq!(config.help_style, "italic");
         assert_eq!(config.log_file, Some("/custom/path/app.log".to_string()));
         assert_eq!(config.log_level, "debug");
         assert_eq!(config.video_extensions, vec!["mp4"]);
@@ -712,6 +810,12 @@ video_player: /usr/bin/mpv
         assert!(saved_content.contains("scrollbar_indicator_char:"));
         assert!(saved_content.contains("scrollbar_fg:"));
         assert!(saved_content.contains("scrollbar_bg:"));
+        assert!(saved_content.contains("count_fg:"));
+        assert!(saved_content.contains("count_style:"));
+        assert!(saved_content.contains("header_fg:"));
+        assert!(saved_content.contains("header_style:"));
+        assert!(saved_content.contains("help_fg:"));
+        assert!(saved_content.contains("help_style:"));
         assert!(saved_content.contains("log_file:"));
         assert!(saved_content.contains("log_level:"));
 
@@ -933,6 +1037,52 @@ video_player: /usr/bin/vlc
         assert!(yaml.contains("video_player: /usr/bin/mpv"));
         assert!(yaml.contains("db_location: \"/custom/path/db.sqlite\""));
         assert!(yaml.contains("log_file: \"/var/log/app.log\""));
+    }
+
+    /// Test Case: Invalid YAML configuration parse error handling
+    /// When the config file contains invalid YAML, read_config should
+    /// log a warning and return default configuration.
+    /// Validates: Requirements 2.4
+    #[test]
+    #[serial_test::serial]
+    fn test_invalid_yaml_parse_error_handling() {
+        use tempfile::TempDir;
+        
+        // Create a temporary directory for the test
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let yaml_path = temp_dir.path().join("config.yaml");
+        let log_file = temp_dir.path().join("test_parse_error.log");
+        
+        // Initialize logger
+        crate::logger::initialize_logger(log_file.clone(), crate::logger::LogLevel::Warn)
+            .expect("Failed to initialize logger");
+
+        // Create an invalid YAML config file (malformed syntax - unclosed quote)
+        let invalid_yaml = r#"current_fg: "Black
+current_bg: White
+video_extensions:
+  - mp4
+video_player: /usr/bin/vlc
+"#;
+        fs::write(&yaml_path, invalid_yaml).expect("Failed to write invalid config");
+
+        // Load the config - should return defaults and log warning
+        let config = read_config(&yaml_path);
+
+        // Verify default values are used (since parse failed)
+        assert_eq!(config.current_fg, "Black");
+        assert_eq!(config.current_bg, "White");
+        
+        // Log a final message to ensure flush
+        crate::logger::log_warn("test_complete");
+        
+        // Give time for log to flush
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        
+        // Verify warning was logged
+        let log_contents = fs::read_to_string(&log_file)
+            .expect("Failed to read log file");
+        assert!(log_contents.contains("Could not parse config.yaml"));
     }
 
 
