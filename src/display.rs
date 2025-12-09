@@ -570,42 +570,27 @@ pub fn draw_screen(
                     let is_new = episode_detail.title == filename;
                     let is_watched = episode_detail.watched == "true";
                     
-                    // Determine display based on conditions
-                    // Priority: Invalid > (New + Watched) > New > Watched > Normal
-                    let (text, fg, bg) = if !file_exists {
-                        // Invalid episode (file doesn't exist) - use invalid colors
-                        let text = truncate_string(name, effective_col_width);
-                        let fg = string_to_fg_color_or_default(&theme.invalid_fg);
-                        let bg = string_to_bg_color_or_default(&theme.invalid_bg);
-                        (text, fg, bg)
-                    } else if is_new && is_watched {
-                        // New AND watched - use new colors with watched indicator
-                        let formatted_name = format_episode_with_indicator(name, true, theme);
-                        let text = truncate_string(&formatted_name, effective_col_width);
-                        let fg = string_to_fg_color_or_default(&theme.new_fg);
-                        let bg = string_to_bg_color_or_default(&theme.new_bg);
-                        (text, fg, bg)
-                    } else if is_new && !is_watched {
-                        // New AND unwatched - use new colors with unwatched indicator
-                        let formatted_name = format_episode_with_indicator(name, false, theme);
-                        let text = truncate_string(&formatted_name, effective_col_width);
-                        let fg = string_to_fg_color_or_default(&theme.new_fg);
-                        let bg = string_to_bg_color_or_default(&theme.new_bg);
-                        (text, fg, bg)
-                    } else if is_watched {
-                        // Watched episode - add indicator and use normal colors
-                        let formatted_name = format_episode_with_indicator(name, true, theme);
-                        let text = truncate_string(&formatted_name, effective_col_width);
-                        let fg = string_to_fg_color_or_default(&theme.episode_fg);
-                        let bg = string_to_bg_color_or_default(&theme.episode_bg);
-                        (text, fg, bg)
+                    // Create Episode component
+                    use crate::components::{Component, episode::Episode};
+                    let episode_component = Episode::new(
+                        name.clone(),
+                        is_watched,
+                        file_exists,
+                        is_new,
+                    );
+                    
+                    // Render the component (not selected yet, will apply selection later)
+                    let cells = episode_component.render(effective_col_width, theme, false);
+                    
+                    // Convert Cell array to display text
+                    // The cells already have the correct colors and styling
+                    let text = cells_to_string(&cells);
+                    
+                    // Get colors from first cell (all cells have same colors in Episode component)
+                    let (fg, bg) = if !cells.is_empty() && !cells[0].is_empty() {
+                        (cells[0][0].fg_color, cells[0][0].bg_color)
                     } else {
-                        // Unwatched episode - add unwatched indicator and use normal colors
-                        let formatted_name = format_episode_with_indicator(name, false, theme);
-                        let text = truncate_string(&formatted_name, effective_col_width);
-                        let fg = string_to_fg_color_or_default(&theme.episode_fg);
-                        let bg = string_to_bg_color_or_default(&theme.episode_bg);
-                        (text, fg, bg)
+                        (Color::Reset, Color::Reset)
                     };
                     
                     (text, fg, bg)
@@ -1141,6 +1126,20 @@ pub fn format_episode_with_indicator(name: &str, is_watched: bool, theme: &Theme
             format!("{} {}", theme.unwatched_indicator, styled_name)
         }
     }
+}
+
+/// Convert a 2D Cell array to a String
+/// 
+/// # Arguments
+/// * `cells` - The 2D array of Cells to convert
+/// 
+/// # Returns
+/// * `String` - The string representation of the cells
+fn cells_to_string(cells: &[Vec<crate::components::Cell>]) -> String {
+    cells.iter()
+        .map(|row| row.iter().map(|cell| cell.character).collect::<String>())
+        .collect::<Vec<String>>()
+        .join("\n")
 }
 
 

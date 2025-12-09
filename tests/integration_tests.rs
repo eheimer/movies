@@ -550,3 +550,300 @@ fn test_theme_file_includes_comments() {
     assert!(contents.contains("watched_indicator: \"●\""));
     assert!(contents.contains("scrollbar_track_char: \"│\""));
 }
+
+// ============================================================================
+// Browse Mode Component Integration Tests (Task 6.1)
+// ============================================================================
+
+/// Integration Test 8: Episode component integration with display layer
+/// 
+/// This test verifies that the Episode component can be created and rendered
+/// with data from the application's data structures, and that the output
+/// is consistent with the expected format.
+/// 
+/// Validates: Requirements 5.1, 5.2
+#[test]
+fn test_episode_component_integration_with_display_layer() {
+    use movies::components::{Component, episode::Episode};
+    use movies::theme::Theme;
+    
+    let theme = Theme::default();
+    
+    // Create an episode component with typical application data
+    let episode = Episode::new(
+        "Test Episode Name".to_string(),
+        false, // unwatched
+        true,  // file exists
+        false, // not new
+    );
+    
+    // Render the component
+    let cells = episode.render(50, &theme, false);
+    
+    // Verify the output structure
+    assert_eq!(cells.len(), 1, "Episode should render as single row");
+    assert!(!cells[0].is_empty(), "Row should contain cells");
+    
+    // Verify the first character is the unwatched indicator
+    assert_eq!(cells[0][0].character, '○', "First character should be unwatched indicator");
+    
+    // Verify we can extract the text content
+    let text: String = cells[0].iter().map(|cell| cell.character).collect();
+    assert!(text.contains("Test Episode Name"), "Text should contain episode name");
+}
+
+/// Integration Test 9: Episode component with selection highlighting
+/// 
+/// This test verifies that when an episode is selected, the component
+/// applies the correct selection colors from the theme.
+/// 
+/// Validates: Requirements 5.3
+#[test]
+fn test_episode_component_selection_highlighting() {
+    use movies::components::{Component, episode::Episode};
+    use movies::theme::Theme;
+    use crossterm::style::Color;
+    
+    let theme = Theme::default();
+    
+    let episode = Episode::new(
+        "Selected Episode".to_string(),
+        false,
+        true,
+        false,
+    );
+    
+    // Render without selection
+    let cells_unselected = episode.render(50, &theme, false);
+    
+    // Render with selection
+    let cells_selected = episode.render(50, &theme, true);
+    
+    // Verify selection changes colors
+    assert_ne!(
+        cells_unselected[0][0].fg_color,
+        cells_selected[0][0].fg_color,
+        "Selection should change foreground color"
+    );
+    
+    // Verify selection uses current_fg/current_bg
+    assert_eq!(
+        cells_selected[0][0].fg_color,
+        Color::Black,
+        "Selected episode should use current_fg (Black by default)"
+    );
+    assert_eq!(
+        cells_selected[0][0].bg_color,
+        Color::White,
+        "Selected episode should use current_bg (White by default)"
+    );
+}
+
+/// Integration Test 10: Episode component with different states
+/// 
+/// This test verifies that episodes with different states (watched, new, invalid)
+/// are rendered with the correct colors and indicators.
+/// 
+/// Validates: Requirements 5.5
+#[test]
+fn test_episode_component_different_states() {
+    use movies::components::{Component, episode::Episode};
+    use movies::theme::Theme;
+    use crossterm::style::Color;
+    
+    let theme = Theme::default();
+    
+    // Test watched episode
+    let watched = Episode::new("Watched".to_string(), true, true, false);
+    let watched_cells = watched.render(50, &theme, false);
+    assert_eq!(watched_cells[0][0].character, '●', "Watched should have ● indicator");
+    
+    // Test unwatched episode
+    let unwatched = Episode::new("Unwatched".to_string(), false, true, false);
+    let unwatched_cells = unwatched.render(50, &theme, false);
+    assert_eq!(unwatched_cells[0][0].character, '○', "Unwatched should have ○ indicator");
+    
+    // Test new episode
+    let new_episode = Episode::new("New".to_string(), false, true, true);
+    let new_cells = new_episode.render(50, &theme, false);
+    assert_eq!(new_cells[0][0].fg_color, Color::Green, "New episode should use green color");
+    
+    // Test invalid episode (file doesn't exist)
+    let invalid = Episode::new("Invalid".to_string(), false, false, false);
+    let invalid_cells = invalid.render(50, &theme, false);
+    assert_eq!(invalid_cells[0][0].fg_color, Color::Red, "Invalid episode should use red color");
+}
+
+/// Integration Test 11: Episode component with custom theme
+/// 
+/// This test verifies that the Episode component correctly uses custom theme values
+/// when rendering, demonstrating integration with the theme system.
+/// 
+/// Validates: Requirements 5.2
+#[test]
+fn test_episode_component_with_custom_theme() {
+    use movies::components::{Component, episode::Episode};
+    use movies::theme::Theme;
+    use crossterm::style::Color;
+    
+    // Create a custom theme
+    let mut theme = Theme::default();
+    theme.watched_indicator = "✓".to_string();
+    theme.unwatched_indicator = "✗".to_string();
+    theme.new_fg = "blue".to_string();
+    theme.invalid_fg = "magenta".to_string();
+    
+    // Test watched episode with custom indicator
+    let watched = Episode::new("Watched".to_string(), true, true, false);
+    let watched_cells = watched.render(50, &theme, false);
+    assert_eq!(watched_cells[0][0].character, '✓', "Should use custom watched indicator");
+    
+    // Test unwatched episode with custom indicator
+    let unwatched = Episode::new("Unwatched".to_string(), false, true, false);
+    let unwatched_cells = unwatched.render(50, &theme, false);
+    assert_eq!(unwatched_cells[0][0].character, '✗', "Should use custom unwatched indicator");
+    
+    // Test new episode with custom color
+    let new_episode = Episode::new("New".to_string(), false, true, true);
+    let new_cells = new_episode.render(50, &theme, false);
+    assert_eq!(new_cells[0][0].fg_color, Color::Blue, "Should use custom new_fg color");
+    
+    // Test invalid episode with custom color
+    let invalid = Episode::new("Invalid".to_string(), false, false, false);
+    let invalid_cells = invalid.render(50, &theme, false);
+    assert_eq!(invalid_cells[0][0].fg_color, Color::Magenta, "Should use custom invalid_fg color");
+}
+
+/// Integration Test 12: Episode component rendering consistency
+/// 
+/// This test verifies that the Episode component produces consistent output
+/// when rendered multiple times with the same parameters, which is important
+/// for reliable display updates.
+/// 
+/// Validates: Requirements 5.2
+#[test]
+fn test_episode_component_rendering_consistency() {
+    use movies::components::{Component, episode::Episode};
+    use movies::theme::Theme;
+    
+    let theme = Theme::default();
+    let episode = Episode::new("Consistent".to_string(), true, true, false);
+    
+    // Render multiple times
+    let render1 = episode.render(50, &theme, false);
+    let render2 = episode.render(50, &theme, false);
+    let render3 = episode.render(50, &theme, false);
+    
+    // All renders should be identical
+    assert_eq!(render1, render2, "First and second render should be identical");
+    assert_eq!(render2, render3, "Second and third render should be identical");
+    
+    // Verify content is correct
+    let text: String = render1[0].iter().map(|cell| cell.character).collect();
+    assert!(text.starts_with("● "), "Should start with watched indicator and space");
+    assert!(text.contains("Consistent"), "Should contain episode name");
+}
+
+/// Integration Test 13: Episode component with width constraints
+/// 
+/// This test verifies that the Episode component correctly handles width constraints
+/// when integrated with the display system, which is important for responsive layout.
+/// 
+/// Validates: Requirements 5.4
+#[test]
+fn test_episode_component_with_width_constraints() {
+    use movies::components::{Component, episode::Episode};
+    use movies::theme::Theme;
+    
+    let theme = Theme::default();
+    let episode = Episode::new(
+        "This is a very long episode name that needs truncation".to_string(),
+        false,
+        true,
+        false,
+    );
+    
+    // Test with various widths
+    let widths = vec![10, 20, 30, 50, 100];
+    
+    for width in widths {
+        let cells = episode.render(width, &theme, false);
+        
+        // Verify output doesn't exceed width
+        assert!(
+            cells[0].len() <= width,
+            "Output length {} should not exceed width {}",
+            cells[0].len(),
+            width
+        );
+        
+        // Verify indicator is preserved even with small width
+        if width > 0 {
+            assert_eq!(
+                cells[0][0].character,
+                '○',
+                "Indicator should be preserved at width {}",
+                width
+            );
+        }
+    }
+}
+
+/// Integration Test 14: Episode component state priority
+/// 
+/// This test verifies that the Episode component correctly prioritizes states
+/// when multiple conditions are true (e.g., invalid overrides new).
+/// 
+/// Validates: Requirements 5.5
+#[test]
+fn test_episode_component_state_priority() {
+    use movies::components::{Component, episode::Episode};
+    use movies::theme::Theme;
+    use crossterm::style::Color;
+    
+    let theme = Theme::default();
+    
+    // Test: Invalid state should override new state
+    let invalid_and_new = Episode::new(
+        "Invalid New".to_string(),
+        false,
+        false, // file doesn't exist (invalid)
+        true,  // is new
+    );
+    let cells = invalid_and_new.render(50, &theme, false);
+    assert_eq!(
+        cells[0][0].fg_color,
+        Color::Red,
+        "Invalid state should override new state (red, not green)"
+    );
+    
+    // Test: New state with watched indicator
+    let new_and_watched = Episode::new(
+        "New Watched".to_string(),
+        true,  // watched
+        true,  // file exists
+        true,  // is new
+    );
+    let cells2 = new_and_watched.render(50, &theme, false);
+    assert_eq!(cells2[0][0].character, '●', "Should have watched indicator");
+    assert_eq!(cells2[0][0].fg_color, Color::Green, "Should use new color");
+    
+    // Test: Selection overrides all other states
+    let invalid_selected = Episode::new(
+        "Invalid Selected".to_string(),
+        false,
+        false, // invalid
+        false,
+    );
+    let cells3 = invalid_selected.render(50, &theme, true); // selected
+    assert_eq!(
+        cells3[0][0].fg_color,
+        Color::Black,
+        "Selection should override invalid state"
+    );
+    assert_eq!(
+        cells3[0][0].bg_color,
+        Color::White,
+        "Selection should override invalid state"
+    );
+}
