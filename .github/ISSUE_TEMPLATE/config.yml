@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Contributing Guide
+    url: https://github.com/eheimer/movies/blob/main/CONTRIBUTING.md
+    about: Learn how to contribute code to the project
+  - name: Security Audit
+    url: https://github.com/eheimer/movies/blob/main/docs/SECURITY_AUDIT.md
+    about: Review the security audit showing the app doesn't modify video files

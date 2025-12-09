@@ -219,13 +219,19 @@ Having issues? Check the [Troubleshooting Guide](docs/TROUBLESHOOTING.md) for so
 
 If you're interested in the technical details, architecture, or want to contribute to the project, check out [CONTRIBUTING.md](CONTRIBUTING.md) for developer documentation.
 
-## Contributing
+## Feedback & Contributions
 
-This project was built with AI assistance, and we welcome feedback and contributions! If you find bugs, have ideas for improvements, or want to add features, please:
+This project was built with AI assistance, and we welcome your feedback and contributions!
 
-- Open an issue on GitHub
-- Submit a pull request
-- Share your thoughts on how to make this better
+### Report Issues or Request Features
+
+- 🐛 **Found a bug?** [Report it here](https://github.com/eheimer/movies/issues/new?template=bug_report.md)
+- 💡 **Have a feature idea?** [Request it here](https://github.com/eheimer/movies/issues/new?template=feature_request.md)
+- ❓ **Have a question?** [Ask here](https://github.com/eheimer/movies/issues/new?template=question.md)
+
+### Contribute Code
+
+Want to contribute code? Check out [CONTRIBUTING.md](CONTRIBUTING.md) for developer documentation and guidelines.
 
 Don't hesitate to critique the code or suggest better approaches - that's how we all learn and improve!
 
