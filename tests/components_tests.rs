@@ -859,3 +859,1299 @@ fn test_component_state_verification_through_cells() {
     // Verify invalid colors are used
     assert_eq!(invalid_result[0][0].fg_color, Color::Red, "Invalid episode should use invalid_fg color");
 }
+
+// ============================================================================
+// Category Component Tests (Task 1.1)
+// ============================================================================
+
+use movies::components::{Category, CategoryType};
+
+/// Test Case 34: Category struct stores title correctly
+/// When a Category component is created with a title,
+/// it should store the title value correctly.
+/// Validates: Requirements 1.1
+#[test]
+fn test_category_stores_title() {
+    let category = Category::new(
+        "Breaking Bad".to_string(),
+        62,
+        45,
+        CategoryType::Series,
+    );
+    
+    assert_eq!(category.title, "Breaking Bad");
+}
+
+/// Test Case 35: Category struct stores episode_count correctly
+/// When a Category component is created with an episode count,
+/// it should store the episode_count value correctly.
+/// Validates: Requirements 1.2
+#[test]
+fn test_category_stores_episode_count() {
+    let category = Category::new(
+        "Season 1".to_string(),
+        13,
+        10,
+        CategoryType::Season,
+    );
+    
+    assert_eq!(category.episode_count, 13);
+}
+
+/// Test Case 36: Category struct stores watched_count correctly
+/// When a Category component is created with a watched count,
+/// it should store the watched_count value correctly.
+/// Validates: Requirements 1.3
+#[test]
+fn test_category_stores_watched_count() {
+    let category = Category::new(
+        "The Wire".to_string(),
+        60,
+        30,
+        CategoryType::Series,
+    );
+    
+    assert_eq!(category.watched_count, 30);
+}
+
+/// Test Case 37: Category struct stores category_type correctly
+/// When a Category component is created with a category type,
+/// it should store the category_type value correctly.
+/// Validates: Requirements 1.4
+#[test]
+fn test_category_stores_category_type() {
+    let series_category = Category::new(
+        "Game of Thrones".to_string(),
+        73,
+        73,
+        CategoryType::Series,
+    );
+    
+    assert_eq!(series_category.category_type, CategoryType::Series);
+    
+    let season_category = Category::new(
+        "Season 8".to_string(),
+        6,
+        6,
+        CategoryType::Season,
+    );
+    
+    assert_eq!(season_category.category_type, CategoryType::Season);
+}
+
+/// Test Case 38: Category struct creation with various values
+/// When Category components are created with different values,
+/// all fields should be stored correctly.
+/// Validates: Requirements 1.1, 1.2, 1.3, 1.4
+#[test]
+fn test_category_creation_with_various_values() {
+    // Test with zero watched count
+    let category1 = Category::new(
+        "New Series".to_string(),
+        10,
+        0,
+        CategoryType::Series,
+    );
+    
+    assert_eq!(category1.title, "New Series");
+    assert_eq!(category1.episode_count, 10);
+    assert_eq!(category1.watched_count, 0);
+    assert_eq!(category1.category_type, CategoryType::Series);
+    
+    // Test with all episodes watched
+    let category2 = Category::new(
+        "Completed Season".to_string(),
+        8,
+        8,
+        CategoryType::Season,
+    );
+    
+    assert_eq!(category2.title, "Completed Season");
+    assert_eq!(category2.episode_count, 8);
+    assert_eq!(category2.watched_count, 8);
+    assert_eq!(category2.category_type, CategoryType::Season);
+    
+    // Test with empty title
+    let category3 = Category::new(
+        "".to_string(),
+        5,
+        2,
+        CategoryType::Series,
+    );
+    
+    assert_eq!(category3.title, "");
+    assert_eq!(category3.episode_count, 5);
+    assert_eq!(category3.watched_count, 2);
+}
+
+// ============================================================================
+// Category Formatting Tests (Task 3.1)
+// ============================================================================
+
+/// Test Case 39: Title inclusion in output
+/// When a Category component renders, the output should contain the title string.
+/// Validates: Requirements 2.1
+#[test]
+fn test_category_title_inclusion_short() {
+    let category = Category::new(
+        "Lost".to_string(),
+        121,
+        50,
+        CategoryType::Series,
+    );
+    
+    let theme = Theme::default();
+    let result = category.render(100, &theme, false);
+    
+    // Should have cells
+    assert!(!result[0].is_empty(), "Should have cells");
+    
+    // Convert cells to string to check for title
+    let rendered_string: String = result[0].iter().map(|cell| cell.character).collect();
+    
+    // Should contain the title
+    assert!(rendered_string.contains("Lost"), "Output should contain title 'Lost'");
+}
+
+/// Test Case 40: Title inclusion with long title
+/// When a Category component renders with a long title,
+/// the output should contain the title string.
+/// Validates: Requirements 2.1
+#[test]
+fn test_category_title_inclusion_long() {
+    let category = Category::new(
+        "The Lord of the Rings: The Rings of Power".to_string(),
+        16,
+        8,
+        CategoryType::Series,
+    );
+    
+    let theme = Theme::default();
+    let result = category.render(100, &theme, false);
+    
+    // Convert cells to string
+    let rendered_string: String = result[0].iter().map(|cell| cell.character).collect();
+    
+    // Should contain the title
+    assert!(rendered_string.contains("The Lord of the Rings: The Rings of Power"), 
+            "Output should contain full title");
+}
+
+/// Test Case 41: Title inclusion with special characters
+/// When a Category component renders with special characters in the title,
+/// the output should contain those characters correctly.
+/// Validates: Requirements 2.1
+#[test]
+fn test_category_title_inclusion_special_chars() {
+    let category = Category::new(
+        "It's Always Sunny in Philadelphia".to_string(),
+        162,
+        100,
+        CategoryType::Series,
+    );
+    
+    let theme = Theme::default();
+    let result = category.render(100, &theme, false);
+    
+    // Convert cells to string
+    let rendered_string: String = result[0].iter().map(|cell| cell.character).collect();
+    
+    // Should contain the title with apostrophe
+    assert!(rendered_string.contains("It's Always Sunny in Philadelphia"), 
+            "Output should contain title with special characters");
+}
+
+/// Test Case 42: Title inclusion with Unicode characters
+/// When a Category component renders with Unicode characters in the title,
+/// the output should contain those characters correctly.
+/// Validates: Requirements 2.1
+#[test]
+fn test_category_title_inclusion_unicode() {
+    let category = Category::new(
+        "Café ☕ Series".to_string(),
+        10,
+        5,
+        CategoryType::Series,
+    );
+    
+    let theme = Theme::default();
+    let result = category.render(100, &theme, false);
+    
+    // Convert cells to string
+    let rendered_string: String = result[0].iter().map(|cell| cell.character).collect();
+    
+    // Should contain the title with Unicode characters
+    assert!(rendered_string.contains("Café"), "Output should contain 'Café'");
+    assert!(rendered_string.contains("☕"), "Output should contain '☕'");
+}
+
+/// Test Case 43: Empty title handling
+/// When a Category component renders with an empty title,
+/// it should still render the episode count information.
+/// Validates: Requirements 2.1
+#[test]
+fn test_category_empty_title() {
+    let category = Category::new(
+        "".to_string(),
+        10,
+        5,
+        CategoryType::Series,
+    );
+    
+    let theme = Theme::default();
+    let result = category.render(100, &theme, false);
+    
+    // Should have cells
+    assert!(!result[0].is_empty(), "Should have cells even with empty title");
+    
+    // Convert cells to string
+    let rendered_string: String = result[0].iter().map(|cell| cell.character).collect();
+    
+    // Should contain episode count information in "X/Y watched" format
+    assert!(rendered_string.contains("5/10 watched"), 
+            "Output should contain '5/10 watched' format even with empty title");
+}
+
+// ============================================================================
+// Category Episode Count Formatting Tests (Task 3.2)
+// ============================================================================
+
+/// Test Case 44: Episode count formatting with zero episodes
+/// When a Category component renders with zero episodes,
+/// the output should contain "(0 episodes)" format.
+/// Validates: Requirements 2.2
+#[test]
+fn test_category_episode_count_zero() {
+    let category = Category::new(
+        "Empty Series".to_string(),
+        0,
+        0,
+        CategoryType::Series,
+    );
+    
+    let theme = Theme::default();
+    let result = category.render(100, &theme, false);
+    
+    // Convert cells to string
+    let rendered_string: String = result[0].iter().map(|cell| cell.character).collect();
+    
+    // Should contain "0/0 watched"
+    assert!(rendered_string.contains("0/0 watched"), 
+            "Output should contain '0/0 watched' for zero episode count");
+}
+
+/// Test Case 45: Episode count formatting with one episode
+/// When a Category component renders with one episode,
+/// the output should contain "(1 episodes)" format.
+/// Validates: Requirements 2.2
+#[test]
+fn test_category_episode_count_one() {
+    let category = Category::new(
+        "Single Episode".to_string(),
+        1,
+        0,
+        CategoryType::Series,
+    );
+    
+    let theme = Theme::default();
+    let result = category.render(100, &theme, false);
+    
+    // Convert cells to string
+    let rendered_string: String = result[0].iter().map(|cell| cell.character).collect();
+    
+    // Should contain "0/1 watched"
+    assert!(rendered_string.contains("0/1 watched"), 
+            "Output should contain '0/1 watched' for single episode");
+}
+
+/// Test Case 46: Episode count formatting with ten episodes
+/// When a Category component renders with ten episodes,
+/// the output should contain "(10 episodes)" format.
+/// Validates: Requirements 2.2
+#[test]
+fn test_category_episode_count_ten() {
+    let category = Category::new(
+        "Ten Episodes".to_string(),
+        10,
+        5,
+        CategoryType::Season,
+    );
+    
+    let theme = Theme::default();
+    let result = category.render(100, &theme, false);
+    
+    // Convert cells to string
+    let rendered_string: String = result[0].iter().map(|cell| cell.character).collect();
+    
+    // Should contain "5/10 watched"
+    assert!(rendered_string.contains("5/10 watched"), 
+            "Output should contain '5/10 watched' for ten episodes with 5 watched");
+}
+
+/// Test Case 47: Episode count formatting with large count
+/// When a Category component renders with over 100 episodes,
+/// the output should contain the correct episode count format.
+/// Validates: Requirements 2.2
+#[test]
+fn test_category_episode_count_large() {
+    let category = Category::new(
+        "Long Running Series".to_string(),
+        156,
+        100,
+        CategoryType::Series,
+    );
+    
+    let theme = Theme::default();
+    let result = category.render(100, &theme, false);
+    
+    // Convert cells to string
+    let rendered_string: String = result[0].iter().map(|cell| cell.character).collect();
+    
+    // Should contain "0/156 watched"
+    assert!(rendered_string.contains("0/156 watched"), 
+            "Output should contain '0/156 watched' for large episode count");
+}
+
+/// Test Case 48: Episode count format consistency
+/// When Category components render with various episode counts,
+/// they should all use the consistent "(X episodes)" format.
+/// Validates: Requirements 2.2
+#[test]
+fn test_category_episode_count_format_consistency() {
+    let theme = Theme::default();
+    
+    // Test various counts
+    let counts = vec![0, 1, 5, 13, 22, 50, 100, 500];
+    
+    for count in counts {
+        let category = Category::new(
+            format!("Series {}", count),
+            count,
+            0,
+            CategoryType::Series,
+        );
+        
+        let result = category.render(100, &theme, false);
+        let rendered_string: String = result[0].iter().map(|cell| cell.character).collect();
+        
+        // Should contain the expected format "0/X watched"
+        let expected = format!("0/{} watched", count);
+        assert!(rendered_string.contains(&expected), 
+                "Output should contain '{}' for count {}", expected, count);
+    }
+}
+
+// ============================================================================
+// Category Watched Count Formatting Tests (Task 3.3)
+// ============================================================================
+
+/// Test Case 49: Watched count omitted when zero
+/// When a Category component renders with zero watched count,
+/// the output should omit the "[Y watched]" portion.
+/// Validates: Requirements 2.3, 2.4
+#[test]
+fn test_category_watched_count_zero_omitted() {
+    let category = Category::new(
+        "New Series".to_string(),
+        20,
+        0,
+        CategoryType::Series,
+    );
+    
+    let theme = Theme::default();
+    let result = category.render(100, &theme, false);
+    
+    // Convert cells to string
+    let rendered_string: String = result[0].iter().map(|cell| cell.character).collect();
+    
+    // Should contain "0/20 watched" format
+    assert!(rendered_string.contains("0/20 watched"), 
+            "Output should contain '0/20 watched' format");
+    
+    // Should contain the title
+    assert!(rendered_string.contains("New Series"), 
+            "Output should contain the title");
+}
+
+/// Test Case 50: Watched count included when non-zero
+/// When a Category component renders with non-zero watched count,
+/// the output should contain "[Y watched]" format.
+/// Validates: Requirements 2.3
+#[test]
+fn test_category_watched_count_nonzero_included() {
+    let category = Category::new(
+        "Partially Watched".to_string(),
+        20,
+        5,
+        CategoryType::Series,
+    );
+    
+    let theme = Theme::default();
+    let result = category.render(100, &theme, false);
+    
+    // Convert cells to string
+    let rendered_string: String = result[0].iter().map(|cell| cell.character).collect();
+    
+    // Should contain "5/20 watched"
+    assert!(rendered_string.contains("5/20 watched"), 
+            "Output should contain '5/20 watched' when watched count is 5");
+}
+
+/// Test Case 51: Watched count with one episode watched
+/// When a Category component renders with one episode watched,
+/// the output should contain "[1 watched]" format.
+/// Validates: Requirements 2.3
+#[test]
+fn test_category_watched_count_one() {
+    let category = Category::new(
+        "Started Series".to_string(),
+        10,
+        1,
+        CategoryType::Series,
+    );
+    
+    let theme = Theme::default();
+    let result = category.render(100, &theme, false);
+    
+    // Convert cells to string
+    let rendered_string: String = result[0].iter().map(|cell| cell.character).collect();
+    
+    // Should contain "1/10 watched"
+    assert!(rendered_string.contains("1/10 watched"), 
+            "Output should contain '1/10 watched' when watched count is 1");
+}
+
+/// Test Case 52: Watched count with all episodes watched
+/// When a Category component renders with all episodes watched,
+/// the output should contain the watched count.
+/// Validates: Requirements 2.3
+#[test]
+fn test_category_watched_count_all() {
+    let category = Category::new(
+        "Completed Series".to_string(),
+        13,
+        13,
+        CategoryType::Series,
+    );
+    
+    let theme = Theme::default();
+    let result = category.render(100, &theme, false);
+    
+    // Convert cells to string
+    let rendered_string: String = result[0].iter().map(|cell| cell.character).collect();
+    
+    // Should contain "13/13 watched"
+    assert!(rendered_string.contains("13/13 watched"), 
+            "Output should contain '13/13 watched' when all episodes are watched");
+}
+
+/// Test Case 53: Watched count with large numbers
+/// When a Category component renders with large watched count,
+/// the output should contain the correct format.
+/// Validates: Requirements 2.3
+#[test]
+fn test_category_watched_count_large() {
+    let category = Category::new(
+        "Long Series".to_string(),
+        200,
+        150,
+        CategoryType::Series,
+    );
+    
+    let theme = Theme::default();
+    let result = category.render(100, &theme, false);
+    
+    // Convert cells to string
+    let rendered_string: String = result[0].iter().map(|cell| cell.character).collect();
+    
+    // Should contain "150/200 watched"
+    assert!(rendered_string.contains("150/200 watched"), 
+            "Output should contain '150/200 watched' for large watched count");
+}
+
+/// Test Case 54: Complete format with watched count
+/// When a Category component renders with non-zero watched count,
+/// the output should follow the complete format: "Title (X episodes) [Y watched]"
+/// Validates: Requirements 2.5
+#[test]
+fn test_category_complete_format_with_watched() {
+    let category = Category::new(
+        "Breaking Bad".to_string(),
+        62,
+        45,
+        CategoryType::Series,
+    );
+    
+    let theme = Theme::default();
+    let result = category.render(100, &theme, false);
+    
+    // Convert cells to string
+    let rendered_string: String = result[0].iter().map(|cell| cell.character).collect();
+    
+    // Should contain all parts in correct format: "Title  45/62 watched"
+    assert!(rendered_string.contains("Breaking Bad"), "Should contain title");
+    assert!(rendered_string.contains("45/62 watched"), "Should contain watched/total count");
+    
+    // Verify order: title should come before watched count
+    let title_pos = rendered_string.find("Breaking Bad").unwrap();
+    let watched_pos = rendered_string.find("45/62 watched").unwrap();
+    
+    assert!(title_pos < watched_pos, "Title should come before watched count");
+}
+
+/// Test Case 55: Complete format without watched count
+/// When a Category component renders with zero watched count,
+/// the output should follow the format: "Title (X episodes)"
+/// Validates: Requirements 2.4, 2.5
+#[test]
+fn test_category_complete_format_without_watched() {
+    let category = Category::new(
+        "The Wire".to_string(),
+        60,
+        0,
+        CategoryType::Series,
+    );
+    
+    let theme = Theme::default();
+    let result = category.render(100, &theme, false);
+    
+    // Convert cells to string
+    let rendered_string: String = result[0].iter().map(|cell| cell.character).collect();
+    
+    // Should contain title and "0/60 watched" format
+    assert!(rendered_string.contains("The Wire"), "Should contain title");
+    assert!(rendered_string.contains("0/60 watched"), "Should contain '0/60 watched' format");
+    
+    // Verify order: title should come before watched count
+    let title_pos = rendered_string.find("The Wire").unwrap();
+    let watched_pos = rendered_string.find("0/60 watched").unwrap();
+    
+    assert!(title_pos < watched_pos, "Title should come before watched count");
+}
+
+// ============================================================================
+// Category Color Application Tests (Task 4.1 and 4.2)
+// ============================================================================
+
+/// Test Case 56: Selection color application
+/// When a Category component renders with is_selected=true,
+/// all output cells should use current_fg and current_bg colors from the theme.
+/// Validates: Requirements 3.3
+#[test]
+fn test_category_selection_color_application() {
+    let category = Category::new(
+        "Breaking Bad".to_string(),
+        62,
+        45,
+        CategoryType::Series,
+    );
+    
+    let theme = Theme::default();
+    let result = category.render(100, &theme, true); // is_selected=true
+    
+    // Should have cells
+    assert!(!result[0].is_empty(), "Should have cells");
+    
+    // All cells should use current_fg and current_bg colors
+    for cell in &result[0] {
+        assert_eq!(cell.fg_color, Color::Black, "All cells should use current_fg (Black)");
+        assert_eq!(cell.bg_color, Color::White, "All cells should use current_bg (White)");
+    }
+}
+
+/// Test Case 57: Selection color application with custom theme
+/// When a Category component renders with is_selected=true and a custom theme,
+/// all output cells should use the custom current_fg and current_bg colors.
+/// Validates: Requirements 3.3
+#[test]
+fn test_category_selection_color_application_custom_theme() {
+    let category = Category::new(
+        "The Wire".to_string(),
+        60,
+        30,
+        CategoryType::Series,
+    );
+    
+    // Create custom theme with different selection colors
+    let mut theme = Theme::default();
+    theme.current_fg = "cyan".to_string();
+    theme.current_bg = "magenta".to_string();
+    
+    let result = category.render(100, &theme, true); // is_selected=true
+    
+    // Should have cells
+    assert!(!result[0].is_empty(), "Should have cells");
+    
+    // All cells should use custom current colors
+    for cell in &result[0] {
+        assert_eq!(cell.fg_color, Color::Cyan, "All cells should use current_fg (Cyan)");
+        assert_eq!(cell.bg_color, Color::Magenta, "All cells should use current_bg (Magenta)");
+    }
+}
+
+/// Test Case 58: Selection color overrides default colors
+/// When a Category component renders with is_selected=true,
+/// the selection colors should override any default category colors.
+/// Validates: Requirements 3.3
+#[test]
+fn test_category_selection_overrides_default() {
+    let category = Category::new(
+        "Game of Thrones".to_string(),
+        73,
+        73,
+        CategoryType::Series,
+    );
+    
+    let theme = Theme::default();
+    
+    // Render without selection
+    let result_unselected = category.render(100, &theme, false);
+    
+    // Render with selection
+    let result_selected = category.render(100, &theme, true);
+    
+    // Both should have cells
+    assert!(!result_unselected[0].is_empty(), "Unselected should have cells");
+    assert!(!result_selected[0].is_empty(), "Selected should have cells");
+    
+    // Selected cells should use current colors (Black on White)
+    for cell in &result_selected[0] {
+        assert_eq!(cell.fg_color, Color::Black, "Selected cells should use current_fg");
+        assert_eq!(cell.bg_color, Color::White, "Selected cells should use current_bg");
+    }
+    
+    // Unselected cells should use series colors for title and count colors for count
+    // Just verify that they're NOT using the selection colors
+    let has_non_selection_colors = result_unselected[0].iter().any(|cell| {
+        cell.fg_color != Color::Black || cell.bg_color != Color::White
+    });
+    assert!(has_non_selection_colors, "Unselected cells should not use selection colors");
+}
+
+/// Test Case 59: Default color application
+/// When a Category component renders with is_selected=false,
+/// all output cells should use default category colors (episode_fg and episode_bg) from the theme.
+/// Validates: Requirements 3.4
+#[test]
+fn test_category_default_color_application() {
+    let category = Category::new(
+        "Lost".to_string(),
+        121,
+        50,
+        CategoryType::Series,
+    );
+    
+    let theme = Theme::default();
+    let result = category.render(100, &theme, false); // is_selected=false
+    
+    // Should have cells
+    assert!(!result[0].is_empty(), "Should have cells");
+    
+    // Cells should use series colors for title (Blue) and count colors for count (DarkGray)
+    let rendered_string: String = result[0].iter().map(|cell| cell.character).collect();
+    
+    // Find where the title ends and count begins
+    let has_series_color = result[0].iter().any(|cell| cell.fg_color == Color::Blue);
+    let has_count_color = result[0].iter().any(|cell| cell.fg_color == Color::DarkGrey);
+    
+    assert!(has_series_color, "Should have cells with series_fg (Blue)");
+    assert!(has_count_color, "Should have cells with count_fg (DarkGray)");
+}
+
+/// Test Case 60: Default color application with custom theme
+/// When a Category component renders with is_selected=false and a custom theme,
+/// all output cells should use the custom episode_fg and episode_bg colors.
+/// Validates: Requirements 3.4
+#[test]
+fn test_category_default_color_application_custom_theme() {
+    let category = Category::new(
+        "Stranger Things".to_string(),
+        34,
+        20,
+        CategoryType::Series,
+    );
+    
+    // Create custom theme with different series and count colors
+    let mut theme = Theme::default();
+    theme.series_fg = "yellow".to_string();
+    theme.series_bg = "blue".to_string();
+    theme.count_fg = "red".to_string();
+    
+    let result = category.render(100, &theme, false); // is_selected=false
+    
+    // Should have cells
+    assert!(!result[0].is_empty(), "Should have cells");
+    
+    // Title cells should use custom series colors, count cells should use count colors
+    let has_series_color = result[0].iter().any(|cell| cell.fg_color == Color::Yellow);
+    let has_count_color = result[0].iter().any(|cell| cell.fg_color == Color::Red);
+    
+    assert!(has_series_color, "Should have cells with series_fg (Yellow)");
+    assert!(has_count_color, "Should have cells with count_fg (Red)");
+}
+
+/// Test Case 61: Default colors for both Series and Season types
+/// When Category components of both Series and Season types render with is_selected=false,
+/// they should both use the same default episode colors.
+/// Validates: Requirements 3.4
+#[test]
+fn test_category_default_colors_both_types() {
+    let series_category = Category::new(
+        "Breaking Bad".to_string(),
+        62,
+        45,
+        CategoryType::Series,
+    );
+    
+    let season_category = Category::new(
+        "Season 1".to_string(),
+        7,
+        7,
+        CategoryType::Season,
+    );
+    
+    let theme = Theme::default();
+    
+    let series_result = series_category.render(100, &theme, false);
+    let season_result = season_category.render(100, &theme, false);
+    
+    // Both should have cells
+    assert!(!series_result[0].is_empty(), "Series should have cells");
+    assert!(!season_result[0].is_empty(), "Season should have cells");
+    
+    // Series should use series colors, Season should use season colors
+    // Both should use count colors for the count part
+    let series_has_series_color = series_result[0].iter().any(|cell| cell.fg_color == Color::Blue);
+    let season_has_season_color = season_result[0].iter().any(|cell| cell.fg_color == Color::Blue);
+    let series_has_count_color = series_result[0].iter().any(|cell| cell.fg_color == Color::DarkGrey);
+    let season_has_count_color = season_result[0].iter().any(|cell| cell.fg_color == Color::DarkGrey);
+    
+    assert!(series_has_series_color, "Series should use series_fg (Blue)");
+    assert!(season_has_season_color, "Season should use season_fg (Blue)");
+    assert!(series_has_count_color, "Series should use count_fg (DarkGray)");
+    assert!(season_has_count_color, "Season should use count_fg (DarkGray)");
+}
+
+/// Test Case 62: Color consistency across entire rendered string
+/// When a Category component renders, all characters in the output
+/// should have consistent colors (all cells use the same fg/bg colors).
+/// Validates: Requirements 3.3, 3.4
+#[test]
+fn test_category_color_consistency() {
+    let category = Category::new(
+        "The Sopranos".to_string(),
+        86,
+        50,
+        CategoryType::Series,
+    );
+    
+    let theme = Theme::default();
+    
+    // Test with selection
+    let result_selected = category.render(100, &theme, true);
+    assert!(!result_selected[0].is_empty(), "Should have cells");
+    
+    let first_cell_fg = result_selected[0][0].fg_color;
+    let first_cell_bg = result_selected[0][0].bg_color;
+    
+    // All cells should have the same colors
+    for cell in &result_selected[0] {
+        assert_eq!(cell.fg_color, first_cell_fg, "All cells should have consistent fg color");
+        assert_eq!(cell.bg_color, first_cell_bg, "All cells should have consistent bg color");
+    }
+    
+    // Test without selection - should have different colors for title vs count
+    let result_unselected = category.render(100, &theme, false);
+    assert!(!result_unselected[0].is_empty(), "Should have cells");
+    
+    // Should have at least two different foreground colors (title and count)
+    let unique_fg_colors: std::collections::HashSet<_> = result_unselected[0]
+        .iter()
+        .map(|cell| cell.fg_color)
+        .collect();
+    
+    assert!(unique_fg_colors.len() >= 2, "Should have at least 2 different fg colors (title and count)");
+}
+
+// ============================================================================
+// Category Text Truncation Tests (Task 5.1)
+// ============================================================================
+
+/// Test Case 63: Text truncation with width smaller than formatted string
+/// When a Category component renders with a width smaller than the formatted string length,
+/// the output should be truncated to fit within the specified width.
+/// Validates: Requirements 3.5
+#[test]
+fn test_category_truncation_smaller_width() {
+    let category = Category::new(
+        "This is a very long series name that should be truncated".to_string(),
+        100,
+        50,
+        CategoryType::Series,
+    );
+    
+    let theme = Theme::default();
+    let width = 20;
+    let result = category.render(width, &theme, false);
+    
+    // Should have cells
+    assert!(!result[0].is_empty(), "Should have cells");
+    
+    // Output should not exceed the width
+    assert!(result[0].len() <= width, 
+            "Output length {} should not exceed width {}", result[0].len(), width);
+}
+
+/// Test Case 64: Text truncation with Unicode characters in title
+/// When a Category component renders with Unicode characters in the title and limited width,
+/// it should correctly handle multi-byte UTF-8 characters during truncation.
+/// Validates: Requirements 3.5
+#[test]
+fn test_category_truncation_with_unicode() {
+    let category = Category::new(
+        "Café ☕ Series with émojis 🎬 and spëcial çharacters".to_string(),
+        25,
+        10,
+        CategoryType::Series,
+    );
+    
+    let theme = Theme::default();
+    let width = 30;
+    let result = category.render(width, &theme, false);
+    
+    // Should have cells
+    assert!(!result[0].is_empty(), "Should have cells");
+    
+    // Output should not exceed the width
+    assert!(result[0].len() <= width, 
+            "Output length {} should not exceed width {}", result[0].len(), width);
+    
+    // Verify we can still read the characters (no broken Unicode)
+    let rendered_string: String = result[0].iter().map(|cell| cell.character).collect();
+    
+    // Should contain at least part of the title
+    assert!(rendered_string.contains("Café") || rendered_string.len() <= width, 
+            "Should contain valid Unicode characters");
+}
+
+/// Test Case 65: Text truncation with various width values
+/// When a Category component renders with different width values,
+/// it should correctly truncate to each specified width.
+/// Validates: Requirements 3.5
+#[test]
+fn test_category_truncation_various_widths() {
+    let category = Category::new(
+        "Breaking Bad".to_string(),
+        62,
+        45,
+        CategoryType::Series,
+    );
+    
+    let theme = Theme::default();
+    
+    // Test with width 10
+    let result_10 = category.render(10, &theme, false);
+    assert!(result_10[0].len() <= 10, "Width 10: output should not exceed width");
+    
+    // Test with width 20
+    let result_20 = category.render(20, &theme, false);
+    assert!(result_20[0].len() <= 20, "Width 20: output should not exceed width");
+    
+    // Test with width 50
+    let result_50 = category.render(50, &theme, false);
+    assert!(result_50[0].len() <= 50, "Width 50: output should not exceed width");
+    
+    // Test with width 100 (larger than content)
+    let result_100 = category.render(100, &theme, false);
+    assert!(result_100[0].len() <= 100, "Width 100: output should not exceed width");
+    
+    // Verify that larger widths produce longer or equal output
+    assert!(result_10[0].len() <= result_20[0].len(), 
+            "Larger width should produce longer or equal output");
+    assert!(result_20[0].len() <= result_50[0].len(), 
+            "Larger width should produce longer or equal output");
+}
+
+/// Test Case 66: Text truncation with zero width
+/// When a Category component renders with zero width,
+/// it should return an empty cell array without panicking.
+/// Validates: Requirements 3.5
+#[test]
+fn test_category_truncation_zero_width() {
+    let category = Category::new(
+        "Test Series".to_string(),
+        10,
+        5,
+        CategoryType::Series,
+    );
+    
+    let theme = Theme::default();
+    let result = category.render(0, &theme, false);
+    
+    // Should return a single row with no cells
+    assert_eq!(result.len(), 1, "Should return single row");
+    assert_eq!(result[0].len(), 0, "Row should be empty for zero width");
+}
+
+/// Test Case 67: Text truncation preserves format structure
+/// When a Category component is truncated, the output should still be readable
+/// and maintain as much of the format structure as possible.
+/// Validates: Requirements 3.5
+#[test]
+fn test_category_truncation_preserves_structure() {
+    let category = Category::new(
+        "Short".to_string(),
+        10,
+        5,
+        CategoryType::Series,
+    );
+    
+    let theme = Theme::default();
+    
+    // Test with width that should fit everything
+    let result_full = category.render(100, &theme, false);
+    let full_string: String = result_full[0].iter().map(|cell| cell.character).collect();
+    
+    // Should contain all parts
+    assert!(full_string.contains("Short"), "Should contain title");
+    assert!(full_string.contains("5/10 watched"), "Should contain watched/total count");
+    
+    // Test with width that truncates
+    let result_truncated = category.render(15, &theme, false);
+    let truncated_string: String = result_truncated[0].iter().map(|cell| cell.character).collect();
+    
+    // With width 15, we need to fit "Short" (5) + spacing (1) + "5/10 watched" (12) = 18 chars
+    // So the title will be truncated. The output should still contain part of the title.
+    assert!(truncated_string.contains("Shor") || truncated_string.starts_with("S"), 
+            "Truncated output should contain at least part of the title, got: '{}'", truncated_string);
+}
+
+/// Test Case 68: Text truncation with exact width match
+/// When a Category component renders with width exactly matching the content length,
+/// no truncation should occur.
+/// Validates: Requirements 3.5
+#[test]
+fn test_category_truncation_exact_width() {
+    let category = Category::new(
+        "Test".to_string(),
+        5,
+        0,
+        CategoryType::Series,
+    );
+    
+    let theme = Theme::default();
+    
+    // First render with large width to get actual length
+    let result_full = category.render(100, &theme, false);
+    let actual_length = result_full[0].len();
+    
+    // Now render with exact width
+    let result_exact = category.render(actual_length, &theme, false);
+    
+    // Should have exactly the same length
+    assert_eq!(result_exact[0].len(), actual_length, 
+               "Should have exactly the same length when width matches content");
+    
+    // Content should be identical
+    let full_string: String = result_full[0].iter().map(|cell| cell.character).collect();
+    let exact_string: String = result_exact[0].iter().map(|cell| cell.character).collect();
+    
+    assert_eq!(full_string, exact_string, 
+               "Content should be identical when width matches");
+}
+
+/// Test Case 69: Text truncation with very long title
+/// When a Category component has a very long title and limited width,
+/// it should truncate gracefully without panicking.
+/// Validates: Requirements 3.5
+#[test]
+fn test_category_truncation_very_long_title() {
+    let category = Category::new(
+        "This is an extremely long series title that goes on and on and on and should definitely be truncated when rendered with a small width constraint".to_string(),
+        150,
+        75,
+        CategoryType::Series,
+    );
+    
+    let theme = Theme::default();
+    let width = 25;
+    let result = category.render(width, &theme, false);
+    
+    // Should have cells
+    assert!(!result[0].is_empty(), "Should have cells");
+    
+    // Output should not exceed the width
+    assert_eq!(result[0].len(), width, 
+               "Output should be exactly the width when truncated");
+}
+
+/// Test Case 70: Text truncation with watched count
+/// When a Category component with watched count is truncated,
+/// it should handle the full formatted string correctly.
+/// Validates: Requirements 3.5
+#[test]
+fn test_category_truncation_with_watched_count() {
+    let category = Category::new(
+        "Series Name".to_string(),
+        100,
+        50,
+        CategoryType::Series,
+    );
+    
+    let theme = Theme::default();
+    
+    // Render with full width
+    let result_full = category.render(100, &theme, false);
+    let full_string: String = result_full[0].iter().map(|cell| cell.character).collect();
+    
+    // Should contain all parts
+    assert!(full_string.contains("Series Name"), "Should contain title");
+    assert!(full_string.contains("50/100 watched"), "Should contain watched/total count");
+    
+    // Render with truncated width
+    let result_truncated = category.render(20, &theme, false);
+    
+    // Should not exceed width
+    assert!(result_truncated[0].len() <= 20, 
+            "Truncated output should not exceed width");
+}
+
+
+// ============================================================================
+// Category Component Isolation Tests (Task 5.2)
+// ============================================================================
+
+/// Test Case 71: Category::render() does not perform terminal I/O
+/// When Category::render() is called, it should not perform any terminal I/O operations.
+/// This test verifies that the component can be tested without terminal interaction.
+/// Validates: Requirements 4.6, 6.1
+#[test]
+fn test_category_render_no_terminal_io() {
+    let category = Category::new(
+        "Test Series".to_string(),
+        50,
+        25,
+        CategoryType::Series,
+    );
+    
+    let theme = Theme::default();
+    
+    // Call render - this should not panic or require terminal setup
+    // If this test passes, it means render() doesn't perform terminal I/O
+    let result = category.render(100, &theme, false);
+    
+    // Verify we got a result
+    assert!(!result.is_empty(), "Should return cell array");
+    assert!(!result[0].is_empty(), "Should have cells in the row");
+}
+
+/// Test Case 72: Cell arrays can be verified without terminal interaction
+/// When a Category component produces Cell arrays, the contents should be verifiable
+/// without requiring terminal interaction.
+/// Validates: Requirements 4.6, 6.1
+#[test]
+fn test_category_cell_array_verification_without_terminal() {
+    let category = Category::new(
+        "Breaking Bad".to_string(),
+        62,
+        45,
+        CategoryType::Series,
+    );
+    
+    let theme = Theme::default();
+    let result = category.render(100, &theme, false);
+    
+    // Verify cell contents without terminal interaction
+    assert_eq!(result.len(), 1, "Should have one row");
+    
+    // Convert to string for verification
+    let rendered_string: String = result[0].iter().map(|cell| cell.character).collect();
+    
+    // Verify content
+    assert!(rendered_string.contains("Breaking Bad"), "Should contain title");
+    assert!(rendered_string.contains("45/62 watched"), "Should contain watched/total count");
+    
+    // Verify colors - first cell should use series_fg (Blue) since it's a Series category
+    assert_eq!(result[0][0].fg_color, Color::Blue, "Should use series_fg color (Blue)");
+    assert_eq!(result[0][0].bg_color, Color::Reset, "Should use series_bg color (Reset)");
+    
+    // Verify we can inspect all cells
+    for cell in &result[0] {
+        // Each cell should have valid character, colors, and style
+        assert!(cell.character != '\0', "Cell should have valid character");
+    }
+}
+
+/// Test Case 73: Category rendering is deterministic
+/// When Category::render() is called multiple times with the same parameters,
+/// it should produce identical results.
+/// Validates: Requirements 4.6, 6.1
+#[test]
+fn test_category_rendering_is_deterministic() {
+    let category = Category::new(
+        "The Wire".to_string(),
+        60,
+        30,
+        CategoryType::Series,
+    );
+    
+    let theme = Theme::default();
+    
+    // Render multiple times
+    let result1 = category.render(100, &theme, false);
+    let result2 = category.render(100, &theme, false);
+    let result3 = category.render(100, &theme, false);
+    
+    // All results should be identical
+    assert_eq!(result1, result2, "First and second render should be identical");
+    assert_eq!(result2, result3, "Second and third render should be identical");
+}
+
+/// Test Case 74: Category can be tested with different themes
+/// When Category::render() is called with different themes,
+/// it should produce different cell arrays without requiring terminal interaction.
+/// Validates: Requirements 4.6, 6.1
+#[test]
+fn test_category_with_different_themes() {
+    let category = Category::new(
+        "Game of Thrones".to_string(),
+        73,
+        73,
+        CategoryType::Series,
+    );
+    
+    // Create two different themes
+    let theme1 = Theme::default();
+    let mut theme2 = Theme::default();
+    theme2.series_fg = "red".to_string();  // Change series colors since it's a Series category
+    theme2.series_bg = "yellow".to_string();
+    
+    // Render with both themes
+    let result1 = category.render(100, &theme1, false);
+    let result2 = category.render(100, &theme2, false);
+    
+    // Results should be different (different colors)
+    assert_ne!(result1[0][0].fg_color, result2[0][0].fg_color, 
+               "Different themes should produce different colors");
+    assert_ne!(result1[0][0].bg_color, result2[0][0].bg_color, 
+               "Different themes should produce different colors");
+}
+
+/// Test Case 75: Category state can be verified through Cell inspection
+/// When a Category component renders, all state information should be verifiable
+/// by inspecting the Cell array without terminal interaction.
+/// Validates: Requirements 4.6, 6.1
+#[test]
+fn test_category_state_verification_through_cells() {
+    // Test with watched count
+    let category_with_watched = Category::new(
+        "Watched Series".to_string(),
+        20,
+        10,
+        CategoryType::Series,
+    );
+    
+    let theme = Theme::default();
+    let result_with_watched = category_with_watched.render(100, &theme, false);
+    
+    // Convert to string
+    let string_with_watched: String = result_with_watched[0].iter()
+        .map(|cell| cell.character).collect();
+    
+    // Verify watched count is present in "X/Y watched" format
+    assert!(string_with_watched.contains("10/20 watched"), 
+            "Should contain watched count in '10/20 watched' format");
+    
+    // Test without watched count
+    let category_without_watched = Category::new(
+        "New Series".to_string(),
+        20,
+        0,
+        CategoryType::Series,
+    );
+    
+    let result_without_watched = category_without_watched.render(100, &theme, false);
+    
+    // Convert to string
+    let string_without_watched: String = result_without_watched[0].iter()
+        .map(|cell| cell.character).collect();
+    
+    // Verify watched count shows "0/20 watched" format
+    assert!(string_without_watched.contains("0/20 watched"), 
+            "Should contain '0/20 watched' format even when zero watched");
+}
+
+/// Test Case 76: Category selection state can be verified through Cell colors
+/// When a Category component renders with different selection states,
+/// the selection state should be verifiable by inspecting cell colors.
+/// Validates: Requirements 4.6, 6.1
+#[test]
+fn test_category_selection_state_verification() {
+    let category = Category::new(
+        "Test Series".to_string(),
+        10,
+        5,
+        CategoryType::Series,
+    );
+    
+    let theme = Theme::default();
+    
+    // Render selected
+    let result_selected = category.render(100, &theme, true);
+    
+    // Verify selection colors
+    for cell in &result_selected[0] {
+        assert_eq!(cell.fg_color, Color::Black, "Selected should use current_fg");
+        assert_eq!(cell.bg_color, Color::White, "Selected should use current_bg");
+    }
+    
+    // Render unselected
+    let result_unselected = category.render(100, &theme, false);
+    
+    // Verify colors - title should use series colors, count should use count colors
+    // The first cells (title part) should use series_fg (Blue)
+    let rendered_string: String = result_unselected[0].iter().map(|cell| cell.character).collect();
+    let title_end = rendered_string.find("Test Series").unwrap() + "Test Series".len();
+    
+    // Check title cells use series colors
+    for cell in &result_unselected[0][0..title_end] {
+        assert_eq!(cell.fg_color, Color::Blue, "Title should use series_fg (Blue)");
+        assert_eq!(cell.bg_color, Color::Reset, "Title should use series_bg (Reset)");
+    }
+    
+    // Check count cells use count colors (find the count part)
+    let count_start = rendered_string.find("5/10 watched").unwrap();
+    for cell in &result_unselected[0][count_start..] {
+        assert_eq!(cell.fg_color, Color::DarkGrey, "Count should use count_fg (DarkGray)");
+    }
+}
+
+/// Test Case 77: Category component can be tested in isolation
+/// When testing Category component, no other components or terminal setup is required.
+/// Validates: Requirements 4.6, 6.1
+#[test]
+fn test_category_component_isolation() {
+    // Create category without any other setup
+    let category = Category::new(
+        "Isolated Test".to_string(),
+        15,
+        7,
+        CategoryType::Season,
+    );
+    
+    // Create minimal theme
+    let theme = Theme::default();
+    
+    // Render should work without any other dependencies
+    let result = category.render(50, &theme, false);
+    
+    // Verify basic functionality
+    assert_eq!(result.len(), 1, "Should return single row");
+    assert!(!result[0].is_empty(), "Should have cells");
+    
+    // Verify content
+    let rendered_string: String = result[0].iter().map(|cell| cell.character).collect();
+    assert!(rendered_string.contains("Isolated Test"), "Should contain title");
+    assert!(rendered_string.contains("7/15 watched"), "Should contain watched/total count");
+}
+

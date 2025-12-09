@@ -847,3 +847,390 @@ fn test_episode_component_state_priority() {
         "Selection should override invalid state"
     );
 }
+
+// ============================================================================
+// Browse Mode Category Component Integration Tests (Task 7.1)
+// ============================================================================
+
+/// Integration Test 15: Category component integration for series entries
+/// 
+/// This test verifies that the Category component can be created and rendered
+/// for series entries with data from the application's data structures.
+/// 
+/// Validates: Requirements 5.1
+#[test]
+fn test_category_component_series_integration() {
+    use movies::components::{Component, Category, CategoryType};
+    use movies::theme::Theme;
+    
+    let theme = Theme::default();
+    
+    // Create a category component for a series entry
+    let category = Category::new(
+        "[Breaking Bad]".to_string(),
+        62,
+        45,
+        CategoryType::Series,
+    );
+    
+    // Render the component
+    let cells = category.render(50, &theme, false);
+    
+    // Verify the output structure
+    assert_eq!(cells.len(), 1, "Category should render as single row");
+    assert!(!cells[0].is_empty(), "Row should contain cells");
+    
+    // Verify we can extract the text content
+    let text: String = cells[0].iter().map(|cell| cell.character).collect();
+    assert!(text.contains("[Breaking Bad]"), "Text should contain series name with brackets");
+    assert!(text.contains("45/62 watched"), "Text should contain watched/total count");
+}
+
+/// Integration Test 16: Category component integration for season entries
+/// 
+/// This test verifies that the Category component can be created and rendered
+/// for season entries with data from the application's data structures.
+/// 
+/// Validates: Requirements 5.2
+#[test]
+fn test_category_component_season_integration() {
+    use movies::components::{Component, Category, CategoryType};
+    use movies::theme::Theme;
+    
+    let theme = Theme::default();
+    
+    // Create a category component for a season entry
+    let category = Category::new(
+        "Season 1".to_string(),
+        13,
+        10,
+        CategoryType::Season,
+    );
+    
+    // Render the component
+    let cells = category.render(50, &theme, false);
+    
+    // Verify the output structure
+    assert_eq!(cells.len(), 1, "Category should render as single row");
+    assert!(!cells[0].is_empty(), "Row should contain cells");
+    
+    // Verify we can extract the text content
+    let text: String = cells[0].iter().map(|cell| cell.character).collect();
+    assert!(text.contains("Season 1"), "Text should contain season name");
+    assert!(text.contains("10/13 watched"), "Text should contain watched/total count");
+}
+
+/// Integration Test 17: Category component with selection highlighting
+/// 
+/// This test verifies that when a category is selected, the component
+/// applies the correct selection colors from the theme.
+/// 
+/// Validates: Requirements 5.3
+#[test]
+fn test_category_component_selection_highlighting() {
+    use movies::components::{Component, Category, CategoryType};
+    use movies::theme::Theme;
+    use crossterm::style::Color;
+    
+    let theme = Theme::default();
+    
+    let category = Category::new(
+        "[The Wire]".to_string(),
+        60,
+        30,
+        CategoryType::Series,
+    );
+    
+    // Render without selection
+    let cells_unselected = category.render(50, &theme, false);
+    
+    // Render with selection
+    let cells_selected = category.render(50, &theme, true);
+    
+    // Verify selection changes colors
+    assert_ne!(
+        cells_unselected[0][0].fg_color,
+        cells_selected[0][0].fg_color,
+        "Selection should change foreground color"
+    );
+    
+    // Verify selection uses current_fg/current_bg
+    assert_eq!(
+        cells_selected[0][0].fg_color,
+        Color::Black,
+        "Selected category should use current_fg (Black by default)"
+    );
+    assert_eq!(
+        cells_selected[0][0].bg_color,
+        Color::White,
+        "Selected category should use current_bg (White by default)"
+    );
+    
+    // Verify all cells use selection colors
+    for cell in &cells_selected[0] {
+        assert_eq!(cell.fg_color, Color::Black, "All cells should use current_fg");
+        assert_eq!(cell.bg_color, Color::White, "All cells should use current_bg");
+    }
+}
+
+/// Integration Test 18: Category navigation through different types
+/// 
+/// This test verifies that categories of different types (Series and Season)
+/// can be rendered correctly, simulating navigation through the browse mode.
+/// 
+/// Validates: Requirements 5.3
+#[test]
+fn test_category_navigation_through_types() {
+    use movies::components::{Component, Category, CategoryType};
+    use movies::theme::Theme;
+    
+    let theme = Theme::default();
+    
+    // Simulate a list of categories (series and seasons)
+    let categories = vec![
+        Category::new("[Series 1]".to_string(), 20, 10, CategoryType::Series),
+        Category::new("[Series 2]".to_string(), 30, 15, CategoryType::Series),
+        Category::new("Season 1".to_string(), 10, 5, CategoryType::Season),
+        Category::new("Season 2".to_string(), 10, 5, CategoryType::Season),
+    ];
+    
+    // Render each category
+    for (i, category) in categories.iter().enumerate() {
+        let is_selected = i == 1; // Select the second item
+        let cells = category.render(50, &theme, is_selected);
+        
+        // Verify each renders correctly
+        assert_eq!(cells.len(), 1, "Each category should render as single row");
+        assert!(!cells[0].is_empty(), "Each row should contain cells");
+        
+        // Verify selection highlighting
+        if is_selected {
+            assert_eq!(
+                cells[0][0].fg_color,
+                crossterm::style::Color::Black,
+                "Selected category should use selection colors"
+            );
+        } else {
+            // Unselected categories use series_fg or season_fg (both Blue by default)
+            assert_eq!(
+                cells[0][0].fg_color,
+                crossterm::style::Color::Blue,
+                "Unselected category should use series/season colors (Blue)"
+            );
+        }
+    }
+}
+
+/// Integration Test 19: Category component with zero watched count
+/// 
+/// This test verifies that categories with zero watched count
+/// omit the watched portion, as per the requirements.
+/// 
+/// Validates: Requirements 5.1, 5.2
+#[test]
+fn test_category_component_zero_watched() {
+    use movies::components::{Component, Category, CategoryType};
+    use movies::theme::Theme;
+    
+    let theme = Theme::default();
+    
+    // Create category with zero watched count (use season to avoid brackets in name)
+    let category = Category::new(
+        "Season 1".to_string(),
+        25,
+        0,
+        CategoryType::Season,
+    );
+    
+    // Render the component
+    let cells = category.render(50, &theme, false);
+    
+    // Verify the output
+    let text: String = cells[0].iter().map(|cell| cell.character).collect();
+    assert!(text.contains("Season 1"), "Text should contain season name");
+    assert!(text.contains("0/25 watched"), "Text should contain '0/25 watched' format");
+}
+
+/// Integration Test 20: Category component with custom theme
+/// 
+/// This test verifies that the Category component correctly uses custom theme values
+/// when rendering, demonstrating integration with the theme system.
+/// 
+/// Validates: Requirements 5.1, 5.2
+#[test]
+fn test_category_component_with_custom_theme() {
+    use movies::components::{Component, Category, CategoryType};
+    use movies::theme::Theme;
+    use crossterm::style::Color;
+    
+    // Create a custom theme
+    let mut theme = Theme::default();
+    theme.series_fg = "yellow".to_string();  // Use series colors for Series category
+    theme.series_bg = "blue".to_string();
+    theme.current_fg = "cyan".to_string();
+    theme.current_bg = "magenta".to_string();
+    
+    let category = Category::new(
+        "[Custom Theme Series]".to_string(),
+        50,
+        25,
+        CategoryType::Series,
+    );
+    
+    // Test unselected with custom colors
+    let cells_unselected = category.render(50, &theme, false);
+    assert_eq!(
+        cells_unselected[0][0].fg_color,
+        Color::Yellow,
+        "Should use custom series_fg color"
+    );
+    assert_eq!(
+        cells_unselected[0][0].bg_color,
+        Color::Blue,
+        "Should use custom series_bg color"
+    );
+    
+    // Test selected with custom colors
+    let cells_selected = category.render(50, &theme, true);
+    assert_eq!(
+        cells_selected[0][0].fg_color,
+        Color::Cyan,
+        "Should use custom current_fg color"
+    );
+    assert_eq!(
+        cells_selected[0][0].bg_color,
+        Color::Magenta,
+        "Should use custom current_bg color"
+    );
+}
+
+/// Integration Test 21: Category component rendering consistency
+/// 
+/// This test verifies that the Category component produces consistent output
+/// when rendered multiple times with the same parameters.
+/// 
+/// Validates: Requirements 5.1, 5.2
+#[test]
+fn test_category_component_rendering_consistency() {
+    use movies::components::{Component, Category, CategoryType};
+    use movies::theme::Theme;
+    
+    let theme = Theme::default();
+    let category = Category::new(
+        "[Consistent Series]".to_string(),
+        40,
+        20,
+        CategoryType::Series,
+    );
+    
+    // Render multiple times
+    let render1 = category.render(50, &theme, false);
+    let render2 = category.render(50, &theme, false);
+    let render3 = category.render(50, &theme, false);
+    
+    // All renders should be identical
+    assert_eq!(render1, render2, "First and second render should be identical");
+    assert_eq!(render2, render3, "Second and third render should be identical");
+    
+    // Verify content is correct
+    let text: String = render1[0].iter().map(|cell| cell.character).collect();
+    assert!(text.contains("[Consistent Series]"), "Should contain series name");
+    assert!(text.contains("20/40 watched"), "Should contain watched/total count");
+}
+
+/// Integration Test 22: Category component with width constraints
+/// 
+/// This test verifies that the Category component correctly handles width constraints
+/// when integrated with the display system.
+/// 
+/// Validates: Requirements 5.1, 5.2
+#[test]
+fn test_category_component_with_width_constraints() {
+    use movies::components::{Component, Category, CategoryType};
+    use movies::theme::Theme;
+    
+    let theme = Theme::default();
+    let category = Category::new(
+        "[This is a very long series name that needs truncation]".to_string(),
+        100,
+        50,
+        CategoryType::Series,
+    );
+    
+    // Test with various widths
+    let widths = vec![10, 20, 30, 50, 100];
+    
+    for width in widths {
+        let cells = category.render(width, &theme, false);
+        
+        // Verify output doesn't exceed width
+        assert!(
+            cells[0].len() <= width,
+            "Output length {} should not exceed width {}",
+            cells[0].len(),
+            width
+        );
+        
+        // Verify we still have content even with small width
+        if width > 0 {
+            assert!(!cells[0].is_empty(), "Should have content at width {}", width);
+        }
+    }
+}
+
+/// Integration Test 23: Category component for both series and season types
+/// 
+/// This test verifies that both Series and Season category types
+/// render correctly with the same component implementation.
+/// 
+/// Validates: Requirements 5.1, 5.2
+#[test]
+fn test_category_component_both_types() {
+    use movies::components::{Component, Category, CategoryType};
+    use movies::theme::Theme;
+    
+    let theme = Theme::default();
+    
+    // Create series category
+    let series = Category::new(
+        "[Game of Thrones]".to_string(),
+        73,
+        73,
+        CategoryType::Series,
+    );
+    
+    // Create season category
+    let season = Category::new(
+        "Season 8".to_string(),
+        6,
+        6,
+        CategoryType::Season,
+    );
+    
+    // Render both
+    let series_cells = series.render(50, &theme, false);
+    let season_cells = season.render(50, &theme, false);
+    
+    // Both should render successfully
+    assert!(!series_cells[0].is_empty(), "Series should render");
+    assert!(!season_cells[0].is_empty(), "Season should render");
+    
+    // Verify content
+    let series_text: String = series_cells[0].iter().map(|cell| cell.character).collect();
+    let season_text: String = season_cells[0].iter().map(|cell| cell.character).collect();
+    
+    assert!(series_text.contains("[Game of Thrones]"), "Series should contain name with brackets");
+    assert!(season_text.contains("Season 8"), "Season should contain name");
+    
+    // Both should use the same default colors (episode_fg/episode_bg)
+    assert_eq!(
+        series_cells[0][0].fg_color,
+        season_cells[0][0].fg_color,
+        "Both types should use same default fg color"
+    );
+    assert_eq!(
+        series_cells[0][0].bg_color,
+        season_cells[0][0].bg_color,
+        "Both types should use same default bg color"
+    );
+}

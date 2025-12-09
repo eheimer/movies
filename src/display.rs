@@ -1,3 +1,4 @@
+use crate::components::{Component, category::{Category, CategoryType}};
 use crate::dto::{EpisodeDetail, Series};
 use crate::episode_field::EpisodeField;
 use crate::menu::{MenuItem, MenuContext};
@@ -26,103 +27,7 @@ fn get_sidebar_width() -> io::Result<usize> {
     Ok(sidebar_width.max(MIN_COL2_WIDTH))
 }
 
-/// Format a series entry with episode counts
-/// 
-/// # Arguments
-/// * `name` - The series name
-/// * `series_id` - The series ID for querying counts
-/// * `terminal_width` - The available width for display
-/// * `theme` - Theme containing count styling
-/// 
-/// # Returns
-/// * `String` - Formatted string with right-justified count as "[<series title>]  <watched>/<total> watched"
-///              or fallback format on error
-pub fn format_series_display(name: &str, series_id: usize, terminal_width: usize, theme: &Theme) -> String {
-    match crate::database::get_series_episode_counts(series_id) {
-        Ok((total, unwatched)) => {
-            let watched = total.saturating_sub(unwatched);
-            let count_text = format!("{}/{} watched", watched, total);
-            
-            // Apply styling to count
-            let styled_count = apply_text_style(&count_text, &theme.count_style);
-            let colored_count = styled_count
-                .with(string_to_fg_color_or_default(&theme.count_fg));
-            
-            // Calculate available space for name (reserve space for count + spacing)
-            let count_visual_len = count_text.len(); // Visual length without ANSI codes
-            let min_spacing = 1;
-            let available_for_name = terminal_width
-                .saturating_sub(count_visual_len)
-                .saturating_sub(min_spacing);
-            
-            // Truncate name if needed (with brackets)
-            let name_part = format!("[{}]", name);
-            let truncated_name = truncate_string(&name_part, available_for_name);
-            
-            // Calculate actual spacing needed
-            let spacing = terminal_width
-                .saturating_sub(truncated_name.len())
-                .saturating_sub(count_visual_len)
-                .max(1); // Ensure at least 1 space
-            
-            format!("{}{}{}", truncated_name, " ".repeat(spacing), colored_count)
-        }
-        Err(e) => {
-            // Log database error and use fallback format
-            crate::logger::log_warn(&format!("Failed to get episode counts for series '{}' (id: {}): {}", name, series_id, e));
-            format!("[{}] ? episodes", name)
-        }
-    }
-}
 
-/// Format a season entry with episode counts
-/// 
-/// # Arguments
-/// * `number` - The season number
-/// * `season_id` - The season ID for querying counts
-/// * `terminal_width` - The available width for display
-/// * `theme` - Theme containing count styling
-/// 
-/// # Returns
-/// * `String` - Formatted string with right-justified count as "Season <number>  <watched>/<total> watched"
-///              or fallback format on error
-pub fn format_season_display(number: usize, season_id: usize, terminal_width: usize, theme: &Theme) -> String {
-    match crate::database::get_season_episode_counts(season_id) {
-        Ok((total, unwatched)) => {
-            let watched = total.saturating_sub(unwatched);
-            let count_text = format!("{}/{} watched", watched, total);
-            
-            // Apply styling to count
-            let styled_count = apply_text_style(&count_text, &theme.count_style);
-            let colored_count = styled_count
-                .with(string_to_fg_color_or_default(&theme.count_fg));
-            
-            // Calculate available space for name (reserve space for count + spacing)
-            let count_visual_len = count_text.len(); // Visual length without ANSI codes
-            let min_spacing = 1;
-            let available_for_name = terminal_width
-                .saturating_sub(count_visual_len)
-                .saturating_sub(min_spacing);
-            
-            // Truncate name if needed
-            let name_part = format!("Season {}", number);
-            let truncated_name = truncate_string(&name_part, available_for_name);
-            
-            // Calculate actual spacing needed
-            let spacing = terminal_width
-                .saturating_sub(truncated_name.len())
-                .saturating_sub(count_visual_len)
-                .max(1); // Ensure at least 1 space
-            
-            format!("{}{}{}", truncated_name, " ".repeat(spacing), colored_count)
-        }
-        Err(e) => {
-            // Log database error and use fallback format
-            crate::logger::log_warn(&format!("Failed to get episode counts for season {} (id: {}): {}", number, season_id, e));
-            format!("Season {} - ? episodes", number)
-        }
-    }
-}
 
 pub fn string_to_color(color: &str) -> Option<Color> {
     match color.to_lowercase().as_str() {
@@ -541,22 +446,62 @@ pub fn draw_screen(
             // Determine the base display text and colors based on entry type
             let (display_text, fg_color, bg_color) = match entry {
                 Entry::Series { name, series_id } => {
-                    // Format with new signature: pass terminal_width and theme
-                    // Note: format_series_display already handles width and includes ANSI color codes
-                    // for the count text, so we don't truncate it (would break the ANSI codes)
-                    let formatted = format_series_display(name, *series_id, effective_col_width, theme);
-                    let fg = string_to_fg_color_or_default(&theme.series_fg);
-                    let bg = string_to_bg_color_or_default(&theme.series_bg);
-                    (formatted, fg, bg)
+                    // Get episode counts from database
+                    let (total, unwatched) = crate::database::get_series_episode_counts(*series_id)
+                        .unwrap_or_else(|e| {
+                            crate::logger::log_warn(&format!("Failed to get episode counts for series '{}' (id: {}): {}", name, series_id, e));
+                            (0, 0)
+                        });
+                    let watched = total.saturating_sub(unwatched);
+                    
+                    // Create Category component with brackets around series name
+                    let category = Category::new(
+                        format!("[{}]", name),
+                        total,
+                        watched,
+                        CategoryType::Series,
+                    );
+                    
+                    // Render with selection state
+                    let is_selected = i == current_item && !filter_mode;
+                    let cells = category.render(effective_col_width, theme, is_selected);
+                    
+                    // Convert Cell array to styled display text (preserves individual cell colors/styles)
+                    let text = cells_to_styled_string(&cells);
+                    
+                    // Use Reset colors since the text already has ANSI codes embedded
+                    let (fg, bg) = (Color::Reset, Color::Reset);
+                    
+                    (text, fg, bg)
                 }
                 Entry::Season { number, season_id } => {
-                    // Format with new signature: pass terminal_width and theme
-                    // Note: format_season_display already handles width and includes ANSI color codes
-                    // for the count text, so we don't truncate it (would break the ANSI codes)
-                    let formatted = format_season_display(*number, *season_id, effective_col_width, theme);
-                    let fg = string_to_fg_color_or_default(&theme.season_fg);
-                    let bg = string_to_bg_color_or_default(&theme.season_bg);
-                    (formatted, fg, bg)
+                    // Get episode counts from database
+                    let (total, unwatched) = crate::database::get_season_episode_counts(*season_id)
+                        .unwrap_or_else(|e| {
+                            crate::logger::log_warn(&format!("Failed to get episode counts for season {} (id: {}): {}", number, season_id, e));
+                            (0, 0)
+                        });
+                    let watched = total.saturating_sub(unwatched);
+                    
+                    // Create Category component
+                    let category = Category::new(
+                        format!("Season {}", number),
+                        total,
+                        watched,
+                        CategoryType::Season,
+                    );
+                    
+                    // Render with selection state
+                    let is_selected = i == current_item && !filter_mode;
+                    let cells = category.render(effective_col_width, theme, is_selected);
+                    
+                    // Convert Cell array to styled display text (preserves individual cell colors/styles)
+                    let text = cells_to_styled_string(&cells);
+                    
+                    // Use Reset colors since the text already has ANSI codes embedded
+                    let (fg, bg) = (Color::Reset, Color::Reset);
+                    
+                    (text, fg, bg)
                 }
                 Entry::Episode { episode_id, name, location, .. } => {
                     // Fetch episode details for this specific episode
@@ -579,26 +524,26 @@ pub fn draw_screen(
                         is_new,
                     );
                     
-                    // Render the component (not selected yet, will apply selection later)
-                    let cells = episode_component.render(effective_col_width, theme, false);
+                    // Render with selection state
+                    let is_selected = i == current_item && !filter_mode;
+                    let cells = episode_component.render(effective_col_width, theme, is_selected);
                     
-                    // Convert Cell array to display text
-                    // The cells already have the correct colors and styling
-                    let text = cells_to_string(&cells);
+                    // Convert Cell array to styled display text (preserves individual cell colors/styles)
+                    let text = cells_to_styled_string(&cells);
                     
-                    // Get colors from first cell (all cells have same colors in Episode component)
-                    let (fg, bg) = if !cells.is_empty() && !cells[0].is_empty() {
-                        (cells[0][0].fg_color, cells[0][0].bg_color)
-                    } else {
-                        (Color::Reset, Color::Reset)
-                    };
+                    // Use Reset colors since the text already has ANSI codes embedded
+                    let (fg, bg) = (Color::Reset, Color::Reset);
                     
                     (text, fg, bg)
                 }
             };
 
             // Apply selection highlighting if this is the current item (overrides type colors)
-            let formatted_text = if i == current_item && !filter_mode {
+            // Skip additional styling if the text is already styled (fg and bg are both Reset)
+            let formatted_text = if fg_color == Color::Reset && bg_color == Color::Reset {
+                // Text is already styled (e.g., from Category component), use as-is
+                display_text.to_string()
+            } else if i == current_item && !filter_mode {
                 format!(
                     "{}",
                     display_text
@@ -1138,6 +1083,47 @@ pub fn format_episode_with_indicator(name: &str, is_watched: bool, theme: &Theme
 fn cells_to_string(cells: &[Vec<crate::components::Cell>]) -> String {
     cells.iter()
         .map(|row| row.iter().map(|cell| cell.character).collect::<String>())
+        .collect::<Vec<String>>()
+        .join("\n")
+}
+
+/// Convert a 2D array of Cells to a styled string with ANSI codes
+/// Each cell's colors and styles are preserved in the output
+/// 
+/// # Arguments
+/// * `cells` - The 2D array of Cells to convert
+/// 
+/// # Returns
+/// * `String` - The styled string with ANSI escape codes
+fn cells_to_styled_string(cells: &[Vec<crate::components::Cell>]) -> String {
+    use crossterm::style::Stylize;
+    
+    cells.iter()
+        .map(|row| {
+            row.iter()
+                .map(|cell| {
+                    let mut styled = cell.character.to_string()
+                        .with(cell.fg_color)
+                        .on(cell.bg_color);
+                    
+                    // Apply text styles
+                    if cell.style.bold {
+                        styled = styled.bold();
+                    }
+                    if cell.style.italic {
+                        styled = styled.italic();
+                    }
+                    if cell.style.underlined {
+                        styled = styled.underlined();
+                    }
+                    if cell.style.dim {
+                        styled = styled.dim();
+                    }
+                    
+                    format!("{}", styled)
+                })
+                .collect::<String>()
+        })
         .collect::<Vec<String>>()
         .join("\n")
 }
