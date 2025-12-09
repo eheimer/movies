@@ -230,7 +230,7 @@ fn draw_header(
         Mode::Edit => {
             let mut instruction = "[\u{2191}]/[\u{2193}] change field, [ESC] cancel".to_string();
             if is_dirty {
-                instruction.push_str(", [F2] save changes");
+                instruction.push_str(", [F2] save");
             }
             instruction
         },
