@@ -7,92 +7,10 @@ use std::path::PathBuf;
 pub struct Config {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub db_location: Option<String>,
-    pub current_fg: String,
-    pub current_bg: String,
-    #[serde(default = "default_dirty_fg")]
-    pub dirty_fg: String,
-    #[serde(default = "default_dirty_bg")]
-    pub dirty_bg: String,
     
-    // Watched episode indicator
-    #[serde(default = "default_watched_indicator")]
-    pub watched_indicator: String,
-    #[serde(default = "default_watched_fg")]
-    pub watched_fg: String,
-    #[serde(default = "default_watched_style")]
-    pub watched_style: String,
-    
-    // Unwatched episode indicator
-    #[serde(default = "default_unwatched_indicator")]
-    pub unwatched_indicator: String,
-    #[serde(default = "default_unwatched_fg")]
-    pub unwatched_fg: String,
-    #[serde(default = "default_unwatched_style")]
-    pub unwatched_style: String,
-    
-    // New episode colors (title == filename)
-    #[serde(default = "default_new_fg")]
-    pub new_fg: String,
-    #[serde(default = "default_new_bg")]
-    pub new_bg: String,
-    
-    // Invalid episode colors (file doesn't exist)
-    #[serde(default = "default_invalid_fg")]
-    pub invalid_fg: String,
-    #[serde(default = "default_invalid_bg")]
-    pub invalid_bg: String,
-    
-    // Series entry colors
-    #[serde(default = "default_series_fg")]
-    pub series_fg: String,
-    #[serde(default = "default_series_bg")]
-    pub series_bg: String,
-    
-    // Season entry colors
-    #[serde(default = "default_season_fg")]
-    pub season_fg: String,
-    #[serde(default = "default_season_bg")]
-    pub season_bg: String,
-    
-    // Episode entry colors (normal state)
-    #[serde(default = "default_episode_fg")]
-    pub episode_fg: String,
-    #[serde(default = "default_episode_bg")]
-    pub episode_bg: String,
-    
-    // Status line colors
-    #[serde(default = "default_status_fg")]
-    pub status_fg: String,
-    #[serde(default = "default_status_bg")]
-    pub status_bg: String,
-    
-    // Scroll bar configuration
-    #[serde(default = "default_scrollbar_track_char")]
-    pub scrollbar_track_char: String,
-    #[serde(default = "default_scrollbar_indicator_char")]
-    pub scrollbar_indicator_char: String,
-    #[serde(default = "default_scrollbar_fg")]
-    pub scrollbar_fg: String,
-    #[serde(default = "default_scrollbar_bg")]
-    pub scrollbar_bg: String,
-    
-    // Count display styling
-    #[serde(default = "default_count_fg")]
-    pub count_fg: String,
-    #[serde(default = "default_count_style")]
-    pub count_style: String,
-    
-    // Header text styling
-    #[serde(default = "default_header_fg")]
-    pub header_fg: String,
-    #[serde(default = "default_header_style")]
-    pub header_style: String,
-    
-    // Help text styling
-    #[serde(default = "default_help_fg")]
-    pub help_fg: String,
-    #[serde(default = "default_help_style")]
-    pub help_style: String,
+    // Theme configuration
+    #[serde(default = "default_active_theme")]
+    pub active_theme: String,
     
     // Logging configuration
     #[serde(default = "default_log_file")]
@@ -104,124 +22,8 @@ pub struct Config {
     pub video_player: String,
 }
 
-fn default_dirty_fg() -> String {
-    "Black".to_string()
-}
-
-fn default_dirty_bg() -> String {
-    "White".to_string()
-}
-
-fn default_watched_indicator() -> String {
-    "●".to_string()
-}
-
-fn default_watched_fg() -> String {
-    "Green".to_string()
-}
-
-fn default_watched_style() -> String {
-    "none".to_string()
-}
-
-fn default_unwatched_indicator() -> String {
-    "○".to_string()
-}
-
-fn default_unwatched_fg() -> String {
-    "Reset".to_string()
-}
-
-fn default_unwatched_style() -> String {
-    "none".to_string()
-}
-
-fn default_new_fg() -> String {
-    "Green".to_string()
-}
-
-fn default_new_bg() -> String {
-    "Reset".to_string()
-}
-
-fn default_invalid_fg() -> String {
-    "Red".to_string()
-}
-
-fn default_invalid_bg() -> String {
-    "Reset".to_string()
-}
-
-fn default_series_fg() -> String {
-    "Blue".to_string()
-}
-
-fn default_series_bg() -> String {
-    "Reset".to_string()
-}
-
-fn default_season_fg() -> String {
-    "Blue".to_string()
-}
-
-fn default_season_bg() -> String {
-    "Reset".to_string()
-}
-
-fn default_episode_fg() -> String {
-    "Reset".to_string()
-}
-
-fn default_episode_bg() -> String {
-    "Reset".to_string()
-}
-
-fn default_status_fg() -> String {
-    "White".to_string()
-}
-
-fn default_status_bg() -> String {
-    "DarkGray".to_string()
-}
-
-fn default_scrollbar_track_char() -> String {
-    "│".to_string()
-}
-
-fn default_scrollbar_indicator_char() -> String {
-    "█".to_string()
-}
-
-fn default_scrollbar_fg() -> String {
-    "White".to_string()
-}
-
-fn default_scrollbar_bg() -> String {
-    "Reset".to_string()
-}
-
-fn default_count_fg() -> String {
-    "DarkGray".to_string()
-}
-
-fn default_count_style() -> String {
-    "italic".to_string()
-}
-
-fn default_header_fg() -> String {
-    "Black".to_string()
-}
-
-fn default_header_style() -> String {
-    "none".to_string()
-}
-
-fn default_help_fg() -> String {
-    "Reset".to_string()
-}
-
-fn default_help_style() -> String {
-    "none".to_string()
+fn default_active_theme() -> String {
+    "THEME-default.yaml".to_string()
 }
 
 fn default_log_file() -> Option<String> {
@@ -236,38 +38,7 @@ impl Default for Config {
     fn default() -> Self {
         Config {
             db_location: None,
-            current_fg: "Black".to_string(),
-            current_bg: "White".to_string(),
-            dirty_fg: "Black".to_string(),
-            dirty_bg: "White".to_string(),
-            watched_indicator: "●".to_string(),
-            watched_fg: "Green".to_string(),
-            watched_style: "none".to_string(),
-            unwatched_indicator: "○".to_string(),
-            unwatched_fg: "Reset".to_string(),
-            unwatched_style: "none".to_string(),
-            new_fg: "Green".to_string(),
-            new_bg: "Reset".to_string(),
-            invalid_fg: "Red".to_string(),
-            invalid_bg: "Reset".to_string(),
-            series_fg: "Blue".to_string(),
-            series_bg: "Reset".to_string(),
-            season_fg: "Blue".to_string(),
-            season_bg: "Reset".to_string(),
-            episode_fg: "Reset".to_string(),
-            episode_bg: "Reset".to_string(),
-            status_fg: "White".to_string(),
-            status_bg: "DarkGray".to_string(),
-            scrollbar_track_char: "│".to_string(),
-            scrollbar_indicator_char: "█".to_string(),
-            scrollbar_fg: "White".to_string(),
-            scrollbar_bg: "Reset".to_string(),
-            count_fg: "DarkGray".to_string(),
-            count_style: "italic".to_string(),
-            header_fg: "Black".to_string(),
-            header_style: "none".to_string(),
-            help_fg: "Reset".to_string(),
-            help_style: "none".to_string(),
+            active_theme: "THEME-default.yaml".to_string(),
             log_file: None,
             log_level: "info".to_string(),
             video_extensions: vec![
@@ -378,114 +149,12 @@ fn generate_yaml_with_comments(config: &Config) -> String {
     }
     yaml.push_str("\n");
     
-    // Color documentation header
-    yaml.push_str("# === Color Configuration ===\n");
-    yaml.push_str("# Valid colors: Black, Red, Green, Yellow, Blue, Magenta, Cyan, White, DarkGray, Reset\n");
-    yaml.push_str("# Reset means use the terminal's default color\n");
-    yaml.push_str("\n");
-    
-    // Current selection colors
-    yaml.push_str("# Current selection colors (highlighted item in browse mode)\n");
-    yaml.push_str(&format!("current_fg: {}\n", config.current_fg));
-    yaml.push_str(&format!("current_bg: {}\n", config.current_bg));
-    yaml.push_str("\n");
-    
-    // Dirty state colors
-    yaml.push_str("# Dirty state colors (items with unsaved changes)\n");
-    yaml.push_str(&format!("dirty_fg: {}\n", config.dirty_fg));
-    yaml.push_str(&format!("dirty_bg: {}\n", config.dirty_bg));
-    yaml.push_str("\n");
-    
-    // Watched indicator
-    yaml.push_str("# Watched episode indicator\n");
-    yaml.push_str("# Unicode character displayed for watched episodes\n");
-    yaml.push_str(&format!("watched_indicator: \"{}\"\n", config.watched_indicator));
-    yaml.push_str("# Foreground color for watched indicator\n");
-    yaml.push_str(&format!("watched_fg: {}\n", config.watched_fg));
-    yaml.push_str("# Style for watched indicator (none, bold, dim, italic, underline)\n");
-    yaml.push_str(&format!("watched_style: {}\n", config.watched_style));
-    yaml.push_str("\n");
-    
-    // Unwatched indicator
-    yaml.push_str("# Unwatched episode indicator\n");
-    yaml.push_str("# Unicode character displayed for unwatched episodes\n");
-    yaml.push_str(&format!("unwatched_indicator: \"{}\"\n", config.unwatched_indicator));
-    yaml.push_str("# Foreground color for unwatched indicator\n");
-    yaml.push_str(&format!("unwatched_fg: {}\n", config.unwatched_fg));
-    yaml.push_str("# Style for unwatched indicator (none, bold, dim, italic, underline)\n");
-    yaml.push_str(&format!("unwatched_style: {}\n", config.unwatched_style));
-    yaml.push_str("\n");
-    
-    // New episode colors
-    yaml.push_str("# New episode colors (when title matches filename)\n");
-    yaml.push_str(&format!("new_fg: {}\n", config.new_fg));
-    yaml.push_str(&format!("new_bg: {}\n", config.new_bg));
-    yaml.push_str("\n");
-    
-    // Invalid episode colors
-    yaml.push_str("# Invalid episode colors (when video file doesn't exist)\n");
-    yaml.push_str(&format!("invalid_fg: {}\n", config.invalid_fg));
-    yaml.push_str(&format!("invalid_bg: {}\n", config.invalid_bg));
-    yaml.push_str("\n");
-    
-    // Series entry colors
-    yaml.push_str("# Series entry colors (for series items in browse mode)\n");
-    yaml.push_str(&format!("series_fg: {}\n", config.series_fg));
-    yaml.push_str(&format!("series_bg: {}\n", config.series_bg));
-    yaml.push_str("\n");
-    
-    // Season entry colors
-    yaml.push_str("# Season entry colors (for season items in browse mode)\n");
-    yaml.push_str(&format!("season_fg: {}\n", config.season_fg));
-    yaml.push_str(&format!("season_bg: {}\n", config.season_bg));
-    yaml.push_str("\n");
-    
-    // Episode entry colors
-    yaml.push_str("# Episode entry colors (for episode items in normal state)\n");
-    yaml.push_str(&format!("episode_fg: {}\n", config.episode_fg));
-    yaml.push_str(&format!("episode_bg: {}\n", config.episode_bg));
-    yaml.push_str("\n");
-    
-    // Status line colors
-    yaml.push_str("# Status line colors (bottom status bar)\n");
-    yaml.push_str(&format!("status_fg: {}\n", config.status_fg));
-    yaml.push_str(&format!("status_bg: {}\n", config.status_bg));
-    yaml.push_str("\n");
-    
-    // Scroll bar configuration
-    yaml.push_str("# Scroll bar configuration\n");
-    yaml.push_str("# Character used for the scroll bar track\n");
-    yaml.push_str(&format!("scrollbar_track_char: \"{}\"\n", config.scrollbar_track_char));
-    yaml.push_str("# Character used for the scroll bar indicator\n");
-    yaml.push_str(&format!("scrollbar_indicator_char: \"{}\"\n", config.scrollbar_indicator_char));
-    yaml.push_str("# Foreground color for scroll bar\n");
-    yaml.push_str(&format!("scrollbar_fg: {}\n", config.scrollbar_fg));
-    yaml.push_str("# Background color for scroll bar\n");
-    yaml.push_str(&format!("scrollbar_bg: {}\n", config.scrollbar_bg));
-    yaml.push_str("\n");
-    
-    // Count display styling
-    yaml.push_str("# Count display styling (watched/unwatched counts for series and seasons)\n");
-    yaml.push_str("# Foreground color for count text\n");
-    yaml.push_str(&format!("count_fg: {}\n", config.count_fg));
-    yaml.push_str("# Style for count text (none, bold, dim, italic, underline)\n");
-    yaml.push_str(&format!("count_style: {}\n", config.count_style));
-    yaml.push_str("\n");
-    
-    // Header text styling
-    yaml.push_str("# Header text styling\n");
-    yaml.push_str("# Foreground color for header text\n");
-    yaml.push_str(&format!("header_fg: {}\n", config.header_fg));
-    yaml.push_str("# Style for header text (none, bold, dim, italic, underline)\n");
-    yaml.push_str(&format!("header_style: {}\n", config.header_style));
-    yaml.push_str("\n");
-    
-    // Help text styling
-    yaml.push_str("# Help text styling\n");
-    yaml.push_str("# Foreground color for help text\n");
-    yaml.push_str(&format!("help_fg: {}\n", config.help_fg));
-    yaml.push_str("# Style for help text (none, bold, dim, italic, underline)\n");
-    yaml.push_str(&format!("help_style: {}\n", config.help_style));
+    // Theme configuration
+    yaml.push_str("# === Theme Configuration ===\n");
+    yaml.push_str("# Name of the active theme file (without path)\n");
+    yaml.push_str("# Theme files are stored in the same directory as this config file\n");
+    yaml.push_str("# Default: THEME-default.yaml\n");
+    yaml.push_str(&format!("active_theme: {}\n", config.active_theme));
     yaml.push_str("\n");
     
     // Logging configuration
@@ -566,7 +235,7 @@ mod tests {
     use tempfile::TempDir;
 
     /// Test Case 9: Missing config field defaults
-    /// When color configuration fields are missing from the config file,
+    /// When optional configuration fields are missing from the config file,
     /// the loaded Config should contain the default values for those fields.
     /// Validates: Requirements 3.2, 7.2
     #[test]
@@ -575,10 +244,8 @@ mod tests {
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
         let yaml_path = temp_dir.path().join("config.yaml");
 
-        // Create a minimal YAML config file with only required fields (missing all new color fields)
-        let minimal_config = r#"current_fg: Black
-current_bg: Yellow
-video_extensions:
+        // Create a minimal YAML config file with only required fields
+        let minimal_config = r#"video_extensions:
   - mp4
   - mkv
 video_player: /usr/bin/vlc
@@ -588,95 +255,34 @@ video_player: /usr/bin/vlc
         // Load the config
         let config = read_config(&yaml_path);
 
-        // Verify all new color fields have their default values
-        assert_eq!(config.watched_indicator, "●");
-        assert_eq!(config.watched_fg, "Green");
-        assert_eq!(config.watched_style, "none");
-        assert_eq!(config.unwatched_indicator, "○");
-        assert_eq!(config.unwatched_fg, "Reset");
-        assert_eq!(config.unwatched_style, "none");
-        assert_eq!(config.new_fg, "Green");
-        assert_eq!(config.new_bg, "Reset");
-        assert_eq!(config.invalid_fg, "Red");
-        assert_eq!(config.invalid_bg, "Reset");
-        assert_eq!(config.series_fg, "Blue");
-        assert_eq!(config.series_bg, "Reset");
-        assert_eq!(config.season_fg, "Blue");
-        assert_eq!(config.season_bg, "Reset");
-        assert_eq!(config.episode_fg, "Reset");
-        assert_eq!(config.episode_bg, "Reset");
-        assert_eq!(config.status_fg, "White");
-        assert_eq!(config.status_bg, "DarkGray");
-        
-        // Verify scrollbar fields have their default values
-        assert_eq!(config.scrollbar_track_char, "│");
-        assert_eq!(config.scrollbar_indicator_char, "█");
-        assert_eq!(config.scrollbar_fg, "White");
-        assert_eq!(config.scrollbar_bg, "Reset");
-        
-        // Verify new count and text styling fields have their default values
-        assert_eq!(config.count_fg, "DarkGray");
-        assert_eq!(config.count_style, "italic");
-        assert_eq!(config.header_fg, "Black");
-        assert_eq!(config.header_style, "none");
-        assert_eq!(config.help_fg, "Reset");
-        assert_eq!(config.help_style, "none");
-        
         // Verify logging fields have their default values
         assert_eq!(config.log_file, None);
         assert_eq!(config.log_level, "info");
+        
+        // Verify active_theme has default value
+        assert_eq!(config.active_theme, "THEME-default.yaml");
 
         // Verify existing fields are preserved
-        assert_eq!(config.current_fg, "Black");
-        assert_eq!(config.current_bg, "Yellow");
         assert_eq!(config.video_extensions, vec!["mp4", "mkv"]);
         assert_eq!(config.video_player, "/usr/bin/vlc");
     }
 
     #[test]
-    fn test_config_default_includes_all_color_fields() {
+    fn test_config_default_has_no_style_fields() {
         // Create a default config
         let config = Config::default();
 
-        // Verify all color fields are present with expected defaults
-        assert_eq!(config.current_fg, "Black");
-        assert_eq!(config.current_bg, "White");
-        assert_eq!(config.dirty_fg, "Black");
-        assert_eq!(config.dirty_bg, "White");
-        assert_eq!(config.watched_indicator, "●");
-        assert_eq!(config.watched_fg, "Green");
-        assert_eq!(config.watched_style, "none");
-        assert_eq!(config.unwatched_indicator, "○");
-        assert_eq!(config.unwatched_fg, "Reset");
-        assert_eq!(config.unwatched_style, "none");
-        assert_eq!(config.new_fg, "Green");
-        assert_eq!(config.new_bg, "Reset");
-        assert_eq!(config.invalid_fg, "Red");
-        assert_eq!(config.invalid_bg, "Reset");
-        assert_eq!(config.series_fg, "Blue");
-        assert_eq!(config.series_bg, "Reset");
-        assert_eq!(config.season_fg, "Blue");
-        assert_eq!(config.season_bg, "Reset");
-        assert_eq!(config.episode_fg, "Reset");
-        assert_eq!(config.episode_bg, "Reset");
-        assert_eq!(config.status_fg, "White");
-        assert_eq!(config.status_bg, "DarkGray");
-        assert_eq!(config.scrollbar_track_char, "│");
-        assert_eq!(config.scrollbar_indicator_char, "█");
-        assert_eq!(config.scrollbar_fg, "White");
-        assert_eq!(config.scrollbar_bg, "Reset");
-        assert_eq!(config.count_fg, "DarkGray");
-        assert_eq!(config.count_style, "italic");
-        assert_eq!(config.header_fg, "Black");
-        assert_eq!(config.header_style, "none");
-        assert_eq!(config.help_fg, "Reset");
-        assert_eq!(config.help_style, "none");
+        // Verify config only has non-visual settings
         assert_eq!(config.log_file, None);
         assert_eq!(config.log_level, "info");
+        assert_eq!(config.active_theme, "THEME-default.yaml");
+        assert_eq!(config.db_location, None);
+        assert!(!config.video_extensions.is_empty());
+        assert_eq!(config.video_player, "/usr/bin/vlc");
     }
 
-    /// Test Case 8: Config color loading
-    /// When the config file contains valid values for color configuration fields,
+    /// Test Case 8: Config loading with all fields
+    /// When the config file contains valid values for all configuration fields,
     /// the loaded Config should contain those values.
     /// Validates: Requirements 3.1, 4.5, 6.4
     #[test]
@@ -686,38 +292,7 @@ video_player: /usr/bin/vlc
         let yaml_path = temp_dir.path().join("config.yaml");
 
         // Create a complete YAML config file with custom values for all fields
-        let complete_config = r#"current_fg: Red
-current_bg: Blue
-dirty_fg: Yellow
-dirty_bg: Magenta
-watched_indicator: "●"
-watched_fg: Green
-watched_style: none
-unwatched_indicator: "○"
-unwatched_fg: Reset
-unwatched_style: none
-new_fg: Yellow
-new_bg: Black
-invalid_fg: Magenta
-invalid_bg: White
-series_fg: Green
-series_bg: Black
-season_fg: Red
-season_bg: White
-episode_fg: Blue
-episode_bg: Yellow
-status_fg: Black
-status_bg: Cyan
-scrollbar_track_char: "┃"
-scrollbar_indicator_char: "▓"
-scrollbar_fg: Cyan
-scrollbar_bg: Black
-count_fg: Yellow
-count_style: bold
-header_fg: Magenta
-header_style: underline
-help_fg: Green
-help_style: italic
+        let complete_config = r#"active_theme: THEME-custom.yaml
 log_file: "/custom/path/app.log"
 log_level: debug
 video_extensions:
@@ -730,38 +305,7 @@ video_player: /usr/bin/mpv
         let config = read_config(&yaml_path);
 
         // Verify all custom values are loaded correctly
-        assert_eq!(config.current_fg, "Red");
-        assert_eq!(config.current_bg, "Blue");
-        assert_eq!(config.dirty_fg, "Yellow");
-        assert_eq!(config.dirty_bg, "Magenta");
-        assert_eq!(config.watched_indicator, "●");
-        assert_eq!(config.watched_fg, "Green");
-        assert_eq!(config.watched_style, "none");
-        assert_eq!(config.unwatched_indicator, "○");
-        assert_eq!(config.unwatched_fg, "Reset");
-        assert_eq!(config.unwatched_style, "none");
-        assert_eq!(config.new_fg, "Yellow");
-        assert_eq!(config.new_bg, "Black");
-        assert_eq!(config.invalid_fg, "Magenta");
-        assert_eq!(config.invalid_bg, "White");
-        assert_eq!(config.series_fg, "Green");
-        assert_eq!(config.series_bg, "Black");
-        assert_eq!(config.season_fg, "Red");
-        assert_eq!(config.season_bg, "White");
-        assert_eq!(config.episode_fg, "Blue");
-        assert_eq!(config.episode_bg, "Yellow");
-        assert_eq!(config.status_fg, "Black");
-        assert_eq!(config.status_bg, "Cyan");
-        assert_eq!(config.scrollbar_track_char, "┃");
-        assert_eq!(config.scrollbar_indicator_char, "▓");
-        assert_eq!(config.scrollbar_fg, "Cyan");
-        assert_eq!(config.scrollbar_bg, "Black");
-        assert_eq!(config.count_fg, "Yellow");
-        assert_eq!(config.count_style, "bold");
-        assert_eq!(config.header_fg, "Magenta");
-        assert_eq!(config.header_style, "underline");
-        assert_eq!(config.help_fg, "Green");
-        assert_eq!(config.help_style, "italic");
+        assert_eq!(config.active_theme, "THEME-custom.yaml");
         assert_eq!(config.log_file, Some("/custom/path/app.log".to_string()));
         assert_eq!(config.log_level, "debug");
         assert_eq!(config.video_extensions, vec!["mp4"]);
@@ -778,59 +322,35 @@ video_player: /usr/bin/mpv
 
         // Create a config with custom values
         let mut config = Config::default();
-        config.current_fg = "Magenta".to_string();
-        config.watched_indicator = "●".to_string();
-        config.series_fg = "Cyan".to_string();
+        config.active_theme = "THEME-custom.yaml".to_string();
 
         // Save the config
         save_config(&config, &config_path);
 
-        // Read the file and verify all fields are present
+        // Read the file and verify fields are present
         let saved_content = fs::read_to_string(&config_path)
             .expect("Failed to read saved config");
         
-        // Check that all new color fields are in the saved file (YAML format)
-        assert!(saved_content.contains("watched_indicator:"));
-        assert!(saved_content.contains("watched_fg:"));
-        assert!(saved_content.contains("unwatched_indicator:"));
-        assert!(saved_content.contains("unwatched_fg:"));
-        assert!(saved_content.contains("new_fg:"));
-        assert!(saved_content.contains("new_bg:"));
-        assert!(saved_content.contains("invalid_fg:"));
-        assert!(saved_content.contains("invalid_bg:"));
-        assert!(saved_content.contains("series_fg:"));
-        assert!(saved_content.contains("series_bg:"));
-        assert!(saved_content.contains("season_fg:"));
-        assert!(saved_content.contains("season_bg:"));
-        assert!(saved_content.contains("episode_fg:"));
-        assert!(saved_content.contains("episode_bg:"));
-        assert!(saved_content.contains("status_fg:"));
-        assert!(saved_content.contains("status_bg:"));
-        assert!(saved_content.contains("scrollbar_track_char:"));
-        assert!(saved_content.contains("scrollbar_indicator_char:"));
-        assert!(saved_content.contains("scrollbar_fg:"));
-        assert!(saved_content.contains("scrollbar_bg:"));
-        assert!(saved_content.contains("count_fg:"));
-        assert!(saved_content.contains("count_style:"));
-        assert!(saved_content.contains("header_fg:"));
-        assert!(saved_content.contains("header_style:"));
-        assert!(saved_content.contains("help_fg:"));
-        assert!(saved_content.contains("help_style:"));
+        // Check that style fields are NOT in the saved file (they're None)
+        assert!(!saved_content.contains("current_fg:"));
+        assert!(!saved_content.contains("watched_indicator:"));
+        assert!(!saved_content.contains("series_fg:"));
+        assert!(!saved_content.contains("scrollbar_track_char:"));
+        
+        // Verify active_theme is in the output
+        assert!(saved_content.contains("active_theme:"));
+        assert!(saved_content.contains("THEME-custom.yaml"));
+        
+        // Verify log fields are present
         assert!(saved_content.contains("log_file:"));
         assert!(saved_content.contains("log_level:"));
-
-        // Verify custom values are saved (YAML format without JSON quotes for simple values)
-        assert!(saved_content.contains("current_fg: Magenta"));
-        assert!(saved_content.contains("watched_indicator: \"●\""));
-        assert!(saved_content.contains("unwatched_indicator: \"○\""));
-        assert!(saved_content.contains("series_fg: Cyan"));
-        assert!(saved_content.contains("scrollbar_track_char: \"│\""));
-        assert!(saved_content.contains("scrollbar_indicator_char: \"█\""));
         
         // Verify inline documentation is present
-        assert!(saved_content.contains("=== Color Configuration ==="));
+        assert!(saved_content.contains("=== Theme Configuration ==="));
         assert!(saved_content.contains("=== Logging Configuration ==="));
-        assert!(saved_content.contains("Scroll bar configuration"));
+        
+        // Verify color configuration section is NOT present
+        assert!(!saved_content.contains("=== Color Configuration ==="));
     }
 
     /// Test Case: Default log file location when not configured
@@ -956,12 +476,12 @@ video_player: /usr/bin/vlc
 
         // Verify section headers are present
         assert!(yaml.contains("=== Database Configuration ==="));
-        assert!(yaml.contains("=== Color Configuration ==="));
+        assert!(yaml.contains("=== Theme Configuration ==="));
         assert!(yaml.contains("=== Logging Configuration ==="));
         assert!(yaml.contains("=== Video Configuration ==="));
 
-        // Verify color documentation
-        assert!(yaml.contains("Valid colors: Black, Red, Green, Yellow, Blue, Magenta, Cyan, White, DarkGray, Reset"));
+        // Verify color configuration section is NOT present
+        assert!(!yaml.contains("=== Color Configuration ==="));
 
         // Verify log level documentation
         assert!(yaml.contains("error - Only log errors"));
@@ -971,18 +491,15 @@ video_player: /usr/bin/vlc
 
         // Verify specific setting comments
         assert!(yaml.contains("Path to the SQLite database file"));
-        assert!(yaml.contains("Current selection colors"));
-        assert!(yaml.contains("Watched episode indicator"));
-        assert!(yaml.contains("Unwatched episode indicator"));
-        assert!(yaml.contains("New episode colors"));
-        assert!(yaml.contains("Invalid episode colors"));
-        assert!(yaml.contains("Series entry colors"));
-        assert!(yaml.contains("Season entry colors"));
-        assert!(yaml.contains("Episode entry colors"));
-        assert!(yaml.contains("Status line colors"));
+        assert!(yaml.contains("Name of the active theme file"));
         assert!(yaml.contains("Log file location"));
         assert!(yaml.contains("File extensions recognized as video files"));
         assert!(yaml.contains("Path to external video player executable"));
+        
+        // Verify style-related comments are NOT present
+        assert!(!yaml.contains("Current selection colors"));
+        assert!(!yaml.contains("Watched episode indicator"));
+        assert!(!yaml.contains("Series entry colors"));
     }
 
     /// Test Case: YAML generation has proper formatting
@@ -1001,9 +518,9 @@ video_player: /usr/bin/vlc
         // Verify blank lines between groups (check for double newlines)
         assert!(yaml.contains("\n\n"));
 
-        // Verify comments are placed above settings (# followed by setting name)
-        assert!(yaml.contains("# Current selection colors"));
-        assert!(yaml.contains("current_fg:"));
+        // Verify comments are placed above settings
+        assert!(yaml.contains("# Name of the active theme file"));
+        assert!(yaml.contains("active_theme:"));
 
         // Verify null values are properly formatted
         assert!(yaml.contains("db_location: null") || yaml.contains("db_location: \""));
@@ -1017,10 +534,7 @@ video_player: /usr/bin/vlc
     #[test]
     fn test_yaml_generation_preserves_values() {
         let mut config = Config::default();
-        config.current_fg = "Magenta".to_string();
-        config.current_bg = "Cyan".to_string();
-        config.watched_indicator = "✓".to_string();
-        config.unwatched_indicator = "✗".to_string();
+        config.active_theme = "THEME-custom.yaml".to_string();
         config.log_level = "debug".to_string();
         config.video_player = "/usr/bin/mpv".to_string();
         config.db_location = Some("/custom/path/db.sqlite".to_string());
@@ -1029,14 +543,15 @@ video_player: /usr/bin/vlc
         let yaml = generate_yaml_with_comments(&config);
 
         // Verify custom values are in the output
-        assert!(yaml.contains("current_fg: Magenta"));
-        assert!(yaml.contains("current_bg: Cyan"));
-        assert!(yaml.contains("watched_indicator: \"✓\""));
-        assert!(yaml.contains("unwatched_indicator: \"✗\""));
+        assert!(yaml.contains("active_theme: THEME-custom.yaml"));
         assert!(yaml.contains("log_level: debug"));
         assert!(yaml.contains("video_player: /usr/bin/mpv"));
         assert!(yaml.contains("db_location: \"/custom/path/db.sqlite\""));
         assert!(yaml.contains("log_file: \"/var/log/app.log\""));
+        
+        // Verify style fields are NOT in the output
+        assert!(!yaml.contains("current_fg:"));
+        assert!(!yaml.contains("watched_indicator:"));
     }
 
     /// Test Case: Invalid YAML configuration parse error handling
@@ -1058,8 +573,7 @@ video_player: /usr/bin/vlc
             .expect("Failed to initialize logger");
 
         // Create an invalid YAML config file (malformed syntax - unclosed quote)
-        let invalid_yaml = r#"current_fg: "Black
-current_bg: White
+        let invalid_yaml = r#"active_theme: "THEME-test.yaml
 video_extensions:
   - mp4
 video_player: /usr/bin/vlc
@@ -1070,8 +584,8 @@ video_player: /usr/bin/vlc
         let config = read_config(&yaml_path);
 
         // Verify default values are used (since parse failed)
-        assert_eq!(config.current_fg, "Black");
-        assert_eq!(config.current_bg, "White");
+        assert_eq!(config.active_theme, "THEME-default.yaml");
+        assert_eq!(config.log_level, "info");
         
         // Log a final message to ensure flush
         crate::logger::log_warn("test_complete");
@@ -1084,6 +598,132 @@ video_player: /usr/bin/vlc
             .expect("Failed to read log file");
         assert!(log_contents.contains("Could not parse config.yaml"));
     }
+
+    /// Test Case: Config with active_theme field loads correctly
+    /// When config.yaml contains an active_theme field, the loaded Config
+    /// should contain that value.
+    /// Validates: Requirements 1.4, 4.2
+    #[test]
+    fn test_config_with_active_theme_loads() {
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let yaml_path = temp_dir.path().join("config.yaml");
+
+        let config_with_theme = r#"active_theme: THEME-custom.yaml
+video_extensions:
+  - mp4
+video_player: /usr/bin/vlc
+"#;
+        fs::write(&yaml_path, config_with_theme).expect("Failed to write test config");
+
+        let config = read_config(&yaml_path);
+
+        assert_eq!(config.active_theme, "THEME-custom.yaml");
+    }
+
+    /// Test Case: Config without active_theme field uses default
+    /// When config.yaml does not contain an active_theme field, the loaded Config
+    /// should use the default value "THEME-default.yaml".
+    /// Validates: Requirements 1.4, 4.2
+    #[test]
+    fn test_config_without_active_theme_uses_default() {
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let yaml_path = temp_dir.path().join("config.yaml");
+
+        let config_without_theme = r#"video_extensions:
+  - mp4
+video_player: /usr/bin/vlc
+"#;
+        fs::write(&yaml_path, config_without_theme).expect("Failed to write test config");
+
+        let config = read_config(&yaml_path);
+
+        assert_eq!(config.active_theme, "THEME-default.yaml");
+    }
+
+    /// Test Case: Config serialization only includes non-visual settings
+    /// When a Config is serialized, only non-visual settings should appear.
+    /// Validates: Requirements 5.1
+    #[test]
+    fn test_config_serialization_only_includes_non_visual_settings() {
+        let mut config = Config::default();
+        config.active_theme = "THEME-test.yaml".to_string();
+        
+        // Serialize the config
+        let yaml = serde_yaml::to_string(&config).expect("Failed to serialize config");
+
+        // Verify active_theme is in the output
+        assert!(yaml.contains("active_theme:"));
+        
+        // Verify video settings are in the output
+        assert!(yaml.contains("video_extensions:"));
+        assert!(yaml.contains("video_player:"));
+        
+        // Verify log settings are in the output
+        assert!(yaml.contains("log_level:"));
+    }
+
+    /// Test Case: Config YAML generation includes active_theme documentation
+    /// When generate_yaml_with_comments is called, the output should include
+    /// documentation for the active_theme field.
+    /// Validates: Requirements 1.4, 4.2
+    #[test]
+    fn test_yaml_generation_includes_active_theme_documentation() {
+        let config = Config::default();
+        let yaml = generate_yaml_with_comments(&config);
+
+        // Verify theme configuration section is present
+        assert!(yaml.contains("=== Theme Configuration ==="));
+        assert!(yaml.contains("Name of the active theme file"));
+        assert!(yaml.contains("Theme files are stored in the same directory"));
+        assert!(yaml.contains("Default: THEME-default.yaml"));
+        assert!(yaml.contains("active_theme: THEME-default.yaml"));
+    }
+
+    /// Test Case: Config YAML generation excludes style fields
+    /// When generate_yaml_with_comments is called, the output should not
+    /// include any style fields (they'll be None after migration).
+    /// Validates: Requirements 5.1, 5.2
+    #[test]
+    fn test_yaml_generation_excludes_style_fields() {
+        let config = Config::default();
+        let yaml = generate_yaml_with_comments(&config);
+
+        // Verify style fields are not in the output
+        assert!(!yaml.contains("current_fg:"));
+        assert!(!yaml.contains("current_bg:"));
+        assert!(!yaml.contains("dirty_fg:"));
+        assert!(!yaml.contains("watched_indicator:"));
+        assert!(!yaml.contains("unwatched_indicator:"));
+        assert!(!yaml.contains("new_fg:"));
+        assert!(!yaml.contains("invalid_fg:"));
+        assert!(!yaml.contains("series_fg:"));
+        assert!(!yaml.contains("season_fg:"));
+        assert!(!yaml.contains("episode_fg:"));
+        assert!(!yaml.contains("status_fg:"));
+        assert!(!yaml.contains("scrollbar_track_char:"));
+        assert!(!yaml.contains("scrollbar_fg:"));
+        assert!(!yaml.contains("count_fg:"));
+        assert!(!yaml.contains("header_fg:"));
+        assert!(!yaml.contains("help_fg:"));
+        
+        // Verify color configuration section is not present
+        assert!(!yaml.contains("=== Color Configuration ==="));
+    }
+
+    /// Test Case: Config default includes active_theme field
+    /// When Config::default() is called, the returned Config should have
+    /// active_theme set to "THEME-default.yaml".
+    /// Validates: Requirements 1.4, 4.2
+    #[test]
+    fn test_config_default_includes_active_theme() {
+        let config = Config::default();
+
+        assert_eq!(config.active_theme, "THEME-default.yaml");
+        assert_eq!(config.log_level, "info");
+        assert_eq!(config.log_file, None);
+    }
+
+
 
 
 }

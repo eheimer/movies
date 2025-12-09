@@ -11,6 +11,7 @@ mod paths;
 mod scrollbar;
 mod splash;
 mod terminal;
+mod theme;
 mod util;
 mod video_metadata;
 
@@ -28,6 +29,7 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::time::Duration;
 use terminal::{initialize_terminal, restore_terminal};
+use theme::Theme;
 use util::{Entry, LastAction, Mode, ViewContext};
 use walkdir::WalkDir;
 
@@ -231,7 +233,7 @@ fn first_run_flow(
     }
 }
 
-fn main_loop(mut entries: Vec<Entry>, mut config: Config, mut resolver: Option<PathResolver>, config_path: PathBuf, mut status_message: String) -> io::Result<()> {
+fn main_loop(mut entries: Vec<Entry>, mut config: Config, theme: Theme, mut resolver: Option<PathResolver>, config_path: PathBuf, mut status_message: String) -> io::Result<()> {
     let mut current_item = 0;
     let mut redraw = true;
     let mut search: String = String::new();
@@ -337,7 +339,7 @@ fn main_loop(mut entries: Vec<Entry>, mut config: Config, mut resolver: Option<P
                 current_item,
                 &mut first_entry,
                 &search,
-                &config,
+                &theme,
                 &mode,
                 &entry_path,
                 &edit_details,
@@ -625,12 +627,19 @@ fn main() -> io::Result<()> {
         // First run - handle setup before initializing terminal
         let (entries, resolver, initial_status) = first_run_flow(&mut config, &app_paths.config_file)?;
         
+        // Load theme from config directory
+        let config_dir = app_paths.config_file.parent()
+            .expect("Config file should have a parent directory");
+        let theme_path = config_dir.join(&config.active_theme);
+        logger::log_info(&format!("Loading theme from {:?}", theme_path));
+        let theme = theme::load_theme(&theme_path);
+        
         // Now start the main loop with the configured database
         initialize_terminal()?;
         splash::show_splash_screen()
             .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
         terminal::clear_screen()?;
-        let result = main_loop(entries, config, Some(resolver), app_paths.config_file.clone(), initial_status);
+        let result = main_loop(entries, config, theme, Some(resolver), app_paths.config_file.clone(), initial_status);
         restore_terminal()?;
         return result;
     }
@@ -712,6 +721,13 @@ fn main() -> io::Result<()> {
     // Load entries from database
     let entries = get_entries().expect("Failed to get entries");
     
+    // Load theme from config directory
+    let config_dir = app_paths.config_file.parent()
+        .expect("Config file should have a parent directory");
+    let theme_path = config_dir.join(&config.active_theme);
+    logger::log_info(&format!("Loading theme from {:?}", theme_path));
+    let theme = theme::load_theme(&theme_path);
+    
     // Create empty initial status for non-first-run path
     let initial_status = String::new();
 
@@ -720,7 +736,7 @@ fn main() -> io::Result<()> {
     splash::show_splash_screen()
         .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
     terminal::clear_screen()?;
-    let result = main_loop(entries, config, Some(resolver), app_paths.config_file, initial_status);
+    let result = main_loop(entries, config, theme, Some(resolver), app_paths.config_file, initial_status);
     restore_terminal()?;
     result
 }

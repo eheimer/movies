@@ -14,5 +14,6 @@ pub mod paths;
 pub mod scrollbar;
 pub mod splash;
 pub mod terminal;
+pub mod theme;
 pub mod util;
 pub mod video_metadata;

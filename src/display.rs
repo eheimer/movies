@@ -1,4 +1,3 @@
-use crate::config::Config;
 use crate::dto::{EpisodeDetail, Series};
 use crate::episode_field::EpisodeField;
 use crate::menu::{MenuItem, MenuContext};
@@ -6,6 +5,7 @@ use crate::scrollbar::{calculate_scrollbar_state, render_scrollbar};
 use crate::terminal::{
     clear_line, clear_screen, get_terminal_size, hide_cursor, move_cursor, print_at, show_cursor,
 };
+use crate::theme::Theme;
 use crate::util::{can_repeat_action, truncate_string, Entry, LastAction, Mode, ViewContext};
 use crossterm::event::KeyCode;
 use crossterm::style::{Color, Stylize};
@@ -32,21 +32,21 @@ fn get_sidebar_width() -> io::Result<usize> {
 /// * `name` - The series name
 /// * `series_id` - The series ID for querying counts
 /// * `terminal_width` - The available width for display
-/// * `config` - Configuration containing count styling
+/// * `theme` - Theme containing count styling
 /// 
 /// # Returns
 /// * `String` - Formatted string with right-justified count as "[<series title>]  <watched>/<total> watched"
 ///              or fallback format on error
-pub fn format_series_display(name: &str, series_id: usize, terminal_width: usize, config: &Config) -> String {
+pub fn format_series_display(name: &str, series_id: usize, terminal_width: usize, theme: &Theme) -> String {
     match crate::database::get_series_episode_counts(series_id) {
         Ok((total, unwatched)) => {
             let watched = total.saturating_sub(unwatched);
             let count_text = format!("{}/{} watched", watched, total);
             
             // Apply styling to count
-            let styled_count = apply_text_style(&count_text, &config.count_style);
+            let styled_count = apply_text_style(&count_text, &theme.count_style);
             let colored_count = styled_count
-                .with(string_to_fg_color_or_default(&config.count_fg));
+                .with(string_to_fg_color_or_default(&theme.count_fg));
             
             // Calculate available space for name (reserve space for count + spacing)
             let count_visual_len = count_text.len(); // Visual length without ANSI codes
@@ -81,21 +81,21 @@ pub fn format_series_display(name: &str, series_id: usize, terminal_width: usize
 /// * `number` - The season number
 /// * `season_id` - The season ID for querying counts
 /// * `terminal_width` - The available width for display
-/// * `config` - Configuration containing count styling
+/// * `theme` - Theme containing count styling
 /// 
 /// # Returns
 /// * `String` - Formatted string with right-justified count as "Season <number>  <watched>/<total> watched"
 ///              or fallback format on error
-pub fn format_season_display(number: usize, season_id: usize, terminal_width: usize, config: &Config) -> String {
+pub fn format_season_display(number: usize, season_id: usize, terminal_width: usize, theme: &Theme) -> String {
     match crate::database::get_season_episode_counts(season_id) {
         Ok((total, unwatched)) => {
             let watched = total.saturating_sub(unwatched);
             let count_text = format!("{}/{} watched", watched, total);
             
             // Apply styling to count
-            let styled_count = apply_text_style(&count_text, &config.count_style);
+            let styled_count = apply_text_style(&count_text, &theme.count_style);
             let colored_count = styled_count
-                .with(string_to_fg_color_or_default(&config.count_fg));
+                .with(string_to_fg_color_or_default(&theme.count_fg));
             
             // Calculate available space for name (reserve space for count + spacing)
             let count_visual_len = count_text.len(); // Visual length without ANSI codes
@@ -197,7 +197,7 @@ fn draw_header(
     selected_entry: Option<&Entry>,
     edit_details: &EpisodeDetail,
     filter_mode: bool,
-    config: &Config,
+    theme: &Theme,
     last_action: &Option<LastAction>,
     view_context: &ViewContext,
     is_first_run: bool,
@@ -343,8 +343,8 @@ fn draw_header(
         // Apply highlight to "filter:" label when in filter mode
         let filter_label = if filter_mode {
             format!("filter:")
-                .with(string_to_fg_color_or_default(&config.current_fg))
-                .on(string_to_bg_color_or_default(&config.current_bg))
+                .with(string_to_fg_color_or_default(&theme.current_fg))
+                .on(string_to_bg_color_or_default(&theme.current_bg))
                 .to_string()
         } else {
             "filter:".to_string()
@@ -360,7 +360,7 @@ pub fn draw_screen(
     current_item: usize,
     first_entry: &mut usize,
     filter: &String,
-    config: &Config,
+    theme: &Theme,
     mode: &Mode,
     entry_path: &String,
     edit_details: &EpisodeDetail,
@@ -431,7 +431,7 @@ pub fn draw_screen(
         selected_entry,
         edit_details,
         filter_mode,
-        config,
+        theme,
         last_action,
         view_context,
         is_first_run,
@@ -541,21 +541,21 @@ pub fn draw_screen(
             // Determine the base display text and colors based on entry type
             let (display_text, fg_color, bg_color) = match entry {
                 Entry::Series { name, series_id } => {
-                    // Format with new signature: pass terminal_width and config
+                    // Format with new signature: pass terminal_width and theme
                     // Note: format_series_display already handles width and includes ANSI color codes
                     // for the count text, so we don't truncate it (would break the ANSI codes)
-                    let formatted = format_series_display(name, *series_id, effective_col_width, config);
-                    let fg = string_to_fg_color_or_default(&config.series_fg);
-                    let bg = string_to_bg_color_or_default(&config.series_bg);
+                    let formatted = format_series_display(name, *series_id, effective_col_width, theme);
+                    let fg = string_to_fg_color_or_default(&theme.series_fg);
+                    let bg = string_to_bg_color_or_default(&theme.series_bg);
                     (formatted, fg, bg)
                 }
                 Entry::Season { number, season_id } => {
-                    // Format with new signature: pass terminal_width and config
+                    // Format with new signature: pass terminal_width and theme
                     // Note: format_season_display already handles width and includes ANSI color codes
                     // for the count text, so we don't truncate it (would break the ANSI codes)
-                    let formatted = format_season_display(*number, *season_id, effective_col_width, config);
-                    let fg = string_to_fg_color_or_default(&config.season_fg);
-                    let bg = string_to_bg_color_or_default(&config.season_bg);
+                    let formatted = format_season_display(*number, *season_id, effective_col_width, theme);
+                    let fg = string_to_fg_color_or_default(&theme.season_fg);
+                    let bg = string_to_bg_color_or_default(&theme.season_bg);
                     (formatted, fg, bg)
                 }
                 Entry::Episode { episode_id, name, location, .. } => {
@@ -575,36 +575,36 @@ pub fn draw_screen(
                     let (text, fg, bg) = if !file_exists {
                         // Invalid episode (file doesn't exist) - use invalid colors
                         let text = truncate_string(name, effective_col_width);
-                        let fg = string_to_fg_color_or_default(&config.invalid_fg);
-                        let bg = string_to_bg_color_or_default(&config.invalid_bg);
+                        let fg = string_to_fg_color_or_default(&theme.invalid_fg);
+                        let bg = string_to_bg_color_or_default(&theme.invalid_bg);
                         (text, fg, bg)
                     } else if is_new && is_watched {
                         // New AND watched - use new colors with watched indicator
-                        let formatted_name = format_episode_with_indicator(name, true, config);
+                        let formatted_name = format_episode_with_indicator(name, true, theme);
                         let text = truncate_string(&formatted_name, effective_col_width);
-                        let fg = string_to_fg_color_or_default(&config.new_fg);
-                        let bg = string_to_bg_color_or_default(&config.new_bg);
+                        let fg = string_to_fg_color_or_default(&theme.new_fg);
+                        let bg = string_to_bg_color_or_default(&theme.new_bg);
                         (text, fg, bg)
                     } else if is_new && !is_watched {
                         // New AND unwatched - use new colors with unwatched indicator
-                        let formatted_name = format_episode_with_indicator(name, false, config);
+                        let formatted_name = format_episode_with_indicator(name, false, theme);
                         let text = truncate_string(&formatted_name, effective_col_width);
-                        let fg = string_to_fg_color_or_default(&config.new_fg);
-                        let bg = string_to_bg_color_or_default(&config.new_bg);
+                        let fg = string_to_fg_color_or_default(&theme.new_fg);
+                        let bg = string_to_bg_color_or_default(&theme.new_bg);
                         (text, fg, bg)
                     } else if is_watched {
                         // Watched episode - add indicator and use normal colors
-                        let formatted_name = format_episode_with_indicator(name, true, config);
+                        let formatted_name = format_episode_with_indicator(name, true, theme);
                         let text = truncate_string(&formatted_name, effective_col_width);
-                        let fg = string_to_fg_color_or_default(&config.episode_fg);
-                        let bg = string_to_bg_color_or_default(&config.episode_bg);
+                        let fg = string_to_fg_color_or_default(&theme.episode_fg);
+                        let bg = string_to_bg_color_or_default(&theme.episode_bg);
                         (text, fg, bg)
                     } else {
                         // Unwatched episode - add unwatched indicator and use normal colors
-                        let formatted_name = format_episode_with_indicator(name, false, config);
+                        let formatted_name = format_episode_with_indicator(name, false, theme);
                         let text = truncate_string(&formatted_name, effective_col_width);
-                        let fg = string_to_fg_color_or_default(&config.episode_fg);
-                        let bg = string_to_bg_color_or_default(&config.episode_bg);
+                        let fg = string_to_fg_color_or_default(&theme.episode_fg);
+                        let bg = string_to_bg_color_or_default(&theme.episode_bg);
                         (text, fg, bg)
                     };
                     
@@ -617,8 +617,8 @@ pub fn draw_screen(
                 format!(
                     "{}",
                     display_text
-                        .with(string_to_fg_color_or_default(&config.current_fg))
-                        .on(string_to_bg_color_or_default(&config.current_bg))
+                        .with(string_to_fg_color_or_default(&theme.current_fg))
+                        .on(string_to_bg_color_or_default(&theme.current_bg))
                 )
             } else {
                 format!("{}", display_text.with(fg_color).on(bg_color))
@@ -628,7 +628,7 @@ pub fn draw_screen(
         }
 
         // Render the scroll bar after list items but before detail window
-        render_scrollbar(&scrollbar_state, config)?;
+        render_scrollbar(&scrollbar_state, theme)?;
         if !series_selected && !season_selected && !matches!(mode, Mode::Menu) {
             draw_detail_window(
                 &entries[current_item],
@@ -638,21 +638,21 @@ pub fn draw_screen(
                 edit_cursor_pos,
                 season_number,
                 dirty_fields,
-                config,
+                theme,
             )?;
         }
         if let Mode::SeriesSelect | Mode::SeriesCreate = mode {
-            draw_series_window(mode, series, new_series, series_selection, config, first_series)?;
+            draw_series_window(mode, series, new_series, series_selection, theme, first_series)?;
         }
     }
 
     // Draw context menu if in Menu mode
     if let Mode::Menu = mode {
-        draw_context_menu(menu_items, menu_selection, config)?;
+        draw_context_menu(menu_items, menu_selection, theme)?;
     }
 
     // Draw status line at the bottom
-    draw_status_line(status_message, config)?;
+    draw_status_line(status_message, theme)?;
 
     // Position cursor when in filter mode or edit mode
     // This must be done AFTER all other drawing to ensure cursor is in the right place
@@ -688,7 +688,7 @@ fn draw_detail_window(
     edit_cursor_pos: usize,
     season_number: Option<usize>,
     dirty_fields: &HashSet<EpisodeField>,
-    config: &Config,
+    theme: &Theme,
 ) -> io::Result<()> {
     let start_col: usize = COL1_WIDTH + 2;
     let start_row = HEADER_SIZE;
@@ -765,8 +765,8 @@ fn draw_detail_window(
         let display_line = if edit_mode && dirty_fields.contains(&field) {
             // Color only the field name part
             let colored_field_name = format!("{}:", field.display_name())
-                .with(string_to_fg_color_or_default(&config.dirty_fg))
-                .on(string_to_bg_color_or_default(&config.dirty_bg))
+                .with(string_to_fg_color_or_default(&theme.dirty_fg))
+                .on(string_to_bg_color_or_default(&theme.dirty_bg))
                 .to_string();
             
             // Extract the value part from the truncated line (everything after "field_name: ")
@@ -805,7 +805,7 @@ fn draw_series_window(
     series: &Vec<Series>,
     new_series: &String,
     series_selection: &mut Option<usize>,
-    config: &Config,
+    theme: &Theme,
     first_series: &mut usize,
 ) -> io::Result<()> {
     let start_col = COL1_WIDTH + 2;
@@ -917,8 +917,8 @@ fn draw_series_window(
                 format!(
                     "{}",
                     display_text
-                        .with(string_to_fg_color_or_default(&config.current_fg))
-                        .on(string_to_bg_color_or_default(&config.current_bg))
+                        .with(string_to_fg_color_or_default(&theme.current_fg))
+                        .on(string_to_bg_color_or_default(&theme.current_bg))
                 )
             } else {
                 display_text
@@ -932,7 +932,7 @@ fn draw_series_window(
         }
         
         // Render the scroll bar after rendering series items
-        render_scrollbar(&scrollbar_state, config)?;
+        render_scrollbar(&scrollbar_state, theme)?;
     }
     Ok(())
 }
@@ -940,7 +940,7 @@ fn draw_series_window(
 fn draw_context_menu(
     menu_items: &[MenuItem],
     selected_index: usize,
-    config: &Config,
+    theme: &Theme,
 ) -> io::Result<()> {
     if menu_items.is_empty() {
         return Ok(());
@@ -986,8 +986,8 @@ fn draw_context_menu(
             format!(
                 "{}",
                 display_text
-                    .with(string_to_fg_color_or_default(&config.current_fg))
-                    .on(string_to_bg_color_or_default(&config.current_bg))
+                    .with(string_to_fg_color_or_default(&theme.current_fg))
+                    .on(string_to_bg_color_or_default(&theme.current_bg))
             )
         } else {
             display_text
@@ -1056,20 +1056,20 @@ fn draw_window(
 /// 
 /// # Arguments
 /// * `message` - The status message to display
-/// * `config` - Configuration containing status line colors
+/// * `theme` - Theme containing status line colors
 /// 
 /// # Returns
 /// * `io::Result<()>` - Ok if successful, error otherwise
-fn draw_status_line(message: &str, config: &Config) -> io::Result<()> {
+fn draw_status_line(message: &str, theme: &Theme) -> io::Result<()> {
     let (cols, rows) = get_terminal_size()?;
     let status_row = rows - 1; // Last row (0-indexed)
     
     // Clear the status line
     clear_line(status_row)?;
     
-    // Get status line colors from config
-    let status_fg = string_to_fg_color_or_default(&config.status_fg);
-    let status_bg = string_to_bg_color_or_default(&config.status_bg);
+    // Get status line colors from theme
+    let status_fg = string_to_fg_color_or_default(&theme.status_fg);
+    let status_bg = string_to_bg_color_or_default(&theme.status_bg);
     
     // Calculate visual width (accounting for multi-byte UTF-8 characters)
     // Use .chars().count() instead of .len() to get visual width, not byte count
@@ -1115,30 +1115,30 @@ pub fn get_max_displayed_items() -> io::Result<usize> {
 /// # Arguments
 /// * `name` - The episode name to format
 /// * `is_watched` - Whether the episode has been watched
-/// * `config` - Configuration containing the watched/unwatched indicators and styles
+/// * `theme` - Theme containing the watched/unwatched indicators and styles
 /// 
 /// # Returns
 /// * `String` - The formatted episode name with indicator and style
-pub fn format_episode_with_indicator(name: &str, is_watched: bool, config: &Config) -> String {
+pub fn format_episode_with_indicator(name: &str, is_watched: bool, theme: &Theme) -> String {
     if is_watched {
         // Apply text style to the name
-        let styled_name = apply_text_style(name, &config.watched_style);
+        let styled_name = apply_text_style(name, &theme.watched_style);
         
         // Add indicator if configured (empty string means no indicator)
-        if config.watched_indicator.is_empty() {
+        if theme.watched_indicator.is_empty() {
             styled_name
         } else {
-            format!("{} {}", config.watched_indicator, styled_name)
+            format!("{} {}", theme.watched_indicator, styled_name)
         }
     } else {
         // Apply unwatched text style to the name
-        let styled_name = apply_text_style(name, &config.unwatched_style);
+        let styled_name = apply_text_style(name, &theme.unwatched_style);
         
         // Add unwatched indicator if configured (empty string means no indicator)
-        if config.unwatched_indicator.is_empty() {
+        if theme.unwatched_indicator.is_empty() {
             styled_name
         } else {
-            format!("{} {}", config.unwatched_indicator, styled_name)
+            format!("{} {}", theme.unwatched_indicator, styled_name)
         }
     }
 }
@@ -1309,13 +1309,13 @@ mod tests {
     /// Validates: Requirements 1.1
     #[test]
     fn test_watched_indicator_presence() {
-        let config = Config::default();
+        let theme = Theme::default();
         let episode_name = "Test Episode";
         
-        let formatted = format_episode_with_indicator(episode_name, true, &config);
+        let formatted = format_episode_with_indicator(episode_name, true, &theme);
         
         // The formatted string should contain the watched indicator
-        assert!(formatted.contains(&config.watched_indicator));
+        assert!(formatted.contains(&theme.watched_indicator));
         // The formatted string should also contain the episode name
         assert!(formatted.contains(episode_name));
     }
@@ -1326,15 +1326,15 @@ mod tests {
     /// Validates: Requirements 1.2
     #[test]
     fn test_unwatched_indicator_presence() {
-        let config = Config::default();
+        let theme = Theme::default();
         let episode_name = "Test Episode";
         
-        let formatted = format_episode_with_indicator(episode_name, false, &config);
+        let formatted = format_episode_with_indicator(episode_name, false, &theme);
         
         // The formatted string should NOT contain the watched indicator
-        assert!(!formatted.contains(&config.watched_indicator));
+        assert!(!formatted.contains(&theme.watched_indicator));
         // The formatted string should contain the unwatched indicator
-        assert!(formatted.contains(&config.unwatched_indicator));
+        assert!(formatted.contains(&theme.unwatched_indicator));
         // The formatted string should contain the episode name
         assert!(formatted.contains(episode_name));
     }
@@ -1345,13 +1345,13 @@ mod tests {
     /// Validates: Requirements 1.4
     #[test]
     fn test_watched_indicator_distinctness() {
-        let config = Config::default();
+        let theme = Theme::default();
         let episode_name = "Test Episode";
         
-        let formatted = format_episode_with_indicator(episode_name, true, &config);
+        let formatted = format_episode_with_indicator(episode_name, true, &theme);
         
         // The indicator should be followed by a space before the episode name
-        let expected = format!("{} {}", config.watched_indicator, episode_name);
+        let expected = format!("{} {}", theme.watched_indicator, episode_name);
         assert_eq!(formatted, expected);
         
         // Verify there's whitespace between indicator and name
@@ -1360,11 +1360,11 @@ mod tests {
 
     #[test]
     fn test_watched_indicator_with_custom_indicator() {
-        let mut config = Config::default();
-        config.watched_indicator = "★".to_string();
+        let mut theme = Theme::default();
+        theme.watched_indicator = "★".to_string();
         let episode_name = "Custom Test";
         
-        let formatted = format_episode_with_indicator(episode_name, true, &config);
+        let formatted = format_episode_with_indicator(episode_name, true, &theme);
         
         // Should use the custom indicator
         assert!(formatted.contains("★"));
@@ -1373,39 +1373,39 @@ mod tests {
 
     #[test]
     fn test_watched_indicator_with_empty_name() {
-        let config = Config::default();
+        let theme = Theme::default();
         let episode_name = "";
         
-        let formatted_watched = format_episode_with_indicator(episode_name, true, &config);
-        let formatted_unwatched = format_episode_with_indicator(episode_name, false, &config);
+        let formatted_watched = format_episode_with_indicator(episode_name, true, &theme);
+        let formatted_unwatched = format_episode_with_indicator(episode_name, false, &theme);
         
         // Even with empty name, indicator should be present when watched
-        assert!(formatted_watched.contains(&config.watched_indicator));
+        assert!(formatted_watched.contains(&theme.watched_indicator));
         // Unwatched should have unwatched indicator
-        assert!(formatted_unwatched.contains(&config.unwatched_indicator));
+        assert!(formatted_unwatched.contains(&theme.unwatched_indicator));
     }
 
     #[test]
     fn test_watched_indicator_with_style() {
-        let mut config = Config::default();
-        config.watched_style = "italic".to_string();
+        let mut theme = Theme::default();
+        theme.watched_style = "italic".to_string();
         let episode_name = "Styled Episode";
         
-        let formatted = format_episode_with_indicator(episode_name, true, &config);
+        let formatted = format_episode_with_indicator(episode_name, true, &theme);
         
         // Should contain both indicator and name (styling is applied but not easily testable)
-        assert!(formatted.contains(&config.watched_indicator));
+        assert!(formatted.contains(&theme.watched_indicator));
         assert!(!formatted.is_empty());
     }
 
     #[test]
     fn test_watched_no_indicator_with_style() {
-        let mut config = Config::default();
-        config.watched_indicator = "".to_string(); // No indicator
-        config.watched_style = "italic".to_string();
+        let mut theme = Theme::default();
+        theme.watched_indicator = "".to_string(); // No indicator
+        theme.watched_style = "italic".to_string();
         let episode_name = "Styled Episode";
         
-        let formatted = format_episode_with_indicator(episode_name, true, &config);
+        let formatted = format_episode_with_indicator(episode_name, true, &theme);
         
         // Should not contain indicator, but should have styled text
         assert!(!formatted.contains("✓"));
@@ -1420,7 +1420,7 @@ mod tests {
     fn test_series_entry_coloring() {
         use crate::util::Entry;
         
-        let config = Config::default();
+        let theme = Theme::default();
         
         // Create a series entry
         let _entry = Entry::Series {
@@ -1428,14 +1428,14 @@ mod tests {
             name: "Test Series".to_string(),
         };
         
-        // Verify the config has the expected series colors
-        assert_eq!(config.series_fg, "Blue");
-        assert_eq!(config.series_bg, "Reset");
+        // Verify the theme has the expected series colors
+        assert_eq!(theme.series_fg, "Blue");
+        assert_eq!(theme.series_bg, "Reset");
         
         // The actual color application happens in draw_screen
-        // This test verifies the config values are correct
-        let series_fg = string_to_fg_color_or_default(&config.series_fg);
-        let series_bg = string_to_bg_color_or_default(&config.series_bg);
+        // This test verifies the theme values are correct
+        let series_fg = string_to_fg_color_or_default(&theme.series_fg);
+        let series_bg = string_to_bg_color_or_default(&theme.series_bg);
         
         assert_eq!(series_fg, Color::Blue);
         assert_eq!(series_bg, Color::Reset);
@@ -1449,7 +1449,7 @@ mod tests {
     fn test_season_entry_coloring() {
         use crate::util::Entry;
         
-        let config = Config::default();
+        let theme = Theme::default();
         
         // Create a season entry
         let _entry = Entry::Season {
@@ -1457,14 +1457,14 @@ mod tests {
             number: 1,
         };
         
-        // Verify the config has the expected season colors
-        assert_eq!(config.season_fg, "Blue");
-        assert_eq!(config.season_bg, "Reset");
+        // Verify the theme has the expected season colors
+        assert_eq!(theme.season_fg, "Blue");
+        assert_eq!(theme.season_bg, "Reset");
         
         // The actual color application happens in draw_screen
-        // This test verifies the config values are correct
-        let season_fg = string_to_fg_color_or_default(&config.season_fg);
-        let season_bg = string_to_bg_color_or_default(&config.season_bg);
+        // This test verifies the theme values are correct
+        let season_fg = string_to_fg_color_or_default(&theme.season_fg);
+        let season_bg = string_to_bg_color_or_default(&theme.season_bg);
         
         assert_eq!(season_fg, Color::Blue);
         assert_eq!(season_bg, Color::Reset);
@@ -1478,7 +1478,7 @@ mod tests {
     fn test_episode_entry_coloring() {
         use crate::util::Entry;
         
-        let config = Config::default();
+        let theme = Theme::default();
         
         // Create an episode entry
         let _entry = Entry::Episode {
@@ -1487,14 +1487,14 @@ mod tests {
             location: "test.mp4".to_string(),
         };
         
-        // Verify the config has the expected episode colors
-        assert_eq!(config.episode_fg, "Reset");
-        assert_eq!(config.episode_bg, "Reset");
+        // Verify the theme has the expected episode colors
+        assert_eq!(theme.episode_fg, "Reset");
+        assert_eq!(theme.episode_bg, "Reset");
         
         // The actual color application happens in draw_screen
-        // This test verifies the config values are correct
-        let episode_fg = string_to_fg_color_or_default(&config.episode_fg);
-        let episode_bg = string_to_bg_color_or_default(&config.episode_bg);
+        // This test verifies the theme values are correct
+        let episode_fg = string_to_fg_color_or_default(&theme.episode_fg);
+        let episode_bg = string_to_bg_color_or_default(&theme.episode_bg);
         
         assert_eq!(episode_fg, Color::Reset);
         assert_eq!(episode_bg, Color::Reset);
@@ -1506,26 +1506,128 @@ mod tests {
     /// Validates: Requirements 4.4
     #[test]
     fn test_selection_highlight_override() {
-        let config = Config::default();
+        let theme = Theme::default();
         
         // Verify that current selection colors are different from type colors
-        assert_eq!(config.current_fg, "Black");
-        assert_eq!(config.current_bg, "White");
+        assert_eq!(theme.current_fg, "Black");
+        assert_eq!(theme.current_bg, "White");
         
         // Verify type colors are different
-        assert_eq!(config.series_fg, "Blue");
-        assert_eq!(config.episode_fg, "Reset");
+        assert_eq!(theme.series_fg, "Blue");
+        assert_eq!(theme.episode_fg, "Reset");
         
         // The actual override logic happens in draw_screen
         // This test verifies that selection colors take precedence
-        let current_fg = string_to_fg_color_or_default(&config.current_fg);
-        let current_bg = string_to_bg_color_or_default(&config.current_bg);
+        let current_fg = string_to_fg_color_or_default(&theme.current_fg);
+        let current_bg = string_to_bg_color_or_default(&theme.current_bg);
         
         assert_eq!(current_fg, Color::Black);
         assert_eq!(current_bg, Color::White);
         
         // Selection colors should be distinct from type colors
-        let series_fg = string_to_fg_color_or_default(&config.series_fg);
+        let series_fg = string_to_fg_color_or_default(&theme.series_fg);
         assert_ne!(current_fg, series_fg);
+    }
+
+    /// Test Case: format_series_display uses theme count styling
+    /// When formatting a series display, the count text should use theme count_fg and count_style.
+    /// Validates: Requirements 1.3
+    #[test]
+    fn test_series_display_uses_theme_count_styling() {
+        let theme = Theme::default();
+        
+        // Verify theme has count styling configured
+        assert_eq!(theme.count_fg, "DarkGray");
+        assert_eq!(theme.count_style, "italic");
+        
+        // The actual formatting happens in format_series_display
+        // This test verifies the theme values are correct for count styling
+        let count_fg = string_to_fg_color_or_default(&theme.count_fg);
+        assert_eq!(count_fg, Color::DarkGrey);
+    }
+
+    /// Test Case: format_season_display uses theme count styling
+    /// When formatting a season display, the count text should use theme count_fg and count_style.
+    /// Validates: Requirements 1.3
+    #[test]
+    fn test_season_display_uses_theme_count_styling() {
+        let theme = Theme::default();
+        
+        // Verify theme has count styling configured
+        assert_eq!(theme.count_fg, "DarkGray");
+        assert_eq!(theme.count_style, "italic");
+        
+        // The actual formatting happens in format_season_display
+        // This test verifies the theme values are correct for count styling
+        let count_fg = string_to_fg_color_or_default(&theme.count_fg);
+        assert_eq!(count_fg, Color::DarkGrey);
+    }
+
+    /// Test Case: Theme provides all required color fields
+    /// When a theme is created, it should have all required color and style fields.
+    /// Validates: Requirements 1.3, 5.3
+    #[test]
+    fn test_theme_has_all_required_fields() {
+        let theme = Theme::default();
+        
+        // Verify all color fields are present and non-empty
+        assert!(!theme.current_fg.is_empty());
+        assert!(!theme.current_bg.is_empty());
+        assert!(!theme.dirty_fg.is_empty());
+        assert!(!theme.dirty_bg.is_empty());
+        assert!(!theme.new_fg.is_empty());
+        assert!(!theme.new_bg.is_empty());
+        assert!(!theme.invalid_fg.is_empty());
+        assert!(!theme.invalid_bg.is_empty());
+        assert!(!theme.series_fg.is_empty());
+        assert!(!theme.series_bg.is_empty());
+        assert!(!theme.season_fg.is_empty());
+        assert!(!theme.season_bg.is_empty());
+        assert!(!theme.episode_fg.is_empty());
+        assert!(!theme.episode_bg.is_empty());
+        assert!(!theme.status_fg.is_empty());
+        assert!(!theme.status_bg.is_empty());
+        assert!(!theme.scrollbar_fg.is_empty());
+        assert!(!theme.scrollbar_bg.is_empty());
+        assert!(!theme.count_fg.is_empty());
+        assert!(!theme.header_fg.is_empty());
+        assert!(!theme.help_fg.is_empty());
+        
+        // Verify style fields are present
+        assert!(!theme.watched_style.is_empty());
+        assert!(!theme.unwatched_style.is_empty());
+        assert!(!theme.count_style.is_empty());
+        assert!(!theme.header_style.is_empty());
+        assert!(!theme.help_style.is_empty());
+        
+        // Verify indicator fields are present (can be empty if no indicator desired)
+        // Just check they exist
+        let _ = &theme.watched_indicator;
+        let _ = &theme.unwatched_indicator;
+        let _ = &theme.scrollbar_track_char;
+        let _ = &theme.scrollbar_indicator_char;
+    }
+
+    /// Test Case: format_episode_with_indicator respects custom theme indicators
+    /// When a theme has custom indicators, format_episode_with_indicator should use them.
+    /// Validates: Requirements 1.3
+    #[test]
+    fn test_format_episode_with_custom_theme_indicators() {
+        let mut theme = Theme::default();
+        theme.watched_indicator = "✓".to_string();
+        theme.unwatched_indicator = "✗".to_string();
+        
+        let episode_name = "Test Episode";
+        
+        let watched_formatted = format_episode_with_indicator(episode_name, true, &theme);
+        let unwatched_formatted = format_episode_with_indicator(episode_name, false, &theme);
+        
+        // Verify custom indicators are used
+        assert!(watched_formatted.contains("✓"));
+        assert!(unwatched_formatted.contains("✗"));
+        
+        // Verify episode name is included
+        assert!(watched_formatted.contains(episode_name));
+        assert!(unwatched_formatted.contains(episode_name));
     }
 }

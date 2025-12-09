@@ -133,13 +133,13 @@ pub fn calculate_scrollbar_state(
 /// Renders a scroll bar in the terminal at the calculated position
 ///
 /// This function draws the scroll bar track and indicator using the characters
-/// and colors specified in the configuration. If the scroll bar is not visible,
+/// and colors specified in the theme. If the scroll bar is not visible,
 /// the function returns immediately without rendering anything.
 ///
 /// # Arguments
 ///
 /// * `state` - The calculated scroll bar state containing position and dimensions
-/// * `config` - Configuration containing scroll bar characters and colors
+/// * `theme` - Theme containing scroll bar characters and colors
 ///
 /// # Returns
 ///
@@ -149,15 +149,15 @@ pub fn calculate_scrollbar_state(
 ///
 /// ```no_run
 /// use movies::scrollbar::{calculate_scrollbar_state, render_scrollbar};
-/// use movies::config::Config;
+/// use movies::theme::Theme;
 ///
-/// let config = Config::default();
+/// let theme = Theme::default();
 /// let state = calculate_scrollbar_state(100, 20, 0, 5, 20, 80);
-/// render_scrollbar(&state, &config).expect("Failed to render scroll bar");
+/// render_scrollbar(&state, &theme).expect("Failed to render scroll bar");
 /// ```
 pub fn render_scrollbar(
     state: &ScrollBarState,
-    config: &crate::config::Config,
+    theme: &crate::theme::Theme,
 ) -> std::io::Result<()> {
     use crate::terminal::print_at;
     use crate::display::{string_to_fg_color_or_default, string_to_bg_color_or_default};
@@ -168,14 +168,14 @@ pub fn render_scrollbar(
         return Ok(());
     }
 
-    // Get colors from config
-    let fg_color = string_to_fg_color_or_default(&config.scrollbar_fg);
-    let bg_color = string_to_bg_color_or_default(&config.scrollbar_bg);
+    // Get colors from theme
+    let fg_color = string_to_fg_color_or_default(&theme.scrollbar_fg);
+    let bg_color = string_to_bg_color_or_default(&theme.scrollbar_bg);
 
     // Draw the track characters for the full track height
     for row in 0..state.track_height {
         let absolute_row = state.track_start + row;
-        let styled_track = config.scrollbar_track_char
+        let styled_track = theme.scrollbar_track_char
             .as_str()
             .with(fg_color)
             .on(bg_color);
@@ -189,7 +189,7 @@ pub fn render_scrollbar(
         let absolute_row = state.indicator_start + row;
         // Only draw if within track bounds
         if absolute_row >= state.track_start && absolute_row < track_end {
-            let styled_indicator = config.scrollbar_indicator_char
+            let styled_indicator = theme.scrollbar_indicator_char
                 .as_str()
                 .with(fg_color)
                 .on(bg_color);
