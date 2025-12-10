@@ -1,8 +1,7 @@
-use crate::components::{Component, category::{Category, CategoryType}};
+use crate::components::{Component, category::{Category, CategoryType}, render_cells_at_column, Scrollbar};
 use crate::dto::{EpisodeDetail, Series};
 use crate::episode_field::EpisodeField;
 use crate::menu::{MenuItem, MenuContext};
-use crate::scrollbar::{calculate_scrollbar_state, render_scrollbar};
 use crate::terminal::{
     clear_line, clear_screen, get_terminal_size, hide_cursor, move_cursor, print_at, show_cursor,
 };
@@ -419,19 +418,20 @@ pub fn draw_screen(
             *first_entry = current_item - max_lines as usize + 1;
         }
 
-        // Calculate scroll bar state for the episode browser
-        let scrollbar_state = calculate_scrollbar_state(
+        // Create Scrollbar component for the episode browser
+        let scrollbar = Scrollbar::new(
             entries.len(),           // total_items
             max_lines,               // visible_items
             *first_entry,            // first_visible_index
-            HEADER_SIZE,             // start_row
-            max_lines,               // available_height
-            COL1_WIDTH - 1,          // column (rightmost column of list area)
         );
+
+        // Render scrollbar to get visibility information
+        let scrollbar_cells = scrollbar.render(max_lines, theme, false);
+        let scrollbar_visible = !scrollbar_cells.is_empty();
 
         // Calculate effective column width (reduce by 1 if scroll bar is visible)
         // Use saturating_sub to prevent underflow
-        let effective_col_width = if scrollbar_state.visible {
+        let effective_col_width = if scrollbar_visible {
             COL1_WIDTH.saturating_sub(1)
         } else {
             COL1_WIDTH
@@ -558,7 +558,9 @@ pub fn draw_screen(
         }
 
         // Render the scroll bar after list items but before detail window
-        render_scrollbar(&scrollbar_state, theme)?;
+        if scrollbar_visible {
+            render_cells_at_column(&scrollbar_cells, COL1_WIDTH - 1, HEADER_SIZE)?;
+        }
         if !series_selected && !season_selected && !matches!(mode, Mode::Menu) {
             draw_detail_window(
                 &entries[current_item],
@@ -805,19 +807,20 @@ fn draw_series_window(
         // Calculate maximum visible series items (subtract borders and title)
         let max_visible_series = series_window_height.saturating_sub(3).max(1);
         
-        // Calculate scroll bar state for the series select window
-        let scrollbar_state = calculate_scrollbar_state(
+        // Create Scrollbar component for the series select window
+        let series_scrollbar = Scrollbar::new(
             series.len(),                           // total_items
             max_visible_series,                     // visible_items
             *first_series,                          // first_visible_index
-            start_row + 2,                          // start_row (after border and title)
-            max_visible_series,                     // available_height
-            series_window_start_col + series_window_width - 1, // column (rightmost column)
         );
+        
+        // Render scrollbar to get visibility information
+        let series_scrollbar_cells = series_scrollbar.render(max_visible_series, theme, false);
+        let series_scrollbar_visible = !series_scrollbar_cells.is_empty();
         
         // Calculate effective series width (reduce by 1 if scroll bar is visible)
         // Use saturating_sub to prevent underflow
-        let effective_series_width = if scrollbar_state.visible {
+        let effective_series_width = if series_scrollbar_visible {
             SERIES_WIDTH.saturating_sub(1)
         } else {
             SERIES_WIDTH
@@ -862,7 +865,9 @@ fn draw_series_window(
         }
         
         // Render the scroll bar after rendering series items
-        render_scrollbar(&scrollbar_state, theme)?;
+        if series_scrollbar_visible {
+            render_cells_at_column(&series_scrollbar_cells, series_window_start_col + series_window_width - 1, start_row + 2)?;
+        }
     }
     Ok(())
 }

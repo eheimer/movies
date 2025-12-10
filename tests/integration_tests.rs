@@ -1234,3 +1234,285 @@ fn test_category_component_both_types() {
         "Both types should use same default bg color"
     );
 }
+
+// ============================================================================
+// Browse Mode Scrollbar Integration Tests (Task 8)
+// ============================================================================
+
+/// Integration Test 24: Scrollbar rendering in browse mode with Scrollbar component
+/// 
+/// This test verifies that the Scrollbar component can be created and rendered
+/// with typical browse mode data (list of entries with viewport constraints).
+/// 
+/// Validates: Requirements 8.1, 8.2
+#[test]
+fn test_scrollbar_rendering_in_browse_mode() {
+    use movies::components::{Component, Scrollbar};
+    use movies::theme::Theme;
+    
+    let theme = Theme::default();
+    
+    // Simulate browse mode with 50 total entries, 20 visible, starting at position 10
+    let scrollbar = Scrollbar::new(
+        50,  // total_items (total entries in list)
+        20,  // visible_items (entries that fit on screen)
+        10,  // first_visible_index (current scroll position)
+    );
+    
+    // Render the scrollbar with typical browse mode height
+    let height = 20;
+    let cells = scrollbar.render(height, &theme, false);
+    
+    // Verify scrollbar is visible (not empty)
+    assert!(!cells.is_empty(), "Scrollbar should be visible when total > visible");
+    assert_eq!(cells.len(), height, "Scrollbar should have correct height");
+    
+    // Verify each row has exactly one cell (single column)
+    for (i, row) in cells.iter().enumerate() {
+        assert_eq!(row.len(), 1, "Row {} should have exactly one cell", i);
+    }
+    
+    // Verify scrollbar uses theme characters and colors
+    let has_track_char = cells.iter().any(|row| row[0].character == '│');
+    let has_indicator_char = cells.iter().any(|row| row[0].character == '█');
+    
+    assert!(has_track_char, "Scrollbar should contain track characters");
+    assert!(has_indicator_char, "Scrollbar should contain indicator characters");
+    
+    // Verify colors are applied from theme
+    for row in &cells {
+        assert_eq!(row[0].fg_color, crossterm::style::Color::White, "Should use scrollbar_fg color");
+        assert_eq!(row[0].bg_color, crossterm::style::Color::Reset, "Should use scrollbar_bg color");
+    }
+}
+
+/// Integration Test 25: Scrollbar updates when scrolling through lists
+/// 
+/// This test verifies that the scrollbar indicator position changes correctly
+/// when the scroll position changes, simulating user navigation in browse mode.
+/// 
+/// Validates: Requirements 8.3
+#[test]
+fn test_scrollbar_updates_when_scrolling() {
+    use movies::components::{Component, Scrollbar};
+    use movies::theme::Theme;
+    
+    let theme = Theme::default();
+    let height = 10;
+    let total_items = 30;
+    let visible_items = 10;
+    
+    // Test scrollbar at different scroll positions
+    let positions = vec![0, 5, 10, 15, 20]; // Different scroll positions
+    let mut previous_indicator_positions = Vec::new();
+    
+    for scroll_pos in positions {
+        let scrollbar = Scrollbar::new(total_items, visible_items, scroll_pos);
+        let cells = scrollbar.render(height, &theme, false);
+        
+        // Find indicator positions (cells with indicator character)
+        let indicator_positions: Vec<usize> = cells
+            .iter()
+            .enumerate()
+            .filter(|(_, row)| row[0].character == '█')
+            .map(|(i, _)| i)
+            .collect();
+        
+        // Verify indicator is present
+        assert!(!indicator_positions.is_empty(), "Indicator should be present at scroll position {}", scroll_pos);
+        
+        // Verify indicator position changes as scroll position changes
+        if !previous_indicator_positions.is_empty() {
+            assert_ne!(
+                indicator_positions, 
+                previous_indicator_positions,
+                "Indicator position should change when scroll position changes from previous"
+            );
+        }
+        
+        previous_indicator_positions = indicator_positions;
+    }
+}
+
+/// Integration Test 26: Scrollbar visibility based on list size
+/// 
+/// This test verifies that the scrollbar is hidden when all items fit on screen
+/// and visible when items exceed the viewport, as required in browse mode.
+/// 
+/// Validates: Requirements 8.4, 8.5
+#[test]
+fn test_scrollbar_visibility_based_on_list_size() {
+    use movies::components::{Component, Scrollbar};
+    use movies::theme::Theme;
+    
+    let theme = Theme::default();
+    let height = 15;
+    
+    // Test case 1: All items fit on screen (scrollbar should be hidden)
+    let scrollbar_hidden = Scrollbar::new(
+        10,  // total_items
+        15,  // visible_items (more than total)
+        0,   // first_visible_index
+    );
+    
+    let cells_hidden = scrollbar_hidden.render(height, &theme, false);
+    assert!(cells_hidden.is_empty(), "Scrollbar should be hidden when all items fit on screen");
+    
+    // Test case 2: Items exceed viewport (scrollbar should be visible)
+    let scrollbar_visible = Scrollbar::new(
+        50,  // total_items
+        15,  // visible_items (less than total)
+        0,   // first_visible_index
+    );
+    
+    let cells_visible = scrollbar_visible.render(height, &theme, false);
+    assert!(!cells_visible.is_empty(), "Scrollbar should be visible when items exceed viewport");
+    assert_eq!(cells_visible.len(), height, "Visible scrollbar should have correct height");
+    
+    // Test case 3: Exact fit (scrollbar should be hidden)
+    let scrollbar_exact = Scrollbar::new(
+        15,  // total_items
+        15,  // visible_items (exactly equal)
+        0,   // first_visible_index
+    );
+    
+    let cells_exact = scrollbar_exact.render(height, &theme, false);
+    assert!(cells_exact.is_empty(), "Scrollbar should be hidden when items exactly fit");
+    
+    // Test case 4: Empty list (scrollbar should be hidden)
+    let scrollbar_empty = Scrollbar::new(
+        0,   // total_items (empty list)
+        15,  // visible_items
+        0,   // first_visible_index
+    );
+    
+    let cells_empty = scrollbar_empty.render(height, &theme, false);
+    assert!(cells_empty.is_empty(), "Scrollbar should be hidden for empty lists");
+}
+
+/// Integration Test 27: Scrollbar integration with browse mode viewport calculations
+/// 
+/// This test verifies that the scrollbar correctly represents the viewport
+/// when integrated with typical browse mode navigation patterns.
+/// 
+/// Validates: Requirements 8.1, 8.2, 8.3
+#[test]
+fn test_scrollbar_integration_with_browse_mode_viewport() {
+    use movies::components::{Component, Scrollbar};
+    use movies::theme::Theme;
+    
+    let theme = Theme::default();
+    let height = 20;
+    
+    // Simulate a large list of episodes in browse mode
+    let total_episodes = 100;
+    let visible_episodes = 20;
+    
+    // Test different navigation scenarios
+    
+    // Scenario 1: At the beginning of the list
+    let scrollbar_top = Scrollbar::new(total_episodes, visible_episodes, 0);
+    let cells_top = scrollbar_top.render(height, &theme, false);
+    
+    // Find indicator at top position
+    let indicator_at_top = cells_top.iter()
+        .take(5) // Check first 5 rows
+        .any(|row| row[0].character == '█');
+    assert!(indicator_at_top, "Indicator should be near top when at beginning of list");
+    
+    // Scenario 2: In the middle of the list
+    let middle_position = (total_episodes - visible_episodes) / 2;
+    let scrollbar_middle = Scrollbar::new(total_episodes, visible_episodes, middle_position);
+    let cells_middle = scrollbar_middle.render(height, &theme, false);
+    
+    // Find indicator in middle area
+    let middle_start = height / 3;
+    let middle_end = (height * 2) / 3;
+    let indicator_in_middle = cells_middle.iter()
+        .skip(middle_start)
+        .take(middle_end - middle_start)
+        .any(|row| row[0].character == '█');
+    assert!(indicator_in_middle, "Indicator should be in middle area when in middle of list");
+    
+    // Scenario 3: At the end of the list
+    let end_position = total_episodes - visible_episodes;
+    let scrollbar_bottom = Scrollbar::new(total_episodes, visible_episodes, end_position);
+    let cells_bottom = scrollbar_bottom.render(height, &theme, false);
+    
+    // Find indicator at bottom position
+    let indicator_at_bottom = cells_bottom.iter()
+        .skip(height - 5) // Check last 5 rows
+        .any(|row| row[0].character == '█');
+    assert!(indicator_at_bottom, "Indicator should be near bottom when at end of list");
+}
+
+/// Integration Test 28: Scrollbar with custom theme integration
+/// 
+/// This test verifies that the scrollbar correctly uses custom theme values
+/// when integrated with the browse mode display system.
+/// 
+/// Validates: Requirements 8.1, 8.2
+#[test]
+fn test_scrollbar_with_custom_theme_integration() {
+    use movies::components::{Component, Scrollbar};
+    use movies::theme::Theme;
+    use crossterm::style::Color;
+    
+    // Create custom theme with different scrollbar appearance
+    let mut theme = Theme::default();
+    theme.scrollbar_track_char = "║".to_string();
+    theme.scrollbar_indicator_char = "▓".to_string();
+    theme.scrollbar_fg = "cyan".to_string();
+    theme.scrollbar_bg = "blue".to_string();
+    
+    let scrollbar = Scrollbar::new(40, 15, 10);
+    let cells = scrollbar.render(15, &theme, false);
+    
+    // Verify custom characters are used
+    let has_custom_track = cells.iter().any(|row| row[0].character == '║');
+    let has_custom_indicator = cells.iter().any(|row| row[0].character == '▓');
+    
+    assert!(has_custom_track, "Should use custom track character");
+    assert!(has_custom_indicator, "Should use custom indicator character");
+    
+    // Verify custom colors are applied
+    for row in &cells {
+        assert_eq!(row[0].fg_color, Color::Cyan, "Should use custom scrollbar_fg color");
+        assert_eq!(row[0].bg_color, Color::Blue, "Should use custom scrollbar_bg color");
+    }
+}
+
+/// Integration Test 29: Scrollbar rendering consistency in browse mode
+/// 
+/// This test verifies that the scrollbar produces consistent output
+/// when rendered multiple times with the same browse mode parameters.
+/// 
+/// Validates: Requirements 8.1, 8.2
+#[test]
+fn test_scrollbar_rendering_consistency_in_browse_mode() {
+    use movies::components::{Component, Scrollbar};
+    use movies::theme::Theme;
+    
+    let theme = Theme::default();
+    
+    // Create scrollbar with typical browse mode parameters
+    let scrollbar = Scrollbar::new(75, 25, 15);
+    
+    // Render multiple times
+    let render1 = scrollbar.render(25, &theme, false);
+    let render2 = scrollbar.render(25, &theme, false);
+    let render3 = scrollbar.render(25, &theme, false);
+    
+    // All renders should be identical
+    assert_eq!(render1, render2, "First and second render should be identical");
+    assert_eq!(render2, render3, "Second and third render should be identical");
+    
+    // Verify content is correct
+    assert!(!render1.is_empty(), "Should produce scrollbar output");
+    assert_eq!(render1.len(), 25, "Should have correct height");
+    
+    // Verify structure is consistent
+    for row in &render1 {
+        assert_eq!(row.len(), 1, "Each row should have exactly one cell");
+    }
+}

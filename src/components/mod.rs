@@ -3,8 +3,10 @@ use crate::theme::Theme;
 
 pub mod episode;
 pub mod category;
+pub mod scrollbar;
 
 pub use category::*;
+pub use scrollbar::Scrollbar;
 
 /// Represents text styling attributes that can be applied to terminal output
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -110,4 +112,76 @@ pub trait Component {
     /// * Multi-line components return multiple rows
     /// * Components must respect the width constraint for each row
     fn render(&self, width: usize, theme: &Theme, is_selected: bool) -> Vec<Vec<Cell>>;
+}
+
+/// Renders a single-column multi-row Cell array to terminal output at specified position
+///
+/// This helper function converts Cell arrays (typically from vertical components like scrollbars)
+/// to terminal output by positioning each row at the specified column and consecutive rows.
+/// Each Cell's styling (colors, text attributes) is preserved in the terminal output.
+///
+/// # Parameters
+///
+/// * `cells` - The 2D array of Cells to render (expected to be single-column, multi-row)
+/// * `column` - The column position where the output should be rendered
+/// * `start_row` - The starting row position for the first Cell
+///
+/// # Returns
+///
+/// * `std::io::Result<()>` - Ok if successful, error if terminal I/O fails
+///
+/// # Example
+///
+/// ```rust,no_run
+/// use movies::components::{render_cells_at_column, Cell, TextStyle};
+/// use crossterm::style::Color;
+///
+/// # fn main() -> std::io::Result<()> {
+/// let cells = vec![
+///     vec![Cell::new('│', Color::White, Color::Black, TextStyle::new())],
+///     vec![Cell::new('█', Color::Red, Color::Black, TextStyle::new())],
+///     vec![Cell::new('│', Color::White, Color::Black, TextStyle::new())],
+/// ];
+/// 
+/// // Render at column 10, starting from row 5
+/// render_cells_at_column(&cells, 10, 5)?;
+/// # Ok(())
+/// # }
+/// ```
+pub fn render_cells_at_column(
+    cells: &[Vec<Cell>], 
+    column: usize, 
+    start_row: usize
+) -> std::io::Result<()> {
+    use crossterm::style::Stylize;
+    use crate::terminal::print_at;
+    
+    for (row_offset, row) in cells.iter().enumerate() {
+        if let Some(cell) = row.first() {
+            let mut styled = cell.character.to_string()
+                .with(cell.fg_color)
+                .on(cell.bg_color);
+            
+            // Apply text styles
+            if cell.style.bold {
+                styled = styled.bold();
+            }
+            if cell.style.italic {
+                styled = styled.italic();
+            }
+            if cell.style.underlined {
+                styled = styled.underlined();
+            }
+            if cell.style.dim {
+                styled = styled.dim();
+            }
+            if cell.style.crossed_out {
+                styled = styled.crossed_out();
+            }
+            
+            print_at(column, start_row + row_offset, &format!("{}", styled))?;
+        }
+    }
+    
+    Ok(())
 }

@@ -1548,7 +1548,7 @@ fn test_category_default_color_application() {
     assert!(!result[0].is_empty(), "Should have cells");
     
     // Cells should use series colors for title (Blue) and count colors for count (DarkGray)
-    let rendered_string: String = result[0].iter().map(|cell| cell.character).collect();
+    let _rendered_string: String = result[0].iter().map(|cell| cell.character).collect();
     
     // Find where the title ends and count begins
     let has_series_color = result[0].iter().any(|cell| cell.fg_color == Color::Blue);
@@ -2155,3 +2155,536 @@ fn test_category_component_isolation() {
     assert!(rendered_string.contains("7/15 watched"), "Should contain watched/total count");
 }
 
+
+// ============================================================================
+// Scrollbar Component Tests
+// ============================================================================
+
+use movies::components::Scrollbar;
+
+/// Test Case 34: Scrollbar hidden when items fit on screen
+/// When total_items is less than or equal to visible_items,
+/// the scrollbar should return an empty Cell array.
+/// Validates: Requirements 3.1
+#[test]
+fn test_scrollbar_hidden_when_items_fit() {
+    let theme = Theme::default();
+    
+    // Test with total_items < visible_items
+    let scrollbar1 = Scrollbar::new(5, 10, 0);
+    let result1 = scrollbar1.render(20, &theme, false);
+    assert!(result1.is_empty(), "Scrollbar should be hidden when total_items < visible_items");
+    
+    // Test with total_items == visible_items
+    let scrollbar2 = Scrollbar::new(10, 10, 0);
+    let result2 = scrollbar2.render(20, &theme, false);
+    assert!(result2.is_empty(), "Scrollbar should be hidden when total_items == visible_items");
+}
+
+/// Test Case 35: Scrollbar hidden when total items is zero
+/// When total_items is 0, the scrollbar should return an empty Cell array.
+/// Validates: Requirements 3.2
+#[test]
+fn test_scrollbar_hidden_when_zero_items() {
+    let theme = Theme::default();
+    let scrollbar = Scrollbar::new(0, 10, 0);
+    let result = scrollbar.render(20, &theme, false);
+    assert!(result.is_empty(), "Scrollbar should be hidden when total_items is 0");
+}
+
+/// Test Case 36: Scrollbar hidden when height is zero
+/// When height is 0, the scrollbar should return an empty Cell array.
+/// Validates: Requirements 3.3
+#[test]
+fn test_scrollbar_hidden_when_zero_height() {
+    let theme = Theme::default();
+    let scrollbar = Scrollbar::new(100, 10, 0);
+    let result = scrollbar.render(0, &theme, false);
+    assert!(result.is_empty(), "Scrollbar should be hidden when height is 0");
+}
+
+/// Test Case 37: Scrollbar visible when needed
+/// When total_items is greater than visible_items,
+/// the scrollbar should return a non-empty Cell array with track and indicator.
+/// Validates: Requirements 3.4
+#[test]
+fn test_scrollbar_visible_when_needed() {
+    let theme = Theme::default();
+    let scrollbar = Scrollbar::new(100, 10, 0);
+    let result = scrollbar.render(20, &theme, false);
+    
+    assert!(!result.is_empty(), "Scrollbar should be visible when total_items > visible_items");
+    assert_eq!(result.len(), 20, "Scrollbar should have height rows");
+    
+    // Each row should have exactly one cell (single column)
+    for row in &result {
+        assert_eq!(row.len(), 1, "Each row should have exactly one cell");
+    }
+}
+
+/// Test Case 38: Indicator at top position
+/// When first_visible_index is 0, the indicator should be positioned at the track start.
+/// Validates: Requirements 5.1
+#[test]
+fn test_indicator_at_top_position() {
+    let theme = Theme::default();
+    let scrollbar = Scrollbar::new(100, 10, 0); // At top
+    let result = scrollbar.render(20, &theme, false);
+    
+    assert!(!result.is_empty(), "Scrollbar should be visible");
+    
+    // First cell should be the indicator
+    assert_eq!(result[0][0].character, '█', "First cell should be indicator at top position");
+}
+
+/// Test Case 39: Indicator at bottom position
+/// When first_visible_index is at maximum scroll position,
+/// the indicator should be positioned at the track end.
+/// Validates: Requirements 5.2
+#[test]
+fn test_indicator_at_bottom_position() {
+    let theme = Theme::default();
+    let scrollbar = Scrollbar::new(100, 10, 90); // At bottom (90 + 10 = 100)
+    let result = scrollbar.render(20, &theme, false);
+    
+    assert!(!result.is_empty(), "Scrollbar should be visible");
+    
+    // Last cell should be the indicator
+    let last_row = result.len() - 1;
+    assert_eq!(result[last_row][0].character, '█', "Last cell should be indicator at bottom position");
+}
+
+/// Test Case 40: Indicator at middle position
+/// When first_visible_index is in the middle,
+/// the indicator should be positioned proportionally within the track.
+/// Validates: Requirements 5.3, 2.4
+#[test]
+fn test_indicator_at_middle_position() {
+    let theme = Theme::default();
+    let scrollbar = Scrollbar::new(100, 10, 45); // Middle position
+    let result = scrollbar.render(20, &theme, false);
+    
+    assert!(!result.is_empty(), "Scrollbar should be visible");
+    
+    // Find where the indicator is
+    let mut indicator_found = false;
+    let mut indicator_start = 0;
+    
+    for (i, row) in result.iter().enumerate() {
+        if row[0].character == '█' {
+            if !indicator_found {
+                indicator_start = i;
+                indicator_found = true;
+            }
+        }
+    }
+    
+    assert!(indicator_found, "Indicator should be present");
+    // Indicator should be roughly in the middle (not at start or end)
+    assert!(indicator_start > 0, "Indicator should not be at start");
+    assert!(indicator_start < result.len() - 1, "Indicator should not be at end");
+}
+
+/// Test Case 41: Indicator height calculation
+/// When the scrollbar renders, the indicator height should be proportional
+/// to the visible/total ratio.
+/// Validates: Requirements 2.5
+#[test]
+fn test_indicator_height_calculation() {
+    let theme = Theme::default();
+    
+    // Test with 10 visible out of 100 total (10% ratio)
+    // Height is 20, so indicator should be 2 cells (10% of 20)
+    let scrollbar = Scrollbar::new(100, 10, 0);
+    let result = scrollbar.render(20, &theme, false);
+    
+    // Count indicator cells
+    let indicator_count = result.iter()
+        .filter(|row| row[0].character == '█')
+        .count();
+    
+    assert_eq!(indicator_count, 2, "Indicator height should be 2 cells (10% of 20)");
+}
+
+/// Test Case 42: Minimum indicator height
+/// When the indicator height calculation would result in less than 1,
+/// it should be clamped to a minimum of 1 row.
+/// Validates: Requirements 5.4
+#[test]
+fn test_minimum_indicator_height() {
+    let theme = Theme::default();
+    
+    // Test with very small ratio (1 visible out of 1000 total)
+    // This would calculate to 0.02 cells, but should be clamped to 1
+    let scrollbar = Scrollbar::new(1000, 1, 0);
+    let result = scrollbar.render(20, &theme, false);
+    
+    // Count indicator cells
+    let indicator_count = result.iter()
+        .filter(|row| row[0].character == '█')
+        .count();
+    
+    assert!(indicator_count >= 1, "Indicator height should be at least 1 cell");
+}
+
+/// Test Case 43: Indicator bounds constraint
+/// When the scrollbar renders, the indicator should never extend past the track bounds.
+/// Validates: Requirements 4.5
+#[test]
+fn test_indicator_bounds_constraint() {
+    let theme = Theme::default();
+    
+    // Test at various scroll positions
+    for first_visible in (0..90).step_by(10) {
+        let scrollbar = Scrollbar::new(100, 10, first_visible);
+        let result = scrollbar.render(20, &theme, false);
+        
+        // Find indicator position and height
+        let mut indicator_start = None;
+        let mut indicator_end = None;
+        
+        for (i, row) in result.iter().enumerate() {
+            if row[0].character == '█' {
+                if indicator_start.is_none() {
+                    indicator_start = Some(i);
+                }
+                indicator_end = Some(i);
+            }
+        }
+        
+        if let (Some(_start), Some(end)) = (indicator_start, indicator_end) {
+            // start is always >= 0 since it's usize, so no need to check
+            assert!(end < result.len(), "Indicator should not extend past track end");
+        }
+    }
+}
+
+/// Test Case 44: Track character usage
+/// When the scrollbar renders, all track positions (non-indicator rows)
+/// should contain the scrollbar_track_char from the theme.
+/// Validates: Requirements 4.1
+#[test]
+fn test_track_character_usage() {
+    let theme = Theme::default();
+    let scrollbar = Scrollbar::new(100, 10, 0);
+    let result = scrollbar.render(20, &theme, false);
+    
+    // Count track cells (should be '│' by default)
+    let track_count = result.iter()
+        .filter(|row| row[0].character == '│')
+        .count();
+    
+    // There should be some track cells
+    assert!(track_count > 0, "There should be track cells");
+    
+    // All non-indicator cells should be track cells
+    let indicator_count = result.iter()
+        .filter(|row| row[0].character == '█')
+        .count();
+    
+    assert_eq!(track_count + indicator_count, result.len(), 
+        "All cells should be either track or indicator");
+}
+
+/// Test Case 45: Indicator character usage
+/// When the scrollbar renders, all indicator positions
+/// should contain the scrollbar_indicator_char from the theme.
+/// Validates: Requirements 4.2
+#[test]
+fn test_indicator_character_usage() {
+    let theme = Theme::default();
+    let scrollbar = Scrollbar::new(100, 10, 0);
+    let result = scrollbar.render(20, &theme, false);
+    
+    // Find indicator cells
+    let indicator_cells: Vec<_> = result.iter()
+        .filter(|row| row[0].character == '█')
+        .collect();
+    
+    // There should be indicator cells
+    assert!(!indicator_cells.is_empty(), "There should be indicator cells");
+    
+    // All indicator cells should use the indicator character
+    for cell_row in indicator_cells {
+        assert_eq!(cell_row[0].character, '█', "Indicator cells should use indicator character");
+    }
+}
+
+/// Test Case 46: Foreground color application
+/// When the scrollbar renders, all cells should use the scrollbar_fg color from the theme.
+/// Validates: Requirements 4.3
+#[test]
+fn test_foreground_color_application() {
+    let theme = Theme::default();
+    let scrollbar = Scrollbar::new(100, 10, 0);
+    let result = scrollbar.render(20, &theme, false);
+    
+    // All cells should use the scrollbar_fg color (White by default)
+    for row in &result {
+        assert_eq!(row[0].fg_color, Color::White, "All cells should use scrollbar_fg color");
+    }
+}
+
+/// Test Case 47: Background color application
+/// When the scrollbar renders, all cells should use the scrollbar_bg color from the theme.
+/// Validates: Requirements 4.4
+#[test]
+fn test_background_color_application() {
+    let theme = Theme::default();
+    let scrollbar = Scrollbar::new(100, 10, 0);
+    let result = scrollbar.render(20, &theme, false);
+    
+    // All cells should use the scrollbar_bg color (Reset by default)
+    for row in &result {
+        assert_eq!(row[0].bg_color, Color::Reset, "All cells should use scrollbar_bg color");
+    }
+}
+
+/// Test Case 48: Custom theme colors
+/// When the scrollbar renders with a custom theme,
+/// it should use the custom colors from that theme.
+/// Validates: Requirements 4.3, 4.4
+#[test]
+fn test_custom_theme_colors() {
+    let mut theme = Theme::default();
+    theme.scrollbar_fg = "cyan".to_string();
+    theme.scrollbar_bg = "blue".to_string();
+    
+    let scrollbar = Scrollbar::new(100, 10, 0);
+    let result = scrollbar.render(20, &theme, false);
+    
+    // All cells should use the custom colors
+    for row in &result {
+        assert_eq!(row[0].fg_color, Color::Cyan, "Should use custom scrollbar_fg color");
+        assert_eq!(row[0].bg_color, Color::Blue, "Should use custom scrollbar_bg color");
+    }
+}
+
+/// Test Case 49: Custom theme characters
+/// When the scrollbar renders with a custom theme,
+/// it should use the custom characters from that theme.
+/// Validates: Requirements 4.1, 4.2
+#[test]
+fn test_custom_theme_characters() {
+    let mut theme = Theme::default();
+    theme.scrollbar_track_char = "|".to_string();
+    theme.scrollbar_indicator_char = "=".to_string();
+    
+    let scrollbar = Scrollbar::new(100, 10, 0);
+    let result = scrollbar.render(20, &theme, false);
+    
+    // Check that custom characters are used
+    let has_track = result.iter().any(|row| row[0].character == '|');
+    let has_indicator = result.iter().any(|row| row[0].character == '=');
+    
+    assert!(has_track, "Should use custom track character");
+    assert!(has_indicator, "Should use custom indicator character");
+}
+
+/// Test Case 50: Scrollbar render does not perform terminal I/O
+/// When the scrollbar renders, it should not perform any terminal I/O operations.
+/// This test verifies that the component can be tested without terminal interaction.
+/// Validates: Requirements 1.5, 7.1, 7.5
+#[test]
+fn test_scrollbar_render_no_terminal_io() {
+    let theme = Theme::default();
+    let scrollbar = Scrollbar::new(100, 10, 50);
+    
+    // Call render - this should not panic or require terminal setup
+    let result = scrollbar.render(20, &theme, false);
+    
+    // Verify we got a result
+    assert!(!result.is_empty(), "Should return cell array");
+    assert_eq!(result.len(), 20, "Should have correct height");
+}
+
+/// Test Case 51: Cell arrays can be inspected
+/// When the scrollbar produces Cell arrays, the contents should be verifiable
+/// without requiring terminal interaction.
+/// Validates: Requirements 7.2, 7.3, 7.4
+#[test]
+fn test_scrollbar_cell_array_inspection() {
+    let theme = Theme::default();
+    let scrollbar = Scrollbar::new(100, 10, 0);
+    let result = scrollbar.render(20, &theme, false);
+    
+    // Verify we can inspect all cells
+    for (i, row) in result.iter().enumerate() {
+        assert_eq!(row.len(), 1, "Each row should have exactly one cell");
+        
+        // Verify cell has valid character
+        assert!(row[0].character != '\0', "Cell should have valid character");
+        
+        // Verify cell has colors
+        assert!(matches!(row[0].fg_color, Color::White), "Cell should have fg color");
+        assert!(matches!(row[0].bg_color, Color::Reset), "Cell should have bg color");
+        
+        // Verify character is either track or indicator
+        assert!(
+            row[0].character == '│' || row[0].character == '█',
+            "Cell at row {} should be either track or indicator character", i
+        );
+    }
+}
+
+/// Test Case 52: Various viewport ratios
+/// When the scrollbar renders with different viewport ratios,
+/// the indicator height should scale proportionally.
+/// Validates: Requirements 2.5
+#[test]
+fn test_various_viewport_ratios() {
+    let theme = Theme::default();
+    let height = 20;
+    
+    // Test 50% ratio (50 visible out of 100 total)
+    let scrollbar1 = Scrollbar::new(100, 50, 0);
+    let result1 = scrollbar1.render(height, &theme, false);
+    let indicator_count1 = result1.iter().filter(|row| row[0].character == '█').count();
+    assert_eq!(indicator_count1, 10, "50% ratio should give 10 cells indicator");
+    
+    // Test 25% ratio (25 visible out of 100 total)
+    let scrollbar2 = Scrollbar::new(100, 25, 0);
+    let result2 = scrollbar2.render(height, &theme, false);
+    let indicator_count2 = result2.iter().filter(|row| row[0].character == '█').count();
+    assert_eq!(indicator_count2, 5, "25% ratio should give 5 cells indicator");
+    
+    // Test 75% ratio (75 visible out of 100 total)
+    let scrollbar3 = Scrollbar::new(100, 75, 0);
+    let result3 = scrollbar3.render(height, &theme, false);
+    let indicator_count3 = result3.iter().filter(|row| row[0].character == '█').count();
+    assert_eq!(indicator_count3, 15, "75% ratio should give 15 cells indicator");
+}
+
+/// Test Case 53: Invalid scroll position handling
+/// When first_visible_index is greater than valid range,
+/// the scrollbar should handle it gracefully without panicking.
+/// Validates: Requirements 7.1
+#[test]
+fn test_invalid_scroll_position() {
+    let theme = Theme::default();
+    
+    // Test with first_visible_index beyond total_items
+    let scrollbar = Scrollbar::new(100, 10, 150);
+    let result = scrollbar.render(20, &theme, false);
+    
+    // Should not panic and should return valid result
+    assert!(!result.is_empty(), "Should handle invalid scroll position gracefully");
+    assert_eq!(result.len(), 20, "Should have correct height");
+}
+
+/// Test Case 54: Edge case - single item visible
+/// When visible_items is 1, the scrollbar should still render correctly.
+/// Validates: Requirements 2.5, 5.4
+#[test]
+fn test_edge_case_single_item_visible() {
+    let theme = Theme::default();
+    let scrollbar = Scrollbar::new(100, 1, 0);
+    let result = scrollbar.render(20, &theme, false);
+    
+    assert!(!result.is_empty(), "Scrollbar should be visible");
+    
+    // Indicator should be at minimum height (1 cell)
+    let indicator_count = result.iter().filter(|row| row[0].character == '█').count();
+    assert!(indicator_count >= 1, "Indicator should be at least 1 cell");
+}
+
+/// Test Case 55: Edge case - very large item count
+/// When total_items is very large, the scrollbar should handle it correctly.
+/// Validates: Requirements 2.4, 2.5
+#[test]
+fn test_edge_case_large_item_count() {
+    let theme = Theme::default();
+    let scrollbar = Scrollbar::new(10000, 10, 5000);
+    let result = scrollbar.render(20, &theme, false);
+    
+    assert!(!result.is_empty(), "Scrollbar should be visible");
+    assert_eq!(result.len(), 20, "Should have correct height");
+    
+    // Indicator should be very small (minimum 1 cell)
+    let indicator_count = result.iter().filter(|row| row[0].character == '█').count();
+    assert!(indicator_count >= 1, "Indicator should be at least 1 cell");
+}
+
+/// Test Case 56: Scrollbar structure consistency
+/// When the scrollbar renders, it should always return a consistent structure
+/// (Vec<Vec<Cell>> with height rows and 1 column per row).
+/// Validates: Requirements 1.2
+#[test]
+fn test_scrollbar_structure_consistency() {
+    let theme = Theme::default();
+    let scrollbar = Scrollbar::new(100, 10, 0);
+    let height = 25;
+    let result = scrollbar.render(height, &theme, false);
+    
+    // Should have exactly height rows
+    assert_eq!(result.len(), height, "Should have exactly height rows");
+    
+    // Each row should have exactly 1 cell
+    for (i, row) in result.iter().enumerate() {
+        assert_eq!(row.len(), 1, "Row {} should have exactly 1 cell", i);
+    }
+}
+
+// ============================================================================
+// Helper Function Tests (Task 6)
+// ============================================================================
+
+/// Test Case 101: Helper function renders cells at specified column
+/// When render_cells_at_column is called with a Cell array and position,
+/// it should render the cells at the specified column and row positions.
+/// Validates: Requirements 1.2
+#[test]
+fn test_render_cells_at_column_basic() {
+    use movies::components::{render_cells_at_column, Cell, TextStyle};
+    use crossterm::style::Color;
+    
+    // Create a simple Cell array (single column, multiple rows)
+    let cells = vec![
+        vec![Cell::new('│', Color::White, Color::Black, TextStyle::new())],
+        vec![Cell::new('█', Color::Red, Color::Black, TextStyle::new())],
+        vec![Cell::new('│', Color::White, Color::Black, TextStyle::new())],
+    ];
+    
+    // This test verifies the function exists and can be called without panicking
+    // In a real terminal environment, this would render at column 10, starting from row 5
+    // Since we're in a test environment, we just verify it doesn't panic
+    let result = render_cells_at_column(&cells, 10, 5);
+    
+    // The function should return Ok(()) if successful
+    assert!(result.is_ok(), "render_cells_at_column should succeed");
+}
+
+/// Test Case 102: Helper function handles empty cell array
+/// When render_cells_at_column is called with an empty Cell array,
+/// it should handle it gracefully without panicking.
+/// Validates: Requirements 1.2
+#[test]
+fn test_render_cells_at_column_empty() {
+    use movies::components::render_cells_at_column;
+    
+    // Create empty Cell array
+    let cells: Vec<Vec<movies::components::Cell>> = vec![];
+    
+    // Should handle empty array gracefully
+    let result = render_cells_at_column(&cells, 0, 0);
+    assert!(result.is_ok(), "render_cells_at_column should handle empty array");
+}
+
+/// Test Case 103: Helper function handles single cell
+/// When render_cells_at_column is called with a single Cell,
+/// it should render that cell at the specified position.
+/// Validates: Requirements 1.2
+#[test]
+fn test_render_cells_at_column_single_cell() {
+    use movies::components::{render_cells_at_column, Cell, TextStyle};
+    use crossterm::style::Color;
+    
+    // Create single Cell array
+    let cells = vec![
+        vec![Cell::new('X', Color::Green, Color::Blue, TextStyle::new())],
+    ];
+    
+    // Should handle single cell
+    let result = render_cells_at_column(&cells, 5, 10);
+    assert!(result.is_ok(), "render_cells_at_column should handle single cell");
+}
