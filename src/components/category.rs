@@ -13,6 +13,7 @@ pub enum CategoryType {
 ///
 /// This component encapsulates the rendering logic for category entries,
 /// displaying title, episode count, and watched count information.
+#[derive(Clone)]
 pub struct Category {
     pub title: String,
     pub episode_count: usize,

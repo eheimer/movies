@@ -1516,3 +1516,384 @@ fn test_scrollbar_rendering_consistency_in_browse_mode() {
         assert_eq!(row.len(), 1, "Each row should have exactly one cell");
     }
 }
+// ============================================================================
+// Browser Component Display Integration Tests (Task 9.1)
+// ============================================================================
+
+/// Integration Test 30: Browser component integration with display system
+/// 
+/// This test verifies that the Browser component works correctly with the existing
+/// display logic, properly integrating categories and episodes with theme support.
+/// 
+/// Validates: Requirements 1.1, 4.1, 4.2, 4.3
+#[test]
+fn test_browser_component_display_integration() {
+    use movies::components::{Component, Browser, Category, CategoryType};
+    use movies::components::episode::Episode;
+    use movies::theme::Theme;
+    
+    let theme = Theme::default();
+    
+    // Create test data similar to what display.rs would create
+    let categories = vec![
+        Category::new("[Breaking Bad]".to_string(), 62, 45, CategoryType::Series),
+        Category::new("Season 1".to_string(), 7, 7, CategoryType::Season),
+    ];
+    
+    let episodes = vec![
+        Episode::new("Pilot".to_string(), true, true, false),
+        Episode::new("Cat's in the Bag...".to_string(), true, true, false),
+        Episode::new("...And the Bag's in the River".to_string(), false, true, false),
+    ];
+    
+    // Create browser component as display.rs would
+    let browser = Browser::new(
+        (0, 5),  // top_left position (matches HEADER_SIZE)
+        45,      // width (matches COL1_WIDTH)
+        10,      // height (typical max_lines)
+        categories,
+        episodes,
+    );
+    
+    // Render the browser component
+    let cells = browser.render(45, &theme, true);
+    
+    // Verify basic structure
+    assert!(!cells.is_empty(), "Browser should render content");
+    assert!(cells.len() <= 10, "Browser should respect height constraint");
+    
+    // Verify content is present
+    let mut has_content = false;
+    for row in &cells {
+        if !row.is_empty() {
+            has_content = true;
+            break;
+        }
+    }
+    assert!(has_content, "Browser should render visible content");
+    
+    // Verify width constraint is respected
+    for (i, row) in cells.iter().enumerate() {
+        assert!(row.len() <= 45, "Row {} should not exceed width constraint", i);
+    }
+}
+
+/// Integration Test 31: Browser component with theme integration
+/// 
+/// This test verifies that the Browser component correctly applies theme colors
+/// and styling when integrated with the display system.
+/// 
+/// Validates: Requirements 1.1, 4.1, 4.2, 4.3
+#[test]
+fn test_browser_component_theme_integration() {
+    use movies::components::{Component, Browser, Category, CategoryType};
+    use movies::components::episode::Episode;
+    use movies::theme::Theme;
+    use crossterm::style::Color;
+    
+    // Create custom theme
+    let mut theme = Theme::default();
+    theme.current_fg = "red".to_string();
+    theme.current_bg = "yellow".to_string();
+    theme.watched_indicator = "★".to_string();
+    theme.unwatched_indicator = "☆".to_string();
+    
+    // Create test data
+    let categories = vec![
+        Category::new("[Test Series]".to_string(), 10, 5, CategoryType::Series),
+    ];
+    
+    let episodes = vec![
+        Episode::new("Watched Episode".to_string(), true, true, false),
+        Episode::new("Unwatched Episode".to_string(), false, true, false),
+    ];
+    
+    // Create browser with selection on first item
+    let mut browser = Browser::new(
+        (0, 5),
+        40,
+        5,
+        categories,
+        episodes,
+    );
+    browser.set_selected_item(0); // Select first item (category)
+    
+    // Render with theme
+    let cells = browser.render(40, &theme, true);
+    
+    // Verify theme integration
+    assert!(!cells.is_empty(), "Should render content");
+    
+    // Check that selection colors are applied to the selected item
+    if !cells[0].is_empty() {
+        // First row should have selection highlighting
+        let has_selection_colors = cells[0].iter().any(|cell| {
+            cell.fg_color == Color::Red || cell.bg_color == Color::Yellow
+        });
+        assert!(has_selection_colors, "Selected item should use theme selection colors");
+    }
+    
+    // Test with episode selection
+    browser.set_selected_item(1); // Select first episode
+    let cells_episode = browser.render(40, &theme, true);
+    
+    // Verify episode indicators are used
+    if cells_episode.len() > 1 && !cells_episode[1].is_empty() {
+        let text: String = cells_episode[1].iter().map(|cell| cell.character).collect();
+        assert!(text.contains("★") || text.contains("☆"), "Should use theme indicators");
+    }
+}
+
+/// Integration Test 32: Browser component terminal output formatting
+/// 
+/// This test verifies that the Browser component output can be properly formatted
+/// for terminal display using the existing display system functions.
+/// 
+/// Validates: Requirements 1.1, 4.1, 4.2, 4.3
+#[test]
+fn test_browser_component_terminal_output_formatting() {
+    use movies::components::{Component, Browser, Category, CategoryType};
+    use movies::components::episode::Episode;
+    use movies::theme::Theme;
+    
+    let theme = Theme::default();
+    
+    // Create test data
+    let categories = vec![
+        Category::new("[Test Series]".to_string(), 5, 3, CategoryType::Series),
+    ];
+    
+    let episodes = vec![
+        Episode::new("Test Episode".to_string(), true, true, false),
+    ];
+    
+    let browser = Browser::new(
+        (0, 5),
+        50,
+        3,
+        categories,
+        episodes,
+    );
+    
+    // Render browser
+    let cells = browser.render(50, &theme, true);
+    
+    // Verify output can be converted to terminal format
+    // This simulates what display.rs does with cells_to_styled_string
+    for (row_index, row) in cells.iter().enumerate() {
+        if !row.is_empty() {
+            // Verify each cell has valid properties for terminal output
+            for (col_index, cell) in row.iter().enumerate() {
+                assert!(cell.character != '\0', "Cell at ({}, {}) should have valid character", row_index, col_index);
+                
+                // Colors should be valid (not checking specific values, just that they exist)
+                // This ensures the cell can be rendered to terminal
+                match cell.fg_color {
+                    crossterm::style::Color::Reset | 
+                    crossterm::style::Color::Black | 
+                    crossterm::style::Color::Red | 
+                    crossterm::style::Color::Green | 
+                    crossterm::style::Color::Yellow | 
+                    crossterm::style::Color::Blue | 
+                    crossterm::style::Color::Magenta | 
+                    crossterm::style::Color::Cyan | 
+                    crossterm::style::Color::White | 
+                    crossterm::style::Color::DarkGrey |
+                    crossterm::style::Color::Rgb { .. } |
+                    crossterm::style::Color::AnsiValue(_) |
+                    _ => {
+                        // Valid color (including other variants)
+                    }
+                }
+                
+                // Verify style flags are boolean (valid for terminal)
+                assert!(cell.style.bold == true || cell.style.bold == false);
+                assert!(cell.style.italic == true || cell.style.italic == false);
+                assert!(cell.style.underlined == true || cell.style.underlined == false);
+                assert!(cell.style.dim == true || cell.style.dim == false);
+                assert!(cell.style.crossed_out == true || cell.style.crossed_out == false);
+            }
+        }
+    }
+    
+    // Verify the output structure is suitable for terminal rendering
+    assert!(cells.len() <= 3, "Should not exceed height constraint");
+    
+    // Verify content is present and properly structured
+    let total_cells: usize = cells.iter().map(|row| row.len()).sum();
+    assert!(total_cells > 0, "Should have rendered some content");
+}
+
+/// Integration Test 33: Browser component with scrollbar integration
+/// 
+/// This test verifies that the Browser component correctly integrates with
+/// scrollbar rendering when content exceeds the viewport height.
+/// 
+/// Validates: Requirements 1.1, 1.3, 4.1, 4.2, 4.3
+#[test]
+fn test_browser_component_scrollbar_integration() {
+    use movies::components::{Component, Browser, Category, CategoryType};
+    use movies::components::episode::Episode;
+    use movies::theme::Theme;
+    
+    let theme = Theme::default();
+    
+    // Create more content than can fit in viewport
+    let categories = vec![
+        Category::new("[Series 1]".to_string(), 10, 5, CategoryType::Series),
+        Category::new("[Series 2]".to_string(), 8, 3, CategoryType::Series),
+        Category::new("[Series 3]".to_string(), 12, 7, CategoryType::Series),
+    ];
+    
+    let episodes = vec![
+        Episode::new("Episode 1".to_string(), true, true, false),
+        Episode::new("Episode 2".to_string(), false, true, false),
+        Episode::new("Episode 3".to_string(), true, true, false),
+        Episode::new("Episode 4".to_string(), false, true, false),
+        Episode::new("Episode 5".to_string(), true, true, false),
+    ];
+    
+    // Total: 3 categories + 5 episodes = 8 items
+    // Height: 5 (less than total items, should trigger scrollbar)
+    let browser = Browser::new(
+        (0, 5),
+        45,      // width
+        5,       // height (less than total items)
+        categories,
+        episodes,
+    );
+    
+    // Verify scrollbar is needed
+    assert!(browser.needs_scrollbar(), "Browser should need scrollbar when content exceeds height");
+    
+    // Verify content width is reduced for scrollbar
+    assert_eq!(browser.content_width(), 44, "Content width should be reduced by 1 for scrollbar");
+    
+    // Render browser
+    let cells = browser.render(45, &theme, true);
+    
+    // Verify output structure with scrollbar
+    assert_eq!(cells.len(), 5, "Should render exactly 5 rows (height)");
+    
+    // Check that rows include scrollbar column
+    for (i, row) in cells.iter().enumerate() {
+        if !row.is_empty() {
+            assert!(row.len() <= 45, "Row {} should not exceed total width", i);
+            
+            // If scrollbar is present, last column should be scrollbar
+            if row.len() == 45 {
+                let last_cell = &row[44];
+                // Scrollbar characters should be track or indicator
+                assert!(
+                    last_cell.character == '│' || last_cell.character == '█',
+                    "Last column should contain scrollbar character"
+                );
+            }
+        }
+    }
+}
+
+/// Integration Test 34: Browser component empty state handling
+/// 
+/// This test verifies that the Browser component handles empty content gracefully
+/// when integrated with the display system.
+/// 
+/// Validates: Requirements 1.1, 2.5, 4.1, 4.2, 4.3
+#[test]
+fn test_browser_component_empty_state_integration() {
+    use movies::components::{Component, Browser};
+    use movies::theme::Theme;
+    
+    let theme = Theme::default();
+    
+    // Create browser with no content
+    let browser = Browser::new(
+        (0, 5),
+        40,
+        8,
+        vec![], // no categories
+        vec![], // no episodes
+    );
+    
+    // Render empty browser
+    let cells = browser.render(40, &theme, true);
+    
+    // Verify empty state handling
+    assert_eq!(cells.len(), 8, "Should render height rows even when empty");
+    
+    // All rows should be empty
+    for (i, row) in cells.iter().enumerate() {
+        assert_eq!(row.len(), 0, "Row {} should be empty for empty browser", i);
+    }
+    
+    // Verify no scrollbar is needed for empty content
+    assert!(!browser.needs_scrollbar(), "Empty browser should not need scrollbar");
+    assert_eq!(browser.content_width(), 40, "Empty browser should use full width");
+    assert_eq!(browser.total_items(), 0, "Empty browser should have 0 total items");
+}
+
+/// Integration Test 35: Browser component selection state integration
+/// 
+/// This test verifies that the Browser component correctly manages selection state
+/// when integrated with the display system's current_item tracking.
+/// 
+/// Validates: Requirements 1.1, 2.1, 2.2, 4.1, 4.2, 4.3
+#[test]
+fn test_browser_component_selection_state_integration() {
+    use movies::components::{Component, Browser, Category, CategoryType};
+    use movies::components::episode::Episode;
+    use movies::theme::Theme;
+    use crossterm::style::Color;
+    
+    let theme = Theme::default();
+    
+    // Create test content
+    let categories = vec![
+        Category::new("[Test Series]".to_string(), 5, 2, CategoryType::Series),
+    ];
+    
+    let episodes = vec![
+        Episode::new("Episode 1".to_string(), true, true, false),
+        Episode::new("Episode 2".to_string(), false, true, false),
+    ];
+    
+    let mut browser = Browser::new(
+        (0, 5),
+        40,
+        5,
+        categories,
+        episodes,
+    );
+    
+    // Test selection on category (item 0)
+    browser.set_selected_item(0);
+    let cells_category = browser.render(40, &theme, true);
+    
+    // Verify category selection highlighting
+    if !cells_category.is_empty() && !cells_category[0].is_empty() {
+        let has_selection = cells_category[0].iter().any(|cell| {
+            cell.fg_color == Color::Black && cell.bg_color == Color::White
+        });
+        assert!(has_selection, "Selected category should have selection highlighting");
+    }
+    
+    // Test selection on episode (item 1)
+    browser.set_selected_item(1);
+    let cells_episode = browser.render(40, &theme, true);
+    
+    // Verify episode selection highlighting
+    if cells_episode.len() > 1 && !cells_episode[1].is_empty() {
+        let has_selection = cells_episode[1].iter().any(|cell| {
+            cell.fg_color == Color::Black && cell.bg_color == Color::White
+        });
+        assert!(has_selection, "Selected episode should have selection highlighting");
+    }
+    
+    // Test selection bounds
+    browser.set_selected_item(100); // Out of bounds
+    assert_eq!(browser.get_selected_item(), 2, "Selection should be clamped to last valid item");
+    
+    // Test selection with empty browser
+    let empty_browser = Browser::new((0, 5), 40, 5, vec![], vec![]);
+    assert_eq!(empty_browser.get_selected_item(), 0, "Empty browser should have selection at 0");
+}

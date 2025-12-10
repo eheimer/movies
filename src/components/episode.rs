@@ -6,6 +6,7 @@ use crossterm::style::Color;
 ///
 /// This component encapsulates the rendering logic for episode entries,
 /// including watched indicators, state-based coloring, and text truncation.
+#[derive(Clone)]
 pub struct Episode {
     pub name: String,
     pub is_watched: bool,

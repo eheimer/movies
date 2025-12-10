@@ -2688,3 +2688,1711 @@ fn test_render_cells_at_column_single_cell() {
     let result = render_cells_at_column(&cells, 5, 10);
     assert!(result.is_ok(), "render_cells_at_column should handle single cell");
 }
+
+// ============================================================================
+// Browser Component Tests (Task 1.1)
+// ============================================================================
+
+use movies::components::Browser;
+
+/// Test Case 1: Boundary constraint enforcement
+/// When a Browser component is created and rendered, it should constrain all child components
+/// within the specified width and height boundaries and position them relative to top-left coordinates.
+/// Validates: Requirements 1.1, 1.4, 1.5
+#[test]
+fn test_browser_boundary_constraint_enforcement() {
+    // Create test categories and episodes
+    let categories = vec![
+        Category::new("Series 1".to_string(), 10, 5, CategoryType::Series),
+        Category::new("Series 2".to_string(), 8, 3, CategoryType::Series),
+    ];
+    
+    let episodes = vec![
+        Episode::new("Episode 1".to_string(), true, true, false),
+        Episode::new("Episode 2".to_string(), false, true, false),
+        Episode::new("Episode 3".to_string(), true, true, false),
+    ];
+    
+    // Create browser with specific dimensions
+    let browser = Browser::new(
+        (10, 5),  // top_left position
+        50,       // width
+        4,        // height (smaller than total items to test scrolling)
+        categories,
+        episodes,
+    );
+    
+    let theme = Theme::default();
+    let result = browser.render(50, &theme, true);
+    
+    // Should return exactly the specified height
+    assert_eq!(result.len(), 4, "Browser should render exactly 4 rows (height constraint)");
+    
+    // Each row should not exceed the specified width
+    for (row_index, row) in result.iter().enumerate() {
+        assert!(row.len() <= 50, 
+                "Row {} length {} should not exceed width constraint 50", 
+                row_index, row.len());
+    }
+    
+    // Should have content (not empty)
+    assert!(!result.is_empty(), "Browser should render content");
+    
+    // First row should contain content from first item
+    assert!(!result[0].is_empty(), "First row should have content");
+}
+
+/// Test Case 2: Browser component with zero dimensions
+/// When a Browser component is created with zero width or height,
+/// it should handle the edge case gracefully without panicking.
+/// Validates: Requirements 1.1, 1.4, 1.5
+#[test]
+fn test_browser_zero_dimensions() {
+    let categories = vec![
+        Category::new("Test Series".to_string(), 5, 2, CategoryType::Series),
+    ];
+    
+    let episodes = vec![
+        Episode::new("Test Episode".to_string(), false, true, false),
+    ];
+    
+    // Test zero width
+    let browser_zero_width = Browser::new(
+        (0, 0),
+        0,  // zero width
+        5,  // normal height
+        categories.clone(),
+        episodes.clone(),
+    );
+    
+    let theme = Theme::default();
+    let result_zero_width = browser_zero_width.render(0, &theme, true);
+    
+    // Should return empty result for zero width
+    assert_eq!(result_zero_width.len(), 0, "Zero width should return empty result");
+    
+    // Test zero height
+    let browser_zero_height = Browser::new(
+        (0, 0),
+        50, // normal width
+        0,  // zero height
+        categories,
+        episodes,
+    );
+    
+    let result_zero_height = browser_zero_height.render(50, &theme, true);
+    
+    // Should return empty result for zero height
+    assert_eq!(result_zero_height.len(), 0, "Zero height should return empty result");
+}
+
+/// Test Case 3: Browser component positioning consistency
+/// When a Browser component is created with different top-left positions,
+/// the component structure should remain consistent (position affects external rendering, not internal structure).
+/// Validates: Requirements 1.1, 1.4
+#[test]
+fn test_browser_positioning_consistency() {
+    let categories = vec![
+        Category::new("Test Series".to_string(), 3, 1, CategoryType::Series),
+    ];
+    
+    let episodes = vec![
+        Episode::new("Test Episode".to_string(), true, true, false),
+    ];
+    
+    // Create browsers with different positions but same dimensions and content
+    let browser1 = Browser::new(
+        (0, 0),   // top-left at origin
+        30,       // width
+        3,        // height
+        categories.clone(),
+        episodes.clone(),
+    );
+    
+    let browser2 = Browser::new(
+        (10, 5),  // different top-left position
+        30,       // same width
+        3,        // same height
+        categories,
+        episodes,
+    );
+    
+    let theme = Theme::default();
+    let result1 = browser1.render(30, &theme, true);
+    let result2 = browser2.render(30, &theme, true);
+    
+    // Both should have the same structure (position doesn't affect internal rendering)
+    assert_eq!(result1.len(), result2.len(), "Both browsers should have same number of rows");
+    
+    // Each corresponding row should have the same length
+    for (i, (row1, row2)) in result1.iter().zip(result2.iter()).enumerate() {
+        assert_eq!(row1.len(), row2.len(), 
+                   "Row {} should have same length in both browsers", i);
+    }
+}
+
+/// Test Case 4: Browser component with content exceeding height
+/// When a Browser component has more items than can fit in the specified height,
+/// it should only render the visible items and handle scrolling properly.
+/// Validates: Requirements 1.1, 1.5
+#[test]
+fn test_browser_content_exceeding_height() {
+    // Create more items than can fit in height
+    let categories = vec![
+        Category::new("Series 1".to_string(), 10, 5, CategoryType::Series),
+        Category::new("Series 2".to_string(), 8, 3, CategoryType::Series),
+        Category::new("Series 3".to_string(), 12, 7, CategoryType::Series),
+    ];
+    
+    let episodes = vec![
+        Episode::new("Episode 1".to_string(), true, true, false),
+        Episode::new("Episode 2".to_string(), false, true, false),
+        Episode::new("Episode 3".to_string(), true, true, false),
+        Episode::new("Episode 4".to_string(), false, true, false),
+    ];
+    
+    // Total items: 3 categories + 4 episodes = 7 items
+    // Height: 4 (can only show 4 items)
+    let browser = Browser::new(
+        (0, 0),
+        40,  // width
+        4,   // height (less than total items)
+        categories,
+        episodes,
+    );
+    
+    let theme = Theme::default();
+    let result = browser.render(40, &theme, true);
+    
+    // Should render exactly the height specified
+    assert_eq!(result.len(), 4, "Should render exactly 4 rows (height constraint)");
+    
+    // All rows should have content (first 4 items should be visible)
+    for (i, row) in result.iter().enumerate() {
+        assert!(!row.is_empty(), "Row {} should have content", i);
+    }
+    
+    // Each row should respect width constraint
+    for row in &result {
+        assert!(row.len() <= 40, "Each row should respect width constraint");
+    }
+}
+
+/// Test Case 5: Browser component with empty content collections
+/// When a Browser component is created with empty categories and episodes,
+/// it should handle the empty state gracefully.
+/// Validates: Requirements 1.1, 1.5
+#[test]
+fn test_browser_empty_content() {
+    let browser = Browser::new(
+        (5, 10),
+        30,  // width
+        5,   // height
+        vec![], // empty categories
+        vec![], // empty episodes
+    );
+    
+    let theme = Theme::default();
+    let result = browser.render(30, &theme, true);
+    
+    // Should return rows for the height, but they should be empty
+    assert_eq!(result.len(), 5, "Should return 5 rows for height 5");
+    
+    // All rows should be empty since there's no content
+    for (i, row) in result.iter().enumerate() {
+        assert_eq!(row.len(), 0, "Row {} should be empty with no content", i);
+    }
+}
+
+/// Test Case 2: Scrollbar visibility logic
+/// When content fits within available height, the browser should display all items without a scrollbar.
+/// When content exceeds available height, the browser should display a scrollbar and adjust content width.
+/// Validates: Requirements 1.2, 1.3
+#[test]
+fn test_browser_scrollbar_visibility_logic() {
+    // Test case 1: Content fits within height (no scrollbar needed)
+    let categories_small = vec![
+        Category::new("Series 1".to_string(), 2, 1, CategoryType::Series),
+    ];
+    let episodes_small = vec![
+        Episode::new("Episode 1".to_string(), false, true, false),
+        Episode::new("Episode 2".to_string(), true, true, false),
+    ];
+    
+    // Total items: 1 category + 2 episodes = 3 items
+    // Height: 5 (can show all 3 items)
+    let browser_no_scrollbar = Browser::new(
+        (0, 0),
+        40,  // width
+        5,   // height (more than total items)
+        categories_small,
+        episodes_small,
+    );
+    
+    // Verify scrollbar is not needed
+    assert!(!browser_no_scrollbar.needs_scrollbar(), "Scrollbar should not be needed when content fits");
+    
+    // Verify content width equals full width
+    assert_eq!(browser_no_scrollbar.content_width(), 40, "Content width should equal full width when no scrollbar");
+    
+    // Verify visible items equals total items
+    assert_eq!(browser_no_scrollbar.visible_items(), 3, "All items should be visible when content fits");
+    
+    let theme = Theme::default();
+    let result_no_scrollbar = browser_no_scrollbar.render(40, &theme, true);
+    
+    // Should render exactly 5 rows (height)
+    assert_eq!(result_no_scrollbar.len(), 5, "Should render exactly 5 rows");
+    
+    // First 3 rows should have content (40 cells each), last 2 should be empty
+    for i in 0..3 {
+        assert!(!result_no_scrollbar[i].is_empty(), "Row {} should have content", i);
+        assert_eq!(result_no_scrollbar[i].len(), 40, "Row {} should have full width", i);
+    }
+    for i in 3..5 {
+        assert_eq!(result_no_scrollbar[i].len(), 0, "Row {} should be empty", i);
+    }
+    
+    // Test case 2: Content exceeds height (scrollbar needed)
+    let categories_large = vec![
+        Category::new("Series 1".to_string(), 3, 2, CategoryType::Series),
+        Category::new("Series 2".to_string(), 4, 1, CategoryType::Series),
+        Category::new("Series 3".to_string(), 2, 1, CategoryType::Series),
+    ];
+    let episodes_large = vec![
+        Episode::new("Episode 1".to_string(), false, true, false),
+        Episode::new("Episode 2".to_string(), true, true, false),
+        Episode::new("Episode 3".to_string(), false, true, true),
+        Episode::new("Episode 4".to_string(), true, true, false),
+        Episode::new("Episode 5".to_string(), false, true, false),
+    ];
+    
+    // Total items: 3 categories + 5 episodes = 8 items
+    // Height: 4 (can only show 4 items, scrollbar needed)
+    let browser_with_scrollbar = Browser::new(
+        (0, 0),
+        40,  // width
+        4,   // height (less than total items)
+        categories_large,
+        episodes_large,
+    );
+    
+    // Verify scrollbar is needed
+    assert!(browser_with_scrollbar.needs_scrollbar(), "Scrollbar should be needed when content exceeds height");
+    
+    // Verify content width is reduced by 1 for scrollbar
+    assert_eq!(browser_with_scrollbar.content_width(), 39, "Content width should be reduced by 1 for scrollbar");
+    
+    // Verify visible items equals height
+    assert_eq!(browser_with_scrollbar.visible_items(), 4, "Visible items should equal height when scrollbar needed");
+    
+    let result_with_scrollbar = browser_with_scrollbar.render(40, &theme, true);
+    
+    // Should render exactly 4 rows (height)
+    assert_eq!(result_with_scrollbar.len(), 4, "Should render exactly 4 rows");
+    
+    // All rows should have content (39 cells for content + 1 for scrollbar = 40 total)
+    for i in 0..4 {
+        assert!(!result_with_scrollbar[i].is_empty(), "Row {} should have content", i);
+        assert_eq!(result_with_scrollbar[i].len(), 40, "Row {} should have full width including scrollbar", i);
+    }
+    
+    // Test case 3: Edge case - exactly matching height (no scrollbar)
+    let categories_exact = vec![
+        Category::new("Series 1".to_string(), 2, 1, CategoryType::Series),
+        Category::new("Series 2".to_string(), 3, 1, CategoryType::Series),
+    ];
+    let episodes_exact = vec![
+        Episode::new("Episode 1".to_string(), false, true, false),
+        Episode::new("Episode 2".to_string(), true, true, false),
+    ];
+    
+    // Total items: 2 categories + 2 episodes = 4 items
+    // Height: 4 (exactly matches, no scrollbar needed)
+    let browser_exact = Browser::new(
+        (0, 0),
+        30,  // width
+        4,   // height (exactly matches total items)
+        categories_exact,
+        episodes_exact,
+    );
+    
+    // Verify no scrollbar needed for exact match
+    assert!(!browser_exact.needs_scrollbar(), "Scrollbar should not be needed when content exactly matches height");
+    assert_eq!(browser_exact.content_width(), 30, "Content width should equal full width for exact match");
+    assert_eq!(browser_exact.visible_items(), 4, "All items should be visible for exact match");
+}
+
+// ============================================================================
+// Browser Selection Management Tests (Task 3.1)
+// ============================================================================
+
+/// Test Case 3: Selection highlighting consistency
+/// When a user navigates through items, the Browser component should maintain a selected item indicator
+/// that highlights the current selection and update the visual selection indicator accordingly.
+/// Validates: Requirements 2.1, 2.2
+#[test]
+fn test_browser_selection_highlighting_consistency() {
+    // Create test content
+    let categories = vec![
+        Category::new("Series 1".to_string(), 5, 2, CategoryType::Series),
+        Category::new("Series 2".to_string(), 3, 1, CategoryType::Series),
+    ];
+    
+    let episodes = vec![
+        Episode::new("Episode 1".to_string(), false, true, false),
+        Episode::new("Episode 2".to_string(), true, true, false),
+        Episode::new("Episode 3".to_string(), false, true, true),
+    ];
+    
+    // Create browser with content
+    let mut browser = Browser::new(
+        (0, 0),
+        50,  // width
+        5,   // height (can show all items)
+        categories,
+        episodes,
+    );
+    
+    let theme = Theme::default();
+    
+    // Test initial selection (should be item 0)
+    assert_eq!(browser.get_selected_item(), 0, "Initial selection should be item 0");
+    assert!(browser.is_item_selected(0), "Item 0 should be selected initially");
+    assert!(!browser.is_item_selected(1), "Item 1 should not be selected initially");
+    
+    // Render with initial selection
+    let result_initial = browser.render(50, &theme, true);
+    assert!(!result_initial.is_empty(), "Should render content");
+    
+    // Test selection movement
+    browser.move_selection_down();
+    assert_eq!(browser.get_selected_item(), 1, "Selection should move to item 1");
+    assert!(!browser.is_item_selected(0), "Item 0 should no longer be selected");
+    assert!(browser.is_item_selected(1), "Item 1 should now be selected");
+    
+    // Test selection bounds checking - move up from item 1
+    browser.move_selection_up();
+    assert_eq!(browser.get_selected_item(), 0, "Selection should move back to item 0");
+    
+    // Test selection bounds checking - try to move up from item 0 (should stay at 0)
+    browser.move_selection_up();
+    assert_eq!(browser.get_selected_item(), 0, "Selection should stay at item 0 (bounds check)");
+    
+    // Test moving to last item
+    let total_items = browser.total_items(); // 2 categories + 3 episodes = 5 items
+    assert_eq!(total_items, 5, "Should have 5 total items");
+    
+    // Move to last item
+    browser.set_selected_item(4); // Last item (index 4)
+    assert_eq!(browser.get_selected_item(), 4, "Selection should be at last item");
+    assert!(browser.is_item_selected(4), "Last item should be selected");
+    
+    // Test bounds checking - try to move down from last item (should stay at last)
+    browser.move_selection_down();
+    assert_eq!(browser.get_selected_item(), 4, "Selection should stay at last item (bounds check)");
+    
+    // Test setting selection to out-of-bounds index (should be clamped)
+    browser.set_selected_item(100); // Way out of bounds
+    assert_eq!(browser.get_selected_item(), 4, "Out-of-bounds selection should be clamped to last valid item");
+    
+    // Test selection highlighting in render output
+    // Set selection to item 2 (third item)
+    browser.set_selected_item(2);
+    let result_selected = browser.render(50, &theme, true);
+    
+    // Should render all 5 rows (height = 5, total items = 5)
+    assert_eq!(result_selected.len(), 5, "Should render 5 rows");
+    
+    // All rows should have content since we have 5 items and height 5
+    for i in 0..5 {
+        assert!(!result_selected[i].is_empty(), "Row {} should have content", i);
+    }
+    
+    // Test with empty content (edge case)
+    let empty_browser = Browser::new(
+        (0, 0),
+        30,
+        3,
+        vec![], // no categories
+        vec![], // no episodes
+    );
+    
+    assert_eq!(empty_browser.get_selected_item(), 0, "Empty browser should have selection at 0");
+    assert_eq!(empty_browser.total_items(), 0, "Empty browser should have 0 total items");
+    
+    let empty_result = empty_browser.render(30, &theme, true);
+    assert_eq!(empty_result.len(), 3, "Empty browser should still render height rows");
+    
+    // All rows should be empty
+    for row in &empty_result {
+        assert_eq!(row.len(), 0, "Empty browser rows should be empty");
+    }
+}
+
+/// Test Case: Selection management methods
+/// When selection management methods are called, they should properly update
+/// the selected item with bounds checking and viewport management.
+/// Validates: Requirements 2.1, 2.4
+#[test]
+fn test_browser_selection_management_methods() {
+    let categories = vec![
+        Category::new("Test Series".to_string(), 2, 1, CategoryType::Series),
+    ];
+    
+    let episodes = vec![
+        Episode::new("Episode 1".to_string(), false, true, false),
+        Episode::new("Episode 2".to_string(), true, true, false),
+        Episode::new("Episode 3".to_string(), false, true, false),
+    ];
+    
+    // Total: 1 category + 3 episodes = 4 items
+    let mut browser = Browser::new(
+        (0, 0),
+        40,
+        2,  // height = 2 (less than total items, will need scrolling)
+        categories,
+        episodes,
+    );
+    
+    // Test initial state
+    assert_eq!(browser.get_selected_item(), 0, "Initial selection should be 0");
+    assert_eq!(browser.first_visible_item, 0, "Initial first visible should be 0");
+    
+    // Test set_selected_item with viewport adjustment
+    browser.set_selected_item(3); // Last item
+    assert_eq!(browser.get_selected_item(), 3, "Selection should be set to item 3");
+    
+    // Since height is 2 and we selected item 3, first_visible_item should adjust
+    // to show items 2 and 3 (so first_visible_item should be 2)
+    assert_eq!(browser.first_visible_item, 2, "First visible should adjust to show selected item");
+    
+    // Test move_selection_up from last item
+    browser.move_selection_up();
+    assert_eq!(browser.get_selected_item(), 2, "Selection should move up to item 2");
+    
+    // Test move_selection_down
+    browser.move_selection_down();
+    assert_eq!(browser.get_selected_item(), 3, "Selection should move down to item 3");
+    
+    // Test is_item_selected
+    assert!(browser.is_item_selected(3), "Item 3 should be selected");
+    assert!(!browser.is_item_selected(0), "Item 0 should not be selected");
+    assert!(!browser.is_item_selected(1), "Item 1 should not be selected");
+    assert!(!browser.is_item_selected(2), "Item 2 should not be selected");
+    
+    // Test bounds checking with set_selected_item
+    browser.set_selected_item(0);
+    assert_eq!(browser.get_selected_item(), 0, "Selection should be set to item 0");
+    assert_eq!(browser.first_visible_item, 0, "First visible should adjust to show item 0");
+    
+    // Test move_selection_up at bounds (should stay at 0)
+    browser.move_selection_up();
+    assert_eq!(browser.get_selected_item(), 0, "Selection should stay at 0 (lower bound)");
+    
+    // Move to last item and test upper bound
+    browser.set_selected_item(3);
+    browser.move_selection_down();
+    assert_eq!(browser.get_selected_item(), 3, "Selection should stay at 3 (upper bound)");
+}
+
+// ============================================================================
+// Browser Viewport Scrolling Tests (Task 4.1, 4.2, 4.3)
+// ============================================================================
+
+/// Test Case 4: Selection viewport management
+/// When the selected item is outside the viewport, the browser should adjust the first visible item
+/// to bring the selection into view and ensure the selected item remains within bounds.
+/// Validates: Requirements 2.3, 2.4
+#[test]
+fn test_browser_selection_viewport_management() {
+    // Create content with more items than viewport height
+    let categories = vec![
+        Category::new("Series 1".to_string(), 2, 1, CategoryType::Series),
+        Category::new("Series 2".to_string(), 3, 1, CategoryType::Series),
+    ];
+    
+    let episodes = vec![
+        Episode::new("Episode 1".to_string(), false, true, false),
+        Episode::new("Episode 2".to_string(), true, true, false),
+        Episode::new("Episode 3".to_string(), false, true, false),
+        Episode::new("Episode 4".to_string(), true, true, false),
+        Episode::new("Episode 5".to_string(), false, true, false),
+    ];
+    
+    // Total: 2 categories + 5 episodes = 7 items
+    // Height: 3 (viewport can only show 3 items at once)
+    let mut browser = Browser::new(
+        (0, 0),
+        40,
+        3,  // height = 3 (smaller than total items)
+        categories,
+        episodes,
+    );
+    
+    // Test initial state - selection and viewport should start at 0
+    assert_eq!(browser.get_selected_item(), 0, "Initial selection should be 0");
+    assert_eq!(browser.first_visible_item, 0, "Initial first visible should be 0");
+    
+    // Test selection within current viewport (no scroll needed)
+    browser.set_selected_item(1);
+    assert_eq!(browser.get_selected_item(), 1, "Selection should be set to item 1");
+    assert_eq!(browser.first_visible_item, 0, "First visible should remain 0 (item 1 is visible)");
+    
+    browser.set_selected_item(2);
+    assert_eq!(browser.get_selected_item(), 2, "Selection should be set to item 2");
+    assert_eq!(browser.first_visible_item, 0, "First visible should remain 0 (item 2 is visible)");
+    
+    // Test selection outside viewport (scroll down needed)
+    browser.set_selected_item(4); // Item 4 is outside viewport [0,1,2]
+    assert_eq!(browser.get_selected_item(), 4, "Selection should be set to item 4");
+    assert_eq!(browser.first_visible_item, 2, "First visible should adjust to 2 to show item 4 in viewport [2,3,4]");
+    
+    // Test selection at last item
+    browser.set_selected_item(6); // Last item (index 6)
+    assert_eq!(browser.get_selected_item(), 6, "Selection should be set to last item");
+    assert_eq!(browser.first_visible_item, 4, "First visible should adjust to 4 to show last item in viewport [4,5,6]");
+    
+    // Test selection moving back up (scroll up needed)
+    browser.set_selected_item(1); // Item 1 is outside current viewport [4,5,6]
+    assert_eq!(browser.get_selected_item(), 1, "Selection should be set to item 1");
+    assert_eq!(browser.first_visible_item, 1, "First visible should adjust to 1 to show item 1 in viewport [1,2,3]");
+    
+    // Test selection at first item
+    browser.set_selected_item(0);
+    assert_eq!(browser.get_selected_item(), 0, "Selection should be set to first item");
+    assert_eq!(browser.first_visible_item, 0, "First visible should adjust to 0 to show first item");
+    
+    // Test bounds checking - out of range selection should be clamped
+    browser.set_selected_item(100); // Way out of bounds
+    assert_eq!(browser.get_selected_item(), 6, "Out-of-bounds selection should be clamped to last valid item");
+    assert_eq!(browser.first_visible_item, 4, "Viewport should adjust to show clamped selection");
+    
+    // Test with empty content
+    let mut empty_browser = Browser::new(
+        (0, 0),
+        30,
+        3,
+        vec![], // no categories
+        vec![], // no episodes
+    );
+    
+    empty_browser.set_selected_item(5); // Try to select non-existent item
+    assert_eq!(empty_browser.get_selected_item(), 0, "Empty browser selection should be clamped to 0");
+    assert_eq!(empty_browser.first_visible_item, 0, "Empty browser first visible should remain 0");
+}
+
+/// Test Case 5: Viewport scroll management
+/// When scrolling is needed, the browser should update the first visible item to control which items
+/// are displayed and recalculate which components are visible within the viewport.
+/// Validates: Requirements 3.1, 3.2
+#[test]
+fn test_browser_viewport_scroll_management() {
+    // Create content with many items to test scrolling
+    let categories = vec![
+        Category::new("Series 1".to_string(), 1, 1, CategoryType::Series),
+        Category::new("Series 2".to_string(), 2, 1, CategoryType::Series),
+        Category::new("Series 3".to_string(), 1, 1, CategoryType::Series),
+    ];
+    
+    let episodes = vec![
+        Episode::new("Episode 1".to_string(), false, true, false),
+        Episode::new("Episode 2".to_string(), true, true, false),
+        Episode::new("Episode 3".to_string(), false, true, false),
+        Episode::new("Episode 4".to_string(), true, true, false),
+        Episode::new("Episode 5".to_string(), false, true, false),
+        Episode::new("Episode 6".to_string(), true, true, false),
+    ];
+    
+    // Total: 3 categories + 6 episodes = 9 items
+    // Height: 4 (viewport shows 4 items at once)
+    let mut browser = Browser::new(
+        (0, 0),
+        50,
+        4,  // height = 4
+        categories,
+        episodes,
+    );
+    
+    let theme = Theme::default();
+    
+    // Test initial viewport (items 0,1,2,3 visible)
+    assert_eq!(browser.first_visible_item, 0, "Initial first visible should be 0");
+    let result_initial = browser.render(50, &theme, true);
+    assert_eq!(result_initial.len(), 4, "Should render 4 rows (viewport height)");
+    
+    // All rows should have content since we're showing first 4 items
+    for i in 0..4 {
+        assert!(!result_initial[i].is_empty(), "Row {} should have content in initial viewport", i);
+    }
+    
+    // Test scrolling by moving selection to force viewport change
+    browser.set_selected_item(5); // This should scroll viewport to show item 5
+    
+    // With selection at item 5 and height 4, viewport should be [2,3,4,5] or [3,4,5,6]
+    // The ensure_selection_visible should adjust first_visible_item appropriately
+    let first_visible_after_scroll = browser.first_visible_item;
+    assert!(first_visible_after_scroll >= 2, "First visible should scroll down to show item 5");
+    assert!(first_visible_after_scroll <= 3, "First visible should not scroll too far");
+    
+    // Render after scroll
+    let result_scrolled = browser.render(50, &theme, true);
+    assert_eq!(result_scrolled.len(), 4, "Should still render 4 rows after scroll");
+    
+    // All rows should have content since we have enough items
+    for i in 0..4 {
+        assert!(!result_scrolled[i].is_empty(), "Row {} should have content after scroll", i);
+    }
+    
+    // Test scrolling to last items
+    browser.set_selected_item(8); // Last item (index 8)
+    
+    // With 9 total items and height 4, last viewport should show items [5,6,7,8]
+    assert_eq!(browser.first_visible_item, 5, "First visible should be 5 to show last 4 items");
+    
+    let result_last = browser.render(50, &theme, true);
+    assert_eq!(result_last.len(), 4, "Should render 4 rows for last viewport");
+    
+    // Test scrolling back to beginning
+    browser.set_selected_item(0);
+    assert_eq!(browser.first_visible_item, 0, "First visible should return to 0 for first item");
+    
+    // Test viewport with content that exactly fits
+    let mut exact_browser = Browser::new(
+        (0, 0),
+        30,
+        4,  // height = 4
+        vec![Category::new("Series".to_string(), 1, 1, CategoryType::Series)], // 1 category
+        vec![
+            Episode::new("Episode 1".to_string(), false, true, false),
+            Episode::new("Episode 2".to_string(), true, true, false),
+            Episode::new("Episode 3".to_string(), false, true, false),
+        ], // 3 episodes
+    );
+    // Total: 1 + 3 = 4 items (exactly fits in height 4)
+    
+    exact_browser.set_selected_item(3); // Last item
+    assert_eq!(exact_browser.first_visible_item, 0, "No scrolling needed when content exactly fits");
+    
+    let result_exact = exact_browser.render(30, &theme, true);
+    assert_eq!(result_exact.len(), 4, "Should render all 4 rows");
+    
+    // All rows should have content
+    for i in 0..4 {
+        assert!(!result_exact[i].is_empty(), "Row {} should have content when content exactly fits", i);
+    }
+}
+
+/// Test Case 6: Scroll bounds enforcement
+/// When scrolling reaches the beginning or end, the browser should prevent scrolling beyond
+/// the first item or beyond the last item that can fit in the viewport.
+/// Validates: Requirements 3.3, 3.4
+#[test]
+fn test_browser_scroll_bounds_enforcement() {
+    // Create content for testing bounds
+    let categories = vec![
+        Category::new("Series 1".to_string(), 2, 1, CategoryType::Series),
+        Category::new("Series 2".to_string(), 1, 1, CategoryType::Series),
+    ];
+    
+    let episodes = vec![
+        Episode::new("Episode 1".to_string(), false, true, false),
+        Episode::new("Episode 2".to_string(), true, true, false),
+        Episode::new("Episode 3".to_string(), false, true, false),
+        Episode::new("Episode 4".to_string(), true, true, false),
+        Episode::new("Episode 5".to_string(), false, true, false),
+        Episode::new("Episode 6".to_string(), true, true, false),
+        Episode::new("Episode 7".to_string(), false, true, false),
+    ];
+    
+    // Total: 2 categories + 7 episodes = 9 items
+    // Height: 3 (viewport shows 3 items at once)
+    let mut browser = Browser::new(
+        (0, 0),
+        40,
+        3,  // height = 3
+        categories,
+        episodes,
+    );
+    
+    // Test lower bound - first_visible_item should not go below 0
+    browser.first_visible_item = 0;
+    browser.clamp_first_visible_item();
+    assert_eq!(browser.first_visible_item, 0, "First visible should not go below 0");
+    
+    // Test setting selection at first item
+    browser.set_selected_item(0);
+    assert_eq!(browser.first_visible_item, 0, "First visible should stay at 0 for first item");
+    
+    // Test upper bound - with 9 items and height 3, max first_visible_item should be 6
+    // This allows showing items [6,7,8] in the viewport
+    let max_first_visible = browser.total_items().saturating_sub(browser.height); // 9 - 3 = 6
+    assert_eq!(max_first_visible, 6, "Max first visible should be 6");
+    
+    // Test setting first_visible_item beyond upper bound
+    browser.first_visible_item = 10; // Way beyond bounds
+    browser.clamp_first_visible_item();
+    assert_eq!(browser.first_visible_item, 6, "First visible should be clamped to max valid value (6)");
+    
+    // Test selection at last item enforces proper bounds
+    browser.set_selected_item(8); // Last item
+    assert_eq!(browser.first_visible_item, 6, "First visible should be 6 to show last item in viewport");
+    
+    // Test intermediate bounds - selection in middle should not violate bounds
+    browser.set_selected_item(4); // Middle item
+    let first_visible_middle = browser.first_visible_item;
+    assert!(first_visible_middle >= 0, "First visible should not be negative");
+    assert!(first_visible_middle <= 6, "First visible should not exceed max bound");
+    
+    // Verify the selected item is actually visible in the viewport
+    let last_visible = first_visible_middle + browser.height - 1; // height = 3, so last_visible = first + 2
+    assert!(4 >= first_visible_middle && 4 <= last_visible, 
+            "Selected item 4 should be visible in viewport [{}, {}]", first_visible_middle, last_visible);
+    
+    // Test edge case - content smaller than viewport height
+    let mut small_browser = Browser::new(
+        (0, 0),
+        30,
+        5,  // height = 5
+        vec![Category::new("Series".to_string(), 1, 1, CategoryType::Series)], // 1 category
+        vec![Episode::new("Episode".to_string(), false, true, false)], // 1 episode
+    );
+    // Total: 1 + 1 = 2 items (less than height 5)
+    
+    // With content smaller than viewport, first_visible_item should always be 0
+    small_browser.first_visible_item = 3; // Try to set beyond content
+    small_browser.clamp_first_visible_item();
+    assert_eq!(small_browser.first_visible_item, 0, "First visible should be 0 when content fits entirely");
+    
+    small_browser.set_selected_item(1); // Last item
+    assert_eq!(small_browser.first_visible_item, 0, "First visible should remain 0 when all content fits");
+    
+    // Test empty content bounds
+    let mut empty_browser = Browser::new(
+        (0, 0),
+        20,
+        3,
+        vec![], // no categories
+        vec![], // no episodes
+    );
+    
+    empty_browser.first_visible_item = 5; // Try to set on empty content
+    empty_browser.clamp_first_visible_item();
+    assert_eq!(empty_browser.first_visible_item, 0, "Empty browser first visible should be clamped to 0");
+    
+    empty_browser.set_selected_item(0);
+    assert_eq!(empty_browser.first_visible_item, 0, "Empty browser should maintain first visible at 0");
+}
+
+// ============================================================================
+// Browser Navigation and Utility Methods Tests (Task 7)
+// ============================================================================
+
+/// Test navigation methods (move_up, move_down, page_up, page_down)
+/// When navigation methods are called, they should properly update selection
+/// with bounds checking and viewport management.
+/// Validates: Requirements 2.1, 2.3, 2.4
+#[test]
+fn test_browser_navigation_methods() {
+    let categories = vec![
+        Category::new("Series 1".to_string(), 2, 1, CategoryType::Series),
+        Category::new("Series 2".to_string(), 3, 1, CategoryType::Series),
+    ];
+    
+    let episodes = vec![
+        Episode::new("Episode 1".to_string(), false, true, false),
+        Episode::new("Episode 2".to_string(), true, true, false),
+        Episode::new("Episode 3".to_string(), false, true, false),
+        Episode::new("Episode 4".to_string(), true, true, false),
+        Episode::new("Episode 5".to_string(), false, true, false),
+        Episode::new("Episode 6".to_string(), true, true, false),
+    ];
+    
+    // Total: 2 categories + 6 episodes = 8 items
+    let mut browser = Browser::new(
+        (0, 0),
+        40,
+        3,  // height = 3 (smaller than total items)
+        categories,
+        episodes,
+    );
+    
+    // Test move_up and move_down (aliases for move_selection_up/down)
+    assert_eq!(browser.get_selected_item(), 0, "Initial selection should be 0");
+    
+    browser.move_down();
+    assert_eq!(browser.get_selected_item(), 1, "move_down should move to item 1");
+    
+    browser.move_down();
+    assert_eq!(browser.get_selected_item(), 2, "move_down should move to item 2");
+    
+    browser.move_up();
+    assert_eq!(browser.get_selected_item(), 1, "move_up should move back to item 1");
+    
+    browser.move_up();
+    assert_eq!(browser.get_selected_item(), 0, "move_up should move back to item 0");
+    
+    // Test bounds checking - move_up at first item
+    browser.move_up();
+    assert_eq!(browser.get_selected_item(), 0, "move_up should stay at item 0 (lower bound)");
+    
+    // Move to last item and test upper bound
+    browser.set_selected_item(7); // Last item
+    browser.move_down();
+    assert_eq!(browser.get_selected_item(), 7, "move_down should stay at item 7 (upper bound)");
+    
+    // Test page_up and page_down
+    browser.set_selected_item(0); // Start at beginning
+    
+    browser.page_down();
+    assert_eq!(browser.get_selected_item(), 3, "page_down should move by viewport height (3)");
+    
+    browser.page_down();
+    assert_eq!(browser.get_selected_item(), 6, "page_down should move to item 6");
+    
+    browser.page_down();
+    assert_eq!(browser.get_selected_item(), 7, "page_down should be clamped to last item");
+    
+    browser.page_up();
+    assert_eq!(browser.get_selected_item(), 4, "page_up should move back by viewport height");
+    
+    browser.page_up();
+    assert_eq!(browser.get_selected_item(), 1, "page_up should move to item 1");
+    
+    browser.page_up();
+    assert_eq!(browser.get_selected_item(), 0, "page_up should be clamped to first item");
+    
+    // Test page navigation with empty browser
+    let mut empty_browser = Browser::new(
+        (0, 0),
+        30,
+        3,
+        vec![], // no categories
+        vec![], // no episodes
+    );
+    
+    empty_browser.page_down();
+    assert_eq!(empty_browser.get_selected_item(), 0, "page_down on empty browser should stay at 0");
+    
+    empty_browser.page_up();
+    assert_eq!(empty_browser.get_selected_item(), 0, "page_up on empty browser should stay at 0");
+}
+
+/// Test utility methods for item counting and type checking
+/// When utility methods are called, they should return correct counts and type information.
+/// Validates: Requirements 2.1, 2.3, 2.4
+#[test]
+fn test_browser_utility_methods() {
+    let categories = vec![
+        Category::new("Series 1".to_string(), 2, 1, CategoryType::Series),
+        Category::new("Series 2".to_string(), 3, 1, CategoryType::Series),
+        Category::new("Series 3".to_string(), 1, 1, CategoryType::Series),
+    ];
+    
+    let episodes = vec![
+        Episode::new("Episode 1".to_string(), false, true, false),
+        Episode::new("Episode 2".to_string(), true, true, false),
+        Episode::new("Episode 3".to_string(), false, true, false),
+        Episode::new("Episode 4".to_string(), true, true, false),
+    ];
+    
+    let mut browser = Browser::new(
+        (0, 0),
+        40,
+        5,
+        categories,
+        episodes,
+    );
+    
+    // Test counting methods
+    assert_eq!(browser.category_count(), 3, "Should have 3 categories");
+    assert_eq!(browser.episode_count(), 4, "Should have 4 episodes");
+    assert_eq!(browser.total_items(), 7, "Should have 7 total items");
+    
+    // Test type checking methods with category selected
+    browser.set_selected_item(0); // First category
+    assert!(browser.is_selected_category(), "Item 0 should be a category");
+    assert!(!browser.is_selected_episode(), "Item 0 should not be an episode");
+    
+    browser.set_selected_item(2); // Last category
+    assert!(browser.is_selected_category(), "Item 2 should be a category");
+    assert!(!browser.is_selected_episode(), "Item 2 should not be an episode");
+    
+    // Test type checking methods with episode selected
+    browser.set_selected_item(3); // First episode
+    assert!(!browser.is_selected_category(), "Item 3 should not be a category");
+    assert!(browser.is_selected_episode(), "Item 3 should be an episode");
+    
+    browser.set_selected_item(6); // Last episode
+    assert!(!browser.is_selected_category(), "Item 6 should not be a category");
+    assert!(browser.is_selected_episode(), "Item 6 should be an episode");
+    
+    // Test with empty browser
+    let empty_browser = Browser::new(
+        (0, 0),
+        30,
+        3,
+        vec![], // no categories
+        vec![], // no episodes
+    );
+    
+    assert_eq!(empty_browser.category_count(), 0, "Empty browser should have 0 categories");
+    assert_eq!(empty_browser.episode_count(), 0, "Empty browser should have 0 episodes");
+    assert_eq!(empty_browser.total_items(), 0, "Empty browser should have 0 total items");
+    assert!(!empty_browser.is_selected_category(), "Empty browser selection should not be category");
+    assert!(!empty_browser.is_selected_episode(), "Empty browser selection should not be episode");
+}
+
+/// Test methods for getting selected item details
+/// When selection detail methods are called, they should return correct indices and references.
+/// Validates: Requirements 2.1, 2.3, 2.4
+#[test]
+fn test_browser_selection_detail_methods() {
+    let categories = vec![
+        Category::new("Series 1".to_string(), 5, 2, CategoryType::Series),
+        Category::new("Season 1".to_string(), 3, 1, CategoryType::Season),
+    ];
+    
+    let episodes = vec![
+        Episode::new("Episode 1".to_string(), false, true, false),
+        Episode::new("Episode 2".to_string(), true, true, false),
+        Episode::new("Episode 3".to_string(), false, true, true),
+    ];
+    
+    let mut browser = Browser::new(
+        (0, 0),
+        40,
+        5,
+        categories,
+        episodes,
+    );
+    
+    // Test with category selected
+    browser.set_selected_item(0); // First category
+    assert_eq!(browser.get_selected_category_index(), Some(0), "Should return category index 0");
+    assert_eq!(browser.get_selected_episode_index(), None, "Should not return episode index");
+    
+    let selected_category = browser.get_selected_category();
+    assert!(selected_category.is_some(), "Should return category reference");
+    assert_eq!(selected_category.unwrap().title, "Series 1", "Should return correct category");
+    
+    assert!(browser.get_selected_episode().is_none(), "Should not return episode reference");
+    
+    browser.set_selected_item(1); // Second category
+    assert_eq!(browser.get_selected_category_index(), Some(1), "Should return category index 1");
+    let selected_category2 = browser.get_selected_category();
+    assert_eq!(selected_category2.unwrap().title, "Season 1", "Should return correct category");
+    
+    // Test with episode selected
+    browser.set_selected_item(2); // First episode (global index 2, episode index 0)
+    assert_eq!(browser.get_selected_category_index(), None, "Should not return category index");
+    assert_eq!(browser.get_selected_episode_index(), Some(0), "Should return episode index 0");
+    
+    let selected_episode = browser.get_selected_episode();
+    assert!(selected_episode.is_some(), "Should return episode reference");
+    assert_eq!(selected_episode.unwrap().name, "Episode 1", "Should return correct episode");
+    
+    assert!(browser.get_selected_category().is_none(), "Should not return category reference");
+    
+    browser.set_selected_item(4); // Last episode (global index 4, episode index 2)
+    assert_eq!(browser.get_selected_episode_index(), Some(2), "Should return episode index 2");
+    let selected_episode2 = browser.get_selected_episode();
+    assert_eq!(selected_episode2.unwrap().name, "Episode 3", "Should return correct episode");
+    
+    // Test with empty browser
+    let empty_browser = Browser::new(
+        (0, 0),
+        30,
+        3,
+        vec![], // no categories
+        vec![], // no episodes
+    );
+    
+    assert_eq!(empty_browser.get_selected_category_index(), None, "Empty browser should not return category index");
+    assert_eq!(empty_browser.get_selected_episode_index(), None, "Empty browser should not return episode index");
+    assert!(empty_browser.get_selected_category().is_none(), "Empty browser should not return category reference");
+    assert!(empty_browser.get_selected_episode().is_none(), "Empty browser should not return episode reference");
+}
+
+/// Test index conversion utility methods
+/// When index conversion methods are called, they should correctly convert between
+/// global indices and category/episode specific indices.
+/// Validates: Requirements 2.1, 2.3, 2.4
+#[test]
+fn test_browser_index_conversion_methods() {
+    let categories = vec![
+        Category::new("Series 1".to_string(), 2, 1, CategoryType::Series),
+        Category::new("Series 2".to_string(), 3, 1, CategoryType::Series),
+    ];
+    
+    let episodes = vec![
+        Episode::new("Episode 1".to_string(), false, true, false),
+        Episode::new("Episode 2".to_string(), true, true, false),
+        Episode::new("Episode 3".to_string(), false, true, false),
+    ];
+    
+    // Total: 2 categories (indices 0,1) + 3 episodes (indices 2,3,4)
+    let browser = Browser::new(
+        (0, 0),
+        40,
+        5,
+        categories,
+        episodes,
+    );
+    
+    // Test global index to category index conversion
+    assert_eq!(browser.global_index_to_category_index(0), Some(0), "Global 0 should be category 0");
+    assert_eq!(browser.global_index_to_category_index(1), Some(1), "Global 1 should be category 1");
+    assert_eq!(browser.global_index_to_category_index(2), None, "Global 2 should not be a category");
+    assert_eq!(browser.global_index_to_category_index(3), None, "Global 3 should not be a category");
+    assert_eq!(browser.global_index_to_category_index(4), None, "Global 4 should not be a category");
+    assert_eq!(browser.global_index_to_category_index(10), None, "Global 10 should not be a category");
+    
+    // Test global index to episode index conversion
+    assert_eq!(browser.global_index_to_episode_index(0), None, "Global 0 should not be an episode");
+    assert_eq!(browser.global_index_to_episode_index(1), None, "Global 1 should not be an episode");
+    assert_eq!(browser.global_index_to_episode_index(2), Some(0), "Global 2 should be episode 0");
+    assert_eq!(browser.global_index_to_episode_index(3), Some(1), "Global 3 should be episode 1");
+    assert_eq!(browser.global_index_to_episode_index(4), Some(2), "Global 4 should be episode 2");
+    assert_eq!(browser.global_index_to_episode_index(10), None, "Global 10 should not be an episode");
+    
+    // Test category index to global index conversion
+    assert_eq!(browser.category_index_to_global_index(0), Some(0), "Category 0 should be global 0");
+    assert_eq!(browser.category_index_to_global_index(1), Some(1), "Category 1 should be global 1");
+    assert_eq!(browser.category_index_to_global_index(2), None, "Category 2 should not exist");
+    assert_eq!(browser.category_index_to_global_index(10), None, "Category 10 should not exist");
+    
+    // Test episode index to global index conversion
+    assert_eq!(browser.episode_index_to_global_index(0), Some(2), "Episode 0 should be global 2");
+    assert_eq!(browser.episode_index_to_global_index(1), Some(3), "Episode 1 should be global 3");
+    assert_eq!(browser.episode_index_to_global_index(2), Some(4), "Episode 2 should be global 4");
+    assert_eq!(browser.episode_index_to_global_index(3), None, "Episode 3 should not exist");
+    assert_eq!(browser.episode_index_to_global_index(10), None, "Episode 10 should not exist");
+    
+    // Test with empty browser
+    let empty_browser = Browser::new(
+        (0, 0),
+        30,
+        3,
+        vec![], // no categories
+        vec![], // no episodes
+    );
+    
+    assert_eq!(empty_browser.global_index_to_category_index(0), None, "Empty browser should have no categories");
+    assert_eq!(empty_browser.global_index_to_episode_index(0), None, "Empty browser should have no episodes");
+    assert_eq!(empty_browser.category_index_to_global_index(0), None, "Empty browser should have no categories");
+    assert_eq!(empty_browser.episode_index_to_global_index(0), None, "Empty browser should have no episodes");
+    
+    // Test with categories only
+    let categories_only_browser = Browser::new(
+        (0, 0),
+        30,
+        3,
+        vec![Category::new("Series".to_string(), 1, 1, CategoryType::Series)],
+        vec![], // no episodes
+    );
+    
+    assert_eq!(categories_only_browser.global_index_to_category_index(0), Some(0), "Should have category at global 0");
+    assert_eq!(categories_only_browser.global_index_to_episode_index(0), None, "Should have no episodes");
+    assert_eq!(categories_only_browser.category_index_to_global_index(0), Some(0), "Category 0 should be global 0");
+    assert_eq!(categories_only_browser.episode_index_to_global_index(0), None, "Should have no episodes");
+    
+    // Test with episodes only
+    let episodes_only_browser = Browser::new(
+        (0, 0),
+        30,
+        3,
+        vec![], // no categories
+        vec![Episode::new("Episode".to_string(), false, true, false)],
+    );
+    
+    assert_eq!(episodes_only_browser.global_index_to_category_index(0), None, "Should have no categories");
+    assert_eq!(episodes_only_browser.global_index_to_episode_index(0), Some(0), "Should have episode at global 0");
+    assert_eq!(episodes_only_browser.category_index_to_global_index(0), None, "Should have no categories");
+    assert_eq!(episodes_only_browser.episode_index_to_global_index(0), Some(0), "Episode 0 should be global 0");
+}
+
+// ============================================================================
+// Browser Component Integration Tests (Task 5.1, 5.2)
+// ============================================================================
+
+/// Test Case 8: Component integration consistency
+/// When the Browser component renders, it should utilize existing Category, Episode, and Scrollbar
+/// components for display without modifying their internal behavior.
+/// Validates: Requirements 4.1, 4.2, 4.3
+#[test]
+fn test_browser_component_integration_consistency() {
+    // Create test content with both categories and episodes
+    let categories = vec![
+        Category::new("Test Series 1".to_string(), 5, 2, CategoryType::Series),
+        Category::new("Test Season 1".to_string(), 3, 1, CategoryType::Season),
+    ];
+    
+    let episodes = vec![
+        Episode::new("Episode 1".to_string(), false, true, false),
+        Episode::new("Episode 2".to_string(), true, true, false),
+        Episode::new("Episode 3".to_string(), false, true, true),
+    ];
+    
+    // Create browser that will need a scrollbar (more items than height)
+    let browser = Browser::new(
+        (0, 0),
+        50,  // width
+        3,   // height (less than total items to trigger scrollbar)
+        categories.clone(),
+        episodes.clone(),
+    );
+    
+    let theme = Theme::default();
+    
+    // Test that browser utilizes existing Category components (Requirement 4.1)
+    // Render individual category components to compare - first item will be selected
+    let category1_direct = categories[0].render(49, &theme, true); // 49 = content_width when scrollbar present, selected
+    let category2_direct = categories[1].render(49, &theme, false); // not selected
+    
+    // Render browser and verify it produces the same output as direct category rendering
+    let browser_result = browser.render(50, &theme, true);
+    
+    // Browser should render exactly 3 rows (height constraint)
+    assert_eq!(browser_result.len(), 3, "Browser should render exactly 3 rows");
+    
+    // First row should match first category component output (selected)
+    assert_eq!(browser_result[0].len(), 50, "First row should have full width including scrollbar");
+    
+    // Extract content portion (excluding scrollbar) and compare with direct category render
+    let browser_row0_content: Vec<_> = browser_result[0].iter().take(49).cloned().collect();
+    assert_eq!(browser_row0_content, category1_direct[0], 
+               "Browser should utilize existing Category component for first category");
+    
+    // Second row should match second category component output (not selected)
+    let browser_row1_content: Vec<_> = browser_result[1].iter().take(49).cloned().collect();
+    assert_eq!(browser_row1_content, category2_direct[0], 
+               "Browser should utilize existing Category component for second category");
+    
+    // Test that browser utilizes existing Episode components (Requirement 4.2)
+    // Third row should be first episode (not selected)
+    let episode1_direct = episodes[0].render(49, &theme, false);
+    let browser_row2_content: Vec<_> = browser_result[2].iter().take(49).cloned().collect();
+    
+    // Compare the actual content portion (episode renders only actual content, browser pads to full width)
+    let episode_content_len = episode1_direct[0].len();
+    let browser_episode_content: Vec<_> = browser_row2_content.iter().take(episode_content_len).cloned().collect();
+    assert_eq!(browser_episode_content, episode1_direct[0], 
+               "Browser should utilize existing Episode component for first episode");
+    
+    // Verify that browser pads the rest with spaces
+    for i in episode_content_len..49 {
+        assert_eq!(browser_row2_content[i].character, ' ', 
+                   "Browser should pad episode content with spaces");
+    }
+    
+    // Test that browser utilizes existing Scrollbar component (Requirement 4.3)
+    // Create a scrollbar directly with same parameters
+    let scrollbar = Scrollbar::new(
+        5,  // total_items (2 categories + 3 episodes)
+        3,  // visible_items (height)
+        0,  // first_visible_item
+    );
+    let scrollbar_direct = scrollbar.render(3, &theme, false);
+    
+    // Verify scrollbar is present in browser output
+    assert!(browser.needs_scrollbar(), "Browser should need scrollbar with this content");
+    
+    // Extract scrollbar column from browser output
+    let browser_scrollbar: Vec<_> = browser_result.iter()
+        .map(|row| row.last().cloned().unwrap_or_else(|| Cell::new(' ', Color::Reset, Color::Reset, TextStyle::new())))
+        .collect();
+    
+    // Compare with direct scrollbar render
+    for (i, (browser_cell, scrollbar_row)) in browser_scrollbar.iter().zip(scrollbar_direct.iter()).enumerate() {
+        if let Some(scrollbar_cell) = scrollbar_row.first() {
+            assert_eq!(browser_cell.character, scrollbar_cell.character, 
+                       "Browser scrollbar row {} should match direct Scrollbar component", i);
+            assert_eq!(browser_cell.fg_color, scrollbar_cell.fg_color, 
+                       "Browser scrollbar row {} should use same colors as direct Scrollbar component", i);
+        }
+    }
+    
+    // Test component integration without scrollbar
+    let browser_no_scrollbar = Browser::new(
+        (0, 0),
+        40,  // width
+        6,   // height (more than total items, no scrollbar needed)
+        vec![Category::new("Single Series".to_string(), 2, 1, CategoryType::Series)],
+        vec![Episode::new("Single Episode".to_string(), true, true, false)],
+    );
+    
+    assert!(!browser_no_scrollbar.needs_scrollbar(), "Browser should not need scrollbar");
+    
+    let result_no_scrollbar = browser_no_scrollbar.render(40, &theme, true);
+    
+    // Should render 6 rows (height), but only first 2 have content
+    assert_eq!(result_no_scrollbar.len(), 6, "Should render full height");
+    
+    // First two rows should have content matching direct component renders
+    assert!(!result_no_scrollbar[0].is_empty(), "First row should have category content");
+    assert!(!result_no_scrollbar[1].is_empty(), "Second row should have episode content");
+    
+    // Remaining rows should be empty
+    for i in 2..6 {
+        assert_eq!(result_no_scrollbar[i].len(), 0, "Row {} should be empty", i);
+    }
+    
+    // Verify content width equals full width when no scrollbar
+    assert_eq!(browser_no_scrollbar.content_width(), 40, "Content width should equal full width without scrollbar");
+}
+
+/// Test Case 6: Empty state handling
+/// When no items are available, the Browser component should handle the empty state
+/// gracefully without selection indicators or errors.
+/// Validates: Requirements 2.5
+#[test]
+fn test_browser_empty_state_handling() {
+    // Create browser with no categories or episodes
+    let empty_browser = Browser::new(
+        (10, 5),  // position
+        30,       // width
+        4,        // height
+        vec![],   // no categories
+        vec![],   // no episodes
+    );
+    
+    let theme = Theme::default();
+    
+    // Test basic empty state properties
+    assert_eq!(empty_browser.total_items(), 0, "Empty browser should have 0 total items");
+    assert_eq!(empty_browser.get_selected_item(), 0, "Empty browser should have selection at 0");
+    assert!(!empty_browser.needs_scrollbar(), "Empty browser should not need scrollbar");
+    assert_eq!(empty_browser.content_width(), 30, "Empty browser content width should equal full width");
+    assert_eq!(empty_browser.visible_items(), 0, "Empty browser should have 0 visible items");
+    
+    // Test rendering empty state
+    let result = empty_browser.render(30, &theme, true);
+    
+    // Should return rows for the specified height
+    assert_eq!(result.len(), 4, "Empty browser should render specified height (4 rows)");
+    
+    // All rows should be empty (no content)
+    for (i, row) in result.iter().enumerate() {
+        assert_eq!(row.len(), 0, "Empty browser row {} should be empty", i);
+    }
+    
+    // Test that empty browser handles selection operations gracefully
+    let mut empty_browser_mut = Browser::new(
+        (0, 0),
+        25,
+        3,
+        vec![],
+        vec![],
+    );
+    
+    // Test selection operations on empty browser
+    empty_browser_mut.move_selection_up();
+    assert_eq!(empty_browser_mut.get_selected_item(), 0, "Selection should remain 0 after move_up on empty browser");
+    
+    empty_browser_mut.move_selection_down();
+    assert_eq!(empty_browser_mut.get_selected_item(), 0, "Selection should remain 0 after move_down on empty browser");
+    
+    empty_browser_mut.set_selected_item(5);
+    assert_eq!(empty_browser_mut.get_selected_item(), 0, "Selection should be clamped to 0 on empty browser");
+    
+    // Test viewport management on empty browser
+    assert_eq!(empty_browser_mut.first_visible_item, 0, "First visible should be 0 on empty browser");
+    
+    empty_browser_mut.ensure_selection_visible();
+    assert_eq!(empty_browser_mut.first_visible_item, 0, "First visible should remain 0 after ensure_selection_visible");
+    
+    // Test that empty browser doesn't crash with various operations
+    empty_browser_mut.clamp_selected_item();
+    empty_browser_mut.clamp_first_visible_item();
+    
+    assert_eq!(empty_browser_mut.get_selected_item(), 0, "Selection should remain stable after clamping operations");
+    assert_eq!(empty_browser_mut.first_visible_item, 0, "First visible should remain stable after clamping operations");
+    
+    // Test rendering after operations
+    let result_after_ops = empty_browser_mut.render(25, &theme, true);
+    assert_eq!(result_after_ops.len(), 3, "Empty browser should still render correctly after operations");
+    
+    for (i, row) in result_after_ops.iter().enumerate() {
+        assert_eq!(row.len(), 0, "Empty browser row {} should still be empty after operations", i);
+    }
+    
+    // Test edge case: zero dimensions with empty content
+    let zero_dim_browser = Browser::new(
+        (0, 0),
+        0,  // zero width
+        0,  // zero height
+        vec![],
+        vec![],
+    );
+    
+    let zero_result = zero_dim_browser.render(0, &theme, true);
+    assert_eq!(zero_result.len(), 0, "Zero dimension empty browser should return empty result");
+    
+    // Test edge case: empty content with large dimensions
+    let large_empty_browser = Browser::new(
+        (0, 0),
+        100,  // large width
+        50,   // large height
+        vec![],
+        vec![],
+    );
+    
+    let large_result = large_empty_browser.render(100, &theme, true);
+    assert_eq!(large_result.len(), 50, "Large empty browser should render full height");
+    
+    for (i, row) in large_result.iter().enumerate() {
+        assert_eq!(row.len(), 0, "Large empty browser row {} should be empty", i);
+    }
+}
+
+// ============================================================================
+// Browser Scrollbar Positioning Tests (Task 6.1)
+// ============================================================================
+
+/// Test Case 7: Scrollbar positioning accuracy
+/// When the scrollbar is displayed, the Browser component should position it to accurately
+/// reflect the current scroll position relative to total content.
+/// Validates: Requirements 3.5
+#[test]
+fn test_browser_scrollbar_positioning_accuracy() {
+    use movies::components::Scrollbar;
+    
+    // Create content that requires scrolling
+    let categories = vec![
+        Category::new("Series 1".to_string(), 2, 1, CategoryType::Series),
+        Category::new("Series 2".to_string(), 3, 1, CategoryType::Series),
+    ];
+    
+    let episodes = vec![
+        Episode::new("Episode 1".to_string(), false, true, false),
+        Episode::new("Episode 2".to_string(), true, true, false),
+        Episode::new("Episode 3".to_string(), false, true, false),
+        Episode::new("Episode 4".to_string(), true, true, false),
+        Episode::new("Episode 5".to_string(), false, true, false),
+        Episode::new("Episode 6".to_string(), true, true, false),
+    ];
+    
+    // Total: 2 categories + 6 episodes = 8 items
+    // Height: 4 (viewport shows 4 items, scrollbar needed)
+    let mut browser = Browser::new(
+        (0, 0),
+        50,  // width
+        4,   // height (less than total items)
+        categories,
+        episodes,
+    );
+    
+    let theme = Theme::default();
+    
+    // Test scrollbar positioning at different scroll positions
+    
+    // Position 1: At the beginning (first_visible_item = 0)
+    browser.first_visible_item = 0;
+    browser.clamp_first_visible_item();
+    
+    let result_start = browser.render(50, &theme, true);
+    assert_eq!(result_start.len(), 4, "Should render 4 rows");
+    
+    // Verify scrollbar is present (each row should have 50 cells: 49 content + 1 scrollbar)
+    for i in 0..4 {
+        assert_eq!(result_start[i].len(), 50, "Row {} should have scrollbar column", i);
+    }
+    
+    // Create expected scrollbar for comparison
+    let expected_scrollbar_start = Scrollbar::new(8, 4, 0); // total=8, visible=4, first_visible=0
+    let scrollbar_cells_start = expected_scrollbar_start.render(4, &theme, false);
+    
+    // Verify scrollbar positioning matches expected
+    for (row_idx, scrollbar_row) in scrollbar_cells_start.iter().enumerate() {
+        if let Some(expected_cell) = scrollbar_row.first() {
+            let actual_scrollbar_cell = &result_start[row_idx][49]; // Last column is scrollbar
+            assert_eq!(actual_scrollbar_cell.character, expected_cell.character,
+                      "Scrollbar character at row {} should match expected for start position", row_idx);
+        }
+    }
+    
+    // Position 2: In the middle (first_visible_item = 2)
+    browser.first_visible_item = 2;
+    browser.clamp_first_visible_item();
+    
+    let result_middle = browser.render(50, &theme, true);
+    
+    let expected_scrollbar_middle = Scrollbar::new(8, 4, 2); // total=8, visible=4, first_visible=2
+    let scrollbar_cells_middle = expected_scrollbar_middle.render(4, &theme, false);
+    
+    // Verify scrollbar positioning for middle position
+    for (row_idx, scrollbar_row) in scrollbar_cells_middle.iter().enumerate() {
+        if let Some(expected_cell) = scrollbar_row.first() {
+            let actual_scrollbar_cell = &result_middle[row_idx][49];
+            assert_eq!(actual_scrollbar_cell.character, expected_cell.character,
+                      "Scrollbar character at row {} should match expected for middle position", row_idx);
+        }
+    }
+    
+    // Position 3: At the end (first_visible_item = 4, showing items 4,5,6,7)
+    browser.first_visible_item = 4;
+    browser.clamp_first_visible_item();
+    
+    let result_end = browser.render(50, &theme, true);
+    
+    let expected_scrollbar_end = Scrollbar::new(8, 4, 4); // total=8, visible=4, first_visible=4
+    let scrollbar_cells_end = expected_scrollbar_end.render(4, &theme, false);
+    
+    // Verify scrollbar positioning for end position
+    for (row_idx, scrollbar_row) in scrollbar_cells_end.iter().enumerate() {
+        if let Some(expected_cell) = scrollbar_row.first() {
+            let actual_scrollbar_cell = &result_end[row_idx][49];
+            assert_eq!(actual_scrollbar_cell.character, expected_cell.character,
+                      "Scrollbar character at row {} should match expected for end position", row_idx);
+        }
+    }
+    
+    // Test edge case: content exactly fits (no scrollbar should be present)
+    let small_browser = Browser::new(
+        (0, 0),
+        30,
+        4,  // height = 4
+        vec![Category::new("Series".to_string(), 1, 1, CategoryType::Series)], // 1 category
+        vec![
+            Episode::new("Episode 1".to_string(), false, true, false),
+            Episode::new("Episode 2".to_string(), true, true, false),
+            Episode::new("Episode 3".to_string(), false, true, false),
+        ], // 3 episodes
+    );
+    // Total: 1 + 3 = 4 items (exactly fits, no scrollbar needed)
+    
+    let result_no_scrollbar = small_browser.render(30, &theme, true);
+    
+    // Verify no scrollbar is present (each row should have exactly 30 cells)
+    for i in 0..4 {
+        assert_eq!(result_no_scrollbar[i].len(), 30, "Row {} should not have scrollbar when content fits", i);
+    }
+    
+    // Test scrollbar accuracy with selection-driven scrolling
+    let mut selection_browser = Browser::new(
+        (0, 0),
+        40,
+        3,  // height = 3
+        vec![
+            Category::new("Series 1".to_string(), 1, 1, CategoryType::Series),
+            Category::new("Series 2".to_string(), 1, 1, CategoryType::Series),
+        ],
+        vec![
+            Episode::new("Episode 1".to_string(), false, true, false),
+            Episode::new("Episode 2".to_string(), true, true, false),
+            Episode::new("Episode 3".to_string(), false, true, false),
+            Episode::new("Episode 4".to_string(), true, true, false),
+        ],
+    );
+    // Total: 2 + 4 = 6 items, height = 3 (scrollbar needed)
+    
+    // Move selection to last item, which should scroll to show it
+    selection_browser.set_selected_item(5); // Last item
+    
+    let result_selection_scroll = selection_browser.render(40, &theme, true);
+    
+    // Verify scrollbar reflects the new scroll position
+    let expected_scrollbar_selection = Scrollbar::new(6, 3, selection_browser.first_visible_item);
+    let scrollbar_cells_selection = expected_scrollbar_selection.render(3, &theme, false);
+    
+    for (row_idx, scrollbar_row) in scrollbar_cells_selection.iter().enumerate() {
+        if let Some(expected_cell) = scrollbar_row.first() {
+            let actual_scrollbar_cell = &result_selection_scroll[row_idx][39]; // Last column
+            assert_eq!(actual_scrollbar_cell.character, expected_cell.character,
+                      "Scrollbar should accurately reflect selection-driven scroll position at row {}", row_idx);
+        }
+    }
+}
+
+// ============================================================================
+// Browser Component Coordination Tests (Task 6.2)
+// ============================================================================
+
+/// Test Case 9: Component coordination
+/// When component properties change, the Browser component should propagate relevant updates
+/// to child components and maintain proper positioning and sizing coordination.
+/// Validates: Requirements 4.4, 4.5
+#[test]
+fn test_browser_component_coordination() {
+    // Create test content
+    let categories = vec![
+        Category::new("Test Series".to_string(), 5, 2, CategoryType::Series),
+        Category::new("Test Season".to_string(), 3, 1, CategoryType::Season),
+    ];
+    
+    let episodes = vec![
+        Episode::new("Episode 1".to_string(), false, true, false),
+        Episode::new("Episode 2".to_string(), true, true, false),
+        Episode::new("Episode 3".to_string(), false, true, true),
+    ];
+    
+    let theme = Theme::default();
+    
+    // Test 1: Width coordination - browser should pass correct width to child components
+    let browser_wide = Browser::new(
+        (0, 0),
+        80,  // wide width
+        3,   // height (will need scrollbar: 2 categories + 3 episodes = 5 > 3)
+        categories.clone(),
+        episodes.clone(),
+    );
+    
+    let result_wide = browser_wide.render(80, &theme, true);
+    
+    // With scrollbar needed, content width should be 79, total width 80
+    assert_eq!(result_wide.len(), 3, "Should render 3 rows");
+    for i in 0..3 {
+        assert_eq!(result_wide[i].len(), 80, "Wide browser row {} should have full width including scrollbar", i);
+    }
+    
+    // Verify child components receive correct width (79 for content when scrollbar present)
+    // We can verify this by checking that content doesn't exceed the content width
+    for i in 0..3 {
+        // Content portion should be exactly 79 cells, scrollbar should be 1 cell
+        let content_cells: Vec<_> = result_wide[i].iter().take(79).collect();
+        assert_eq!(content_cells.len(), 79, "Content portion should be exactly 79 cells");
+    }
+    
+    // Test 2: Width coordination without scrollbar
+    let browser_narrow_no_scroll = Browser::new(
+        (0, 0),
+        40,  // width
+        6,   // height (more than total items: 5, so no scrollbar needed)
+        categories.clone(),
+        episodes.clone(),
+    );
+    
+    let result_narrow_no_scroll = browser_narrow_no_scroll.render(40, &theme, true);
+    
+    // Without scrollbar, content width should equal full width (40)
+    assert_eq!(result_narrow_no_scroll.len(), 6, "Should render 6 rows");
+    
+    // First 5 rows should have content (40 cells each), last row should be empty
+    for i in 0..5 {
+        assert_eq!(result_narrow_no_scroll[i].len(), 40, "Row {} should have full width without scrollbar", i);
+    }
+    assert_eq!(result_narrow_no_scroll[5].len(), 0, "Last row should be empty when no more content");
+    
+    // Test 3: Selection state propagation - browser should pass correct selection state to child components
+    let mut browser_selection = Browser::new(
+        (0, 0),
+        50,
+        5,   // height = 5 (exactly matches total items, no scrollbar)
+        categories.clone(),
+        episodes.clone(),
+    );
+    
+    // Test selection of first item (category)
+    browser_selection.set_selected_item(0);
+    let result_select_0 = browser_selection.render(50, &theme, true);
+    
+    // Render the first category directly with selection to compare
+    let category_0_selected = categories[0].render(50, &theme, true);
+    let category_0_unselected = categories[0].render(50, &theme, false);
+    
+    // First row should match selected category
+    assert_eq!(result_select_0[0], category_0_selected[0], 
+               "Browser should pass selection state to first category");
+    
+    // Second row should match unselected category
+    let category_1_unselected = categories[1].render(50, &theme, false);
+    assert_eq!(result_select_0[1], category_1_unselected[0], 
+               "Browser should pass unselected state to second category");
+    
+    // Test selection of episode (third item, index 2)
+    browser_selection.set_selected_item(2);
+    let result_select_2 = browser_selection.render(50, &theme, true);
+    
+    // First two rows should be unselected categories
+    assert_eq!(result_select_2[0], category_0_unselected[0], 
+               "First category should be unselected when episode is selected");
+    assert_eq!(result_select_2[1], category_1_unselected[0], 
+               "Second category should be unselected when episode is selected");
+    
+    // Third row should be selected episode
+    let episode_0_selected = episodes[0].render(50, &theme, true);
+    
+    // Browser pads episode content to full width, so we need to compare the actual content portion
+    let episode_content_len = episode_0_selected[0].len();
+    let browser_episode_content: Vec<_> = result_select_2[2].iter().take(episode_content_len).cloned().collect();
+    assert_eq!(browser_episode_content, episode_0_selected[0], 
+               "Browser should pass selection state to first episode");
+    
+    // Test 4: Theme propagation - browser should pass theme to all child components
+    let mut custom_theme = Theme::default();
+    custom_theme.current_fg = "red".to_string();
+    custom_theme.current_bg = "blue".to_string();
+    
+    let result_custom_theme = browser_selection.render(50, &custom_theme, true);
+    
+    // Render components directly with custom theme for comparison
+    let category_custom_theme = categories[1].render(50, &custom_theme, true);
+    
+    // Set selection to second category to test theme propagation
+    browser_selection.set_selected_item(1);
+    let result_theme_test = browser_selection.render(50, &custom_theme, true);
+    
+    assert_eq!(result_theme_test[1], category_custom_theme[0], 
+               "Browser should propagate custom theme to child components");
+    
+    // Test 5: Positioning coordination with scrolling
+    let mut browser_scroll = Browser::new(
+        (0, 0),
+        45,
+        3,   // height = 3 (less than 5 total items, scrollbar needed)
+        categories.clone(),
+        episodes.clone(),
+    );
+    
+    // Scroll to middle position
+    browser_scroll.first_visible_item = 2;
+    browser_scroll.clamp_first_visible_item();
+    
+    let result_scroll = browser_scroll.render(45, &theme, true);
+    
+    // Should render 3 rows with scrollbar (44 content + 1 scrollbar = 45 total)
+    assert_eq!(result_scroll.len(), 3, "Should render 3 rows when scrolled");
+    for i in 0..3 {
+        assert_eq!(result_scroll[i].len(), 45, "Scrolled row {} should have full width", i);
+    }
+    
+    // Verify that the correct items are rendered based on scroll position
+    // With first_visible_item = 2, should show items 2, 3, 4 (first episode, second episode, third episode)
+    let episode_0_unselected = episodes[0].render(44, &theme, false); // Content width = 44
+    let episode_1_unselected = episodes[1].render(44, &theme, false);
+    let episode_2_unselected = episodes[2].render(44, &theme, false);
+    
+    // Compare content portions (excluding scrollbar)
+    let row0_content: Vec<_> = result_scroll[0].iter().take(episode_0_unselected[0].len()).cloned().collect();
+    let row1_content: Vec<_> = result_scroll[1].iter().take(episode_1_unselected[0].len()).cloned().collect();
+    let row2_content: Vec<_> = result_scroll[2].iter().take(episode_2_unselected[0].len()).cloned().collect();
+    
+    assert_eq!(row0_content, episode_0_unselected[0], 
+               "First visible row should show first episode when scrolled to position 2");
+    assert_eq!(row1_content, episode_1_unselected[0], 
+               "Second visible row should show second episode when scrolled to position 2");
+    assert_eq!(row2_content, episode_2_unselected[0], 
+               "Third visible row should show third episode when scrolled to position 2");
+    
+    // Test 6: Edge case coordination - empty content
+    let empty_browser = Browser::new(
+        (0, 0),
+        30,
+        4,
+        vec![], // no categories
+        vec![], // no episodes
+    );
+    
+    let result_empty = empty_browser.render(30, &theme, true);
+    
+    // Should render 4 empty rows
+    assert_eq!(result_empty.len(), 4, "Empty browser should render height rows");
+    for (i, row) in result_empty.iter().enumerate() {
+        assert_eq!(row.len(), 0, "Empty browser row {} should be empty", i);
+    }
+    
+    // Verify no scrollbar is created for empty content
+    assert!(!empty_browser.needs_scrollbar(), "Empty browser should not need scrollbar");
+    assert_eq!(empty_browser.content_width(), 30, "Empty browser content width should equal full width");
+}

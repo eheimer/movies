@@ -1,4 +1,5 @@
-use crate::components::{Component, category::{Category, CategoryType}, render_cells_at_column, Scrollbar};
+use crate::components::{Component, category::{Category, CategoryType}, render_cells_at_column, Scrollbar, Browser};
+use crate::components::episode::Episode;
 use crate::dto::{EpisodeDetail, Series};
 use crate::episode_field::EpisodeField;
 use crate::menu::{MenuItem, MenuContext};
@@ -19,6 +20,88 @@ const COL1_WIDTH: usize = 45;
 const MIN_COL2_WIDTH: usize = 20;
 const DETAIL_HEIGHT: usize = 11;
 const SERIES_WIDTH: usize = 40;
+
+/// Convert Entry objects to Browser component data
+/// 
+/// # Arguments
+/// * `entries` - The entries to convert
+/// * `edit_details` - Episode details for context
+/// * `resolver` - Path resolver for file existence checks
+/// 
+/// # Returns
+/// * `(Vec<Category>, Vec<Episode>)` - Tuple of categories and episodes for Browser component
+fn entries_to_browser_data(
+    entries: &[Entry],
+    edit_details: &EpisodeDetail,
+    resolver: &crate::path_resolver::PathResolver,
+) -> (Vec<Category>, Vec<Episode>) {
+    let mut categories = Vec::new();
+    let mut episodes = Vec::new();
+    
+    for entry in entries {
+        match entry {
+            Entry::Series { name, series_id } => {
+                // Get episode counts from database
+                let (total, unwatched) = crate::database::get_series_episode_counts(*series_id)
+                    .unwrap_or_else(|e| {
+                        crate::logger::log_warn(&format!("Failed to get episode counts for series '{}' (id: {}): {}", name, series_id, e));
+                        (0, 0)
+                    });
+                let watched = total.saturating_sub(unwatched);
+                
+                // Create Category component with brackets around series name
+                let category = Category::new(
+                    format!("[{}]", name),
+                    total,
+                    watched,
+                    CategoryType::Series,
+                );
+                categories.push(category);
+            }
+            Entry::Season { number, season_id } => {
+                // Get episode counts from database
+                let (total, unwatched) = crate::database::get_season_episode_counts(*season_id)
+                    .unwrap_or_else(|e| {
+                        crate::logger::log_warn(&format!("Failed to get episode counts for season {} (id: {}): {}", number, season_id, e));
+                        (0, 0)
+                    });
+                let watched = total.saturating_sub(unwatched);
+                
+                // Create Category component
+                let category = Category::new(
+                    format!("Season {}", number),
+                    total,
+                    watched,
+                    CategoryType::Season,
+                );
+                categories.push(category);
+            }
+            Entry::Episode { episode_id, name, location, .. } => {
+                // Fetch episode details for this specific episode
+                let episode_detail = crate::database::get_episode_detail(*episode_id)
+                    .unwrap_or_else(|_| edit_details.clone());
+                
+                // Check individual conditions for combined state handling
+                let absolute_path = resolver.to_absolute(std::path::Path::new(location));
+                let file_exists = absolute_path.exists();
+                let filename = location.rsplit('/').next().unwrap_or("");
+                let is_new = episode_detail.title == filename;
+                let is_watched = episode_detail.watched == "true";
+                
+                // Create Episode component
+                let episode_component = Episode::new(
+                    name.clone(),
+                    is_watched,
+                    file_exists,
+                    is_new,
+                );
+                episodes.push(episode_component);
+            }
+        }
+    }
+    
+    (categories, episodes)
+}
 
 fn get_sidebar_width() -> io::Result<usize> {
     let (cols, _) = get_terminal_size()?;
@@ -418,148 +501,38 @@ pub fn draw_screen(
             *first_entry = current_item - max_lines as usize + 1;
         }
 
-        // Create Scrollbar component for the episode browser
-        let scrollbar = Scrollbar::new(
-            entries.len(),           // total_items
-            max_lines,               // visible_items
-            *first_entry,            // first_visible_index
+        // Convert entries to Browser component data
+        let (categories, episodes) = entries_to_browser_data(entries, edit_details, resolver);
+        
+        // Create Browser component
+        let mut browser = Browser::new(
+            (0, HEADER_SIZE),  // top_left position
+            COL1_WIDTH,        // width
+            max_lines,         // height
+            categories,
+            episodes,
         );
-
-        // Render scrollbar to get visibility information
-        let scrollbar_cells = scrollbar.render(max_lines, theme, false);
-        let scrollbar_visible = !scrollbar_cells.is_empty();
-
-        // Calculate effective column width (reduce by 1 if scroll bar is visible)
-        // Use saturating_sub to prevent underflow
-        let effective_col_width = if scrollbar_visible {
-            COL1_WIDTH.saturating_sub(1)
-        } else {
-            COL1_WIDTH
-        };
-
-        for (i, entry) in entries
-            .iter()
-            .enumerate()
-            .skip(*first_entry)
-            .take(max_lines as usize)
-        {
-            // Determine the base display text and colors based on entry type
-            let (display_text, fg_color, bg_color) = match entry {
-                Entry::Series { name, series_id } => {
-                    // Get episode counts from database
-                    let (total, unwatched) = crate::database::get_series_episode_counts(*series_id)
-                        .unwrap_or_else(|e| {
-                            crate::logger::log_warn(&format!("Failed to get episode counts for series '{}' (id: {}): {}", name, series_id, e));
-                            (0, 0)
-                        });
-                    let watched = total.saturating_sub(unwatched);
-                    
-                    // Create Category component with brackets around series name
-                    let category = Category::new(
-                        format!("[{}]", name),
-                        total,
-                        watched,
-                        CategoryType::Series,
-                    );
-                    
-                    // Render with selection state
-                    let is_selected = i == current_item && !filter_mode;
-                    let cells = category.render(effective_col_width, theme, is_selected);
-                    
-                    // Convert Cell array to styled display text (preserves individual cell colors/styles)
-                    let text = cells_to_styled_string(&cells);
-                    
-                    // Use Reset colors since the text already has ANSI codes embedded
-                    let (fg, bg) = (Color::Reset, Color::Reset);
-                    
-                    (text, fg, bg)
-                }
-                Entry::Season { number, season_id } => {
-                    // Get episode counts from database
-                    let (total, unwatched) = crate::database::get_season_episode_counts(*season_id)
-                        .unwrap_or_else(|e| {
-                            crate::logger::log_warn(&format!("Failed to get episode counts for season {} (id: {}): {}", number, season_id, e));
-                            (0, 0)
-                        });
-                    let watched = total.saturating_sub(unwatched);
-                    
-                    // Create Category component
-                    let category = Category::new(
-                        format!("Season {}", number),
-                        total,
-                        watched,
-                        CategoryType::Season,
-                    );
-                    
-                    // Render with selection state
-                    let is_selected = i == current_item && !filter_mode;
-                    let cells = category.render(effective_col_width, theme, is_selected);
-                    
-                    // Convert Cell array to styled display text (preserves individual cell colors/styles)
-                    let text = cells_to_styled_string(&cells);
-                    
-                    // Use Reset colors since the text already has ANSI codes embedded
-                    let (fg, bg) = (Color::Reset, Color::Reset);
-                    
-                    (text, fg, bg)
-                }
-                Entry::Episode { episode_id, name, location, .. } => {
-                    // Fetch episode details for this specific episode
-                    let episode_detail = crate::database::get_episode_detail(*episode_id)
-                        .unwrap_or_else(|_| edit_details.clone());
-                    
-                    // Check individual conditions for combined state handling
-                    let absolute_path = resolver.to_absolute(std::path::Path::new(location));
-                    let file_exists = absolute_path.exists();
-                    let filename = location.rsplit('/').next().unwrap_or("");
-                    let is_new = episode_detail.title == filename;
-                    let is_watched = episode_detail.watched == "true";
-                    
-                    // Create Episode component
-                    use crate::components::{Component, episode::Episode};
-                    let episode_component = Episode::new(
-                        name.clone(),
-                        is_watched,
-                        file_exists,
-                        is_new,
-                    );
-                    
-                    // Render with selection state
-                    let is_selected = i == current_item && !filter_mode;
-                    let cells = episode_component.render(effective_col_width, theme, is_selected);
-                    
-                    // Convert Cell array to styled display text (preserves individual cell colors/styles)
-                    let text = cells_to_styled_string(&cells);
-                    
-                    // Use Reset colors since the text already has ANSI codes embedded
-                    let (fg, bg) = (Color::Reset, Color::Reset);
-                    
-                    (text, fg, bg)
-                }
-            };
-
-            // Apply selection highlighting if this is the current item (overrides type colors)
-            // Skip additional styling if the text is already styled (fg and bg are both Reset)
-            let formatted_text = if fg_color == Color::Reset && bg_color == Color::Reset {
-                // Text is already styled (e.g., from Category component), use as-is
-                display_text.to_string()
-            } else if i == current_item && !filter_mode {
-                format!(
-                    "{}",
-                    display_text
-                        .with(string_to_fg_color_or_default(&theme.current_fg))
-                        .on(string_to_bg_color_or_default(&theme.current_bg))
-                )
-            } else {
-                format!("{}", display_text.with(fg_color).on(bg_color))
-            };
-            
-            print_at(0, i - *first_entry + HEADER_SIZE, &formatted_text)?;
-        }
-
-        // Render the scroll bar after list items but before detail window
-        if scrollbar_visible {
-            render_cells_at_column(&scrollbar_cells, COL1_WIDTH - 1, HEADER_SIZE)?;
+        
+        // Set the current selection and first visible item
+        browser.set_selected_item(current_item);
+        browser.first_visible_item = *first_entry;
+        
+        // Ensure selection is visible and bounds are correct
+        browser.ensure_selection_visible();
+        
+        // Update first_entry to match browser's scroll position
+        *first_entry = browser.first_visible_item;
+        
+        // Render the browser component
+        let browser_cells = browser.render(COL1_WIDTH, theme, true);
+        
+        // Render the browser output to the terminal
+        for (row_index, row) in browser_cells.iter().enumerate() {
+            if !row.is_empty() {
+                // Convert Cell array to styled display text
+                let text = cells_to_styled_string(&[row.clone()]);
+                print_at(0, HEADER_SIZE + row_index, &text)?;
+            }
         }
         if !series_selected && !season_selected && !matches!(mode, Mode::Menu) {
             draw_detail_window(

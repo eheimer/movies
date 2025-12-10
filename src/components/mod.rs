@@ -4,9 +4,11 @@ use crate::theme::Theme;
 pub mod episode;
 pub mod category;
 pub mod scrollbar;
+pub mod browser;
 
 pub use category::*;
 pub use scrollbar::Scrollbar;
+pub use browser::Browser;
 
 /// Represents text styling attributes that can be applied to terminal output
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
