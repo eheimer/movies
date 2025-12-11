@@ -27,7 +27,7 @@ impl Episode {
 }
 
 impl Component for Episode {
-    fn render(&self, width: usize, theme: &Theme, is_selected: bool) -> Vec<Vec<Cell>> {
+    fn render(&self, width: usize, _height: usize, theme: &Theme, is_selected: bool) -> Vec<Vec<Cell>> {
         // Handle edge case: width of 0
         if width == 0 {
             return vec![vec![]];
@@ -116,13 +116,6 @@ fn string_to_color(color: &str) -> Option<Color> {
 }
 
 /// Parse a style string into a TextStyle struct
-///
-/// # Arguments
-/// * `style` - Style string: "none", "bold", "italic", "underline", "strikethrough", "dim"
-///            Multiple styles can be combined with commas: "bold,italic"
-///
-/// # Returns
-/// * `TextStyle` - The parsed text style
 fn parse_text_style(style: &str) -> TextStyle {
     if style.is_empty() || style.to_lowercase() == "none" {
         return TextStyle::new();
@@ -148,15 +141,7 @@ fn parse_text_style(style: &str) -> TextStyle {
     text_style
 }
 
-/// Format an episode name with watched indicator and style if applicable
-///
-/// # Arguments
-/// * `name` - The episode name to format
-/// * `is_watched` - Whether the episode has been watched
-/// * `theme` - Theme containing the watched/unwatched indicators and styles
-///
-/// # Returns
-/// * `String` - The formatted episode name with indicator
+/// Format an episode name with watched indicator
 fn format_episode_with_indicator(name: &str, is_watched: bool, theme: &Theme) -> String {
     if is_watched {
         // Add indicator if configured (empty string means no indicator)
@@ -175,14 +160,7 @@ fn format_episode_with_indicator(name: &str, is_watched: bool, theme: &Theme) ->
     }
 }
 
-/// Truncate a string to fit within a specified width, accounting for Unicode characters
-///
-/// # Arguments
-/// * `s` - The string to truncate
-/// * `max_width` - Maximum width in characters
-///
-/// # Returns
-/// * `String` - The truncated string
+/// Truncate a string to fit within a specified width
 fn truncate_string(s: &str, max_width: usize) -> String {
     let char_count = s.chars().count();
     if char_count <= max_width {

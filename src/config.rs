@@ -57,45 +57,22 @@ impl Default for Config {
 
 impl Config {
     /// Get the database path as a PathBuf
-    /// 
-    /// # Returns
-    /// * `Option<PathBuf>` - Database path if configured, None otherwise
     pub fn get_database_path(&self) -> Option<PathBuf> {
         self.db_location.as_ref().map(PathBuf::from)
     }
     
     /// Set the database path and save the config
-    /// 
-    /// # Arguments
-    /// * `path` - Path to the database file
     pub fn set_database_path(&mut self, path: PathBuf) {
         self.db_location = Some(path.to_string_lossy().to_string());
     }
     
     /// Check if this is a first run (no database location configured)
-    /// 
-    /// # Returns
-    /// * `bool` - True if db_location is None
     pub fn is_first_run(&self) -> bool {
         self.db_location.is_none()
     }
 }
 
-/// Read configuration from file
-/// If the config file has missing optional fields, they will be filled with defaults.
-/// 
-/// # Arguments
-/// * `config_path` - Path to the config.yaml file
-/// 
-/// # Returns
-/// * `Config` - Loaded configuration or default if file doesn't exist
-/// 
-/// # Behavior
-/// 1. If config.yaml exists, parse with serde_yaml
-/// 2. If config.yaml missing, create default config.yaml
-/// 3. Handle YAML parsing errors: display error, log warning, fall back to defaults
-/// 4. Unknown fields are ignored (serde default behavior)
-/// 5. Missing optional fields use default values (serde defaults)
+/// Read configuration from file, creating default if missing
 pub fn read_config(config_path: &PathBuf) -> Config {
     if config_path.exists() {
         match fs::read_to_string(config_path) {
@@ -129,12 +106,6 @@ pub fn read_config(config_path: &PathBuf) -> Config {
 }
 
 /// Generate YAML configuration string with inline documentation
-/// 
-/// # Arguments
-/// * `config` - Configuration to serialize
-/// 
-/// # Returns
-/// * `String` - YAML string with inline comments documenting each setting
 pub fn generate_yaml_with_comments(config: &Config) -> String {
     let mut yaml = String::new();
     
@@ -196,10 +167,6 @@ pub fn generate_yaml_with_comments(config: &Config) -> String {
 
 
 /// Save configuration to file
-/// 
-/// # Arguments
-/// * `config` - Configuration to save
-/// * `config_path` - Path to the config.yaml file
 pub fn save_config(config: &Config, config_path: &PathBuf) {
     let yaml_content = generate_yaml_with_comments(config);
     if let Err(e) = fs::write(config_path, yaml_content) {
@@ -210,12 +177,6 @@ pub fn save_config(config: &Config, config_path: &PathBuf) {
 }
 
 /// Parse log level string into LogLevel enum
-/// 
-/// # Arguments
-/// * `level_str` - Log level string (error, warn, info, debug)
-/// 
-/// # Returns
-/// * `crate::logger::LogLevel` - Parsed log level, defaults to Info for invalid values
 pub fn parse_log_level(level_str: &str) -> crate::logger::LogLevel {
     match level_str.to_lowercase().as_str() {
         "error" => crate::logger::LogLevel::Error,

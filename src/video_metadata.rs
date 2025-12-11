@@ -243,17 +243,6 @@ fn extract_avi_duration(file_path: &Path) -> Result<u64, Box<dyn Error>> {
 }
 
 /// Extract duration and update episode length in database
-/// 
-/// # Arguments
-/// * `episode_id` - The ID of the episode to update
-/// * `file_path` - Path to the video file
-/// 
-/// # Returns
-/// * `Result<(), Box<dyn Error>>` - Ok if successful, error otherwise
-/// 
-/// This function extracts the duration from the video file and updates
-/// the episode.length field in the database with the duration in seconds.
-/// If extraction fails, the database is not updated and an error is returned.
 pub fn extract_and_update_episode_length(
     episode_id: usize,
     file_path: &Path,
@@ -298,17 +287,6 @@ pub fn extract_and_update_episode_length(
 }
 
 /// Format duration in seconds as "hh:mm:ss"
-/// 
-/// # Arguments
-/// * `seconds` - Duration in seconds
-/// 
-/// # Returns
-/// * `String` - Formatted duration as "hh:mm:ss"
-/// 
-/// # Examples
-/// * 3661 seconds -> "01:01:01"
-/// * 2730 seconds -> "00:45:30"
-/// * 90000 seconds -> "25:00:00"
 pub fn format_duration_hms(seconds: u64) -> String {
     let hours = seconds / 3600;
     let minutes = (seconds % 3600) / 60;

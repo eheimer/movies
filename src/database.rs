@@ -8,18 +8,6 @@ use std::sync::{Mutex, OnceLock};
 static DB_CONN: OnceLock<Mutex<Connection>> = OnceLock::new();
 
 /// Initialize the database connection and schema
-/// 
-/// # Arguments
-/// * `db_path` - Path to the database file
-/// 
-/// # Returns
-/// * `Result<(), Box<dyn std::error::Error>>` - Ok if successful, error otherwise
-/// 
-/// # Errors
-/// * Returns error if database is already initialized
-/// * Returns error if parent directory cannot be created
-/// * Returns error if database cannot be opened
-/// * Returns error if schema creation fails
 pub fn initialize_database(db_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
     // Create parent directory if it doesn't exist
     if let Some(parent) = db_path.parent() {
@@ -131,12 +119,6 @@ pub fn initialize_database(db_path: &Path) -> Result<(), Box<dyn std::error::Err
 }
 
 /// Get a reference to the database connection
-/// 
-/// # Returns
-/// * `&'static Mutex<Connection>` - Reference to the database connection
-/// 
-/// # Panics
-/// * Panics if database has not been initialized
 pub fn get_connection() -> &'static Mutex<Connection> {
     DB_CONN.get().expect("Database not initialized")
 }
@@ -150,14 +132,6 @@ pub fn episode_exists(location: &str) -> Result<bool> {
 }
 
 /// Import an episode with relative path storage
-/// 
-/// # Arguments
-/// * `absolute_location` - The absolute path to the video file
-/// * `name` - The name of the episode
-/// * `resolver` - PathResolver for converting to relative paths and validation
-/// 
-/// # Returns
-/// * `Result<bool, Box<dyn std::error::Error>>` - Ok(true) if inserted, Ok(false) if already exists, Err on error
 pub fn import_episode_relative(
     absolute_location: &str,
     name: &str,
@@ -320,13 +294,6 @@ pub fn get_entries_for_season(season_id: usize) -> Result<Vec<Entry>> {
 }
 
 /// Get the absolute location of an episode by resolving its relative path
-/// 
-/// # Arguments
-/// * `episode_id` - The ID of the episode
-/// * `resolver` - PathResolver for converting relative paths to absolute
-/// 
-/// # Returns
-/// * `Result<String, Box<dyn std::error::Error>>` - Absolute path as string or error
 pub fn get_episode_absolute_location(
     episode_id: usize,
     resolver: &PathResolver,
@@ -667,15 +634,6 @@ pub fn create_season_and_assign(
 }
 
 /// Get episode counts for a series
-/// 
-/// Counts all episodes across all seasons and standalone episodes within the series.
-/// Treats NULL watched status as unwatched (false).
-/// 
-/// # Arguments
-/// * `series_id` - The series ID
-/// 
-/// # Returns
-/// * `Result<(usize, usize), Box<dyn std::error::Error>>` - (total_episodes, unwatched_episodes) or error
 pub fn get_series_episode_counts(series_id: usize) -> Result<(usize, usize), Box<dyn std::error::Error>> {
     let conn = get_connection().lock().unwrap();
     
@@ -698,15 +656,6 @@ pub fn get_series_episode_counts(series_id: usize) -> Result<(usize, usize), Box
 }
 
 /// Get episode counts for a season
-/// 
-/// Counts only episodes that belong to the specific season.
-/// Treats NULL watched status as unwatched (false).
-/// 
-/// # Arguments
-/// * `season_id` - The season ID
-/// 
-/// # Returns
-/// * `Result<(usize, usize), Box<dyn std::error::Error>>` - (total_episodes, unwatched_episodes) or error
 pub fn get_season_episode_counts(season_id: usize) -> Result<(usize, usize), Box<dyn std::error::Error>> {
     let conn = get_connection().lock().unwrap();
     
@@ -729,19 +678,6 @@ pub fn get_season_episode_counts(season_id: usize) -> Result<(usize, usize), Box
 }
 
 /// Calculate the next available episode number for a series and optional season
-/// 
-/// This function finds the lowest positive integer starting from 1 that is not
-/// currently assigned to any episode within the same series and season combination.
-/// If there are gaps in the sequence (e.g., 1, 2, 4, 5), it returns the first gap (3).
-/// If all sequential numbers are taken, it returns max + 1.
-/// If no episodes exist, it returns 1.
-/// 
-/// # Arguments
-/// * `series_id` - The ID of the series
-/// * `season_number` - Optional season number to scope the query
-/// 
-/// # Returns
-/// * `Result<usize>` - The next available episode number or error
 pub fn get_next_available_episode_number(
     series_id: usize,
     season_number: Option<usize>,
@@ -802,12 +738,6 @@ pub fn get_next_available_episode_number(
 }
 
 /// Get episodes with missing length (NULL or 0)
-/// 
-/// Returns a list of (episode_id, file_path) tuples for episodes that need
-/// duration extraction. This includes episodes where length IS NULL or length = 0.
-/// 
-/// # Returns
-/// * `Result<Vec<(usize, String)>, Box<dyn std::error::Error>>` - List of (episode_id, location) tuples or error
 pub fn get_episodes_with_missing_length() -> Result<Vec<(usize, String)>, Box<dyn std::error::Error>> {
     let conn = get_connection().lock().unwrap();
     

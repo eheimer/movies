@@ -4,10 +4,6 @@ use std::path::PathBuf;
 use crate::logger;
 
 /// Theme struct containing all color and style configuration
-/// 
-/// This struct holds all visual styling options that were previously
-/// stored in the Config struct. It allows for easy theme switching
-/// and separation of visual concerns from application configuration.
 #[derive(Deserialize, Serialize, Clone)]
 #[serde(default)]
 pub struct Theme {
@@ -112,10 +108,6 @@ impl Default for Theme {
 }
 
 /// Load a theme from a YAML file
-/// 
-/// If the file doesn't exist, creates a default theme file and returns the default theme.
-/// If the file exists but contains invalid YAML, logs a warning and returns the default theme.
-/// If the file exists but is missing fields, serde will use default values for those fields.
 pub fn load_theme(theme_path: &PathBuf) -> Theme {
     if !theme_path.exists() {
         logger::log_warn(&format!("Theme file not found at {:?}, creating default theme", theme_path));
@@ -142,9 +134,6 @@ pub fn load_theme(theme_path: &PathBuf) -> Theme {
 }
 
 /// Save a theme to a YAML file with comments
-/// 
-/// Generates a YAML file with inline documentation comments to help users
-/// understand each configuration option.
 pub fn save_theme(theme: &Theme, theme_path: &PathBuf) {
     let yaml_content = generate_theme_yaml_with_comments(theme);
     
@@ -156,9 +145,6 @@ pub fn save_theme(theme: &Theme, theme_path: &PathBuf) {
 }
 
 /// Generate YAML content with inline documentation comments
-/// 
-/// Creates a human-readable YAML file with comments explaining each field,
-/// valid values, and usage examples.
 pub fn generate_theme_yaml_with_comments(theme: &Theme) -> String {
     format!(
         r##"# === Color Configuration ===

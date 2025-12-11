@@ -51,12 +51,6 @@ pub struct PathResolver {
 
 impl PathResolver {
     /// Create a new PathResolver from database location
-    /// 
-    /// # Arguments
-    /// * `db_path` - Path to the videos.sqlite database file
-    /// 
-    /// # Returns
-    /// * `Result<Self, PathResolverError>` - New PathResolver or error
     pub fn from_database_path(db_path: &Path) -> Result<Self, PathResolverError> {
         // Validate database path exists
         if !db_path.exists() {
@@ -100,20 +94,11 @@ impl PathResolver {
 
 
     /// Get the root directory used for path resolution
-    /// 
-    /// # Returns
-    /// * `&Path` - Reference to the root directory
     pub fn get_root_dir(&self) -> &Path {
         &self.root_dir
     }
 
     /// Convert an absolute path to a relative path from the configured root directory
-    /// 
-    /// # Arguments
-    /// * `absolute_path` - The absolute path to convert
-    /// 
-    /// # Returns
-    /// * `Result<PathBuf, PathResolverError>` - Relative path or error
     pub fn to_relative(&self, absolute_path: &Path) -> Result<PathBuf, PathResolverError> {
         crate::logger::log_debug(&format!(
             "PathResolver: Converting absolute path to relative: {}",
@@ -156,12 +141,6 @@ impl PathResolver {
     }
     
     /// Convert a relative path to an absolute path using the configured root directory
-    /// 
-    /// # Arguments
-    /// * `relative_path` - The relative path to convert
-    /// 
-    /// # Returns
-    /// * `PathBuf` - Absolute path
     pub fn to_absolute(&self, relative_path: &Path) -> PathBuf {
         let absolute_path = self.root_dir.join(relative_path);
         crate::logger::log_debug(&format!(
@@ -175,13 +154,6 @@ impl PathResolver {
 
     
     /// Validate that a path is under the configured root directory
-    /// This enforces strict path validation to prevent directory traversal
-    /// 
-    /// # Arguments
-    /// * `path` - The path to validate
-    /// 
-    /// # Returns
-    /// * `Result<(), PathResolverError>` - Ok if valid, error if not under root
     pub fn validate_path_under_root(&self, path: &Path) -> Result<(), PathResolverError> {
         crate::logger::log_debug(&format!(
             "PathResolver: Validating path is under root: {}",

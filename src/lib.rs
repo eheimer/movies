@@ -12,7 +12,6 @@ pub mod logger;
 pub mod menu;
 pub mod path_resolver;
 pub mod paths;
-pub mod scrollbar;
 pub mod splash;
 pub mod terminal;
 pub mod theme;

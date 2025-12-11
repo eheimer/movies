@@ -28,23 +28,9 @@ impl Scrollbar {
 
 impl Component for Scrollbar {
     /// Renders the scrollbar component to a 2D array of Cells
-    ///
-    /// Note: For scrollbars, the `width` parameter is treated as `height` since
-    /// scrollbars are vertical components that span multiple rows but only one column.
-    ///
-    /// # Parameters
-    ///
-    /// * `height` - Height in rows for the scrollbar track (passed as `width` for trait compatibility)
     /// * `theme` - Theme object containing scrollbar colors and characters
-    /// * `is_selected` - Ignored for scrollbars (always rendered the same way)
-    ///
-    /// # Returns
-    ///
-    /// A 2D array of Cells where:
-    /// * The outer Vec represents rows (height of the scrollbar)
-    /// * Each inner Vec contains exactly one Cell (single column)
-    /// * Returns empty Vec if scrollbar is not needed
-    fn render(&self, height: usize, theme: &Theme, _is_selected: bool) -> Vec<Vec<Cell>> {
+    /// * `_is_selected` - Ignored for scrollbars (always rendered the same way)
+    fn render(&self, _width: usize, height: usize, theme: &Theme, _is_selected: bool) -> Vec<Vec<Cell>> {
         // Step 1: Determine visibility - return empty if scrollbar not needed
         if self.total_items <= self.visible_items || self.total_items == 0 || height == 0 {
             return vec![];

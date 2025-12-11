@@ -9,7 +9,6 @@ mod logger;
 mod menu;
 mod path_resolver;
 mod paths;
-mod scrollbar;
 mod splash;
 mod terminal;
 mod theme;
@@ -34,18 +33,7 @@ use theme::Theme;
 use util::{Entry, LastAction, Mode, ViewContext};
 use walkdir::WalkDir;
 
-/// Handle first-run setup flow
-/// 
-/// This function guides the user through initial setup when no database location is configured.
-/// It prompts for a video collection directory, checks for existing database, initializes
-/// the database, and performs an initial scan.
-/// 
-/// # Arguments
-/// * `config` - Mutable reference to configuration
-/// * `config_path` - Path to the config file for saving
-/// 
-/// # Returns
-/// * `io::Result<(Vec<Entry>, PathResolver, String)>` - Loaded entries, PathResolver, and initial status message on success
+/// Handle first-run setup flow for new users
 fn first_run_flow(
     config: &mut Config,
     config_path: &Path,

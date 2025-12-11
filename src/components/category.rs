@@ -39,7 +39,7 @@ impl Category {
 }
 
 impl Component for Category {
-    fn render(&self, width: usize, theme: &Theme, is_selected: bool) -> Vec<Vec<Cell>> {
+    fn render(&self, width: usize, _height: usize, theme: &Theme, is_selected: bool) -> Vec<Vec<Cell>> {
         // Handle edge case: width of 0
         if width == 0 {
             return vec![vec![]];
@@ -123,24 +123,8 @@ impl Component for Category {
     }
 }
 
-/// Format a category string with title, episode count, and watched count
-///
-/// # Arguments
-/// * `title` - The category title (series or season name)
-/// * `episode_count` - Total number of episodes in the category
-/// * `watched_count` - Number of watched episodes
-///
-/// # Returns
-/// * `String` - Formatted string: "Title (X episodes) [Y watched]" or "Title (X episodes)"
-fn format_category_string(title: &str, episode_count: usize, watched_count: usize) -> String {
-    let base = format!("{} ({} episodes)", title, episode_count);
-    
-    if watched_count > 0 {
-        format!("{} [{} watched]", base, watched_count)
-    } else {
-        base
-    }
-}
+
+
 
 /// Convert a color string to a foreground Color, with default fallback
 fn string_to_fg_color_or_default(color: &str) -> Color {
@@ -169,14 +153,7 @@ fn string_to_color(color: &str) -> Option<Color> {
     }
 }
 
-/// Truncate a string to fit within a specified width, accounting for Unicode characters
-///
-/// # Arguments
-/// * `s` - The string to truncate
-/// * `max_width` - Maximum width in characters
-///
-/// # Returns
-/// * `String` - The truncated string
+/// Truncate a string to fit within a specified width
 fn truncate_string(s: &str, max_width: usize) -> String {
     let char_count = s.chars().count();
     if char_count <= max_width {
@@ -187,12 +164,6 @@ fn truncate_string(s: &str, max_width: usize) -> String {
 }
 
 /// Parse a text style string into a TextStyle struct
-///
-/// # Arguments
-/// * `style` - Style string (e.g., "bold", "italic", "bold,italic")
-///
-/// # Returns
-/// * `TextStyle` - The parsed text style
 fn parse_text_style(style: &str) -> TextStyle {
     let mut text_style = TextStyle::new();
     

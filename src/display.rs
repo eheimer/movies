@@ -22,14 +22,6 @@ const DETAIL_HEIGHT: usize = 11;
 const SERIES_WIDTH: usize = 40;
 
 /// Convert Entry objects to Browser component data
-/// 
-/// # Arguments
-/// * `entries` - The entries to convert
-/// * `edit_details` - Episode details for context
-/// * `resolver` - Path resolver for file existence checks
-/// 
-/// # Returns
-/// * `(Vec<Category>, Vec<Episode>)` - Tuple of categories and episodes for Browser component
 fn entries_to_browser_data(
     entries: &[Entry],
     edit_details: &EpisodeDetail,
@@ -135,43 +127,9 @@ pub fn string_to_fg_color_or_default(color: &str) -> Color {
     string_to_color(color).unwrap_or(Color::Black)
 }
 
-/// Apply text style attributes based on style string
-/// 
-/// # Arguments
-/// * `text` - The text to style
-/// * `style` - Style string: "none", "bold", "italic", "underline", "strikethrough", "dim"
-///            Multiple styles can be combined with commas: "bold,italic"
-/// 
-/// # Returns
-/// * `String` - The styled text
-pub fn apply_text_style(text: &str, style: &str) -> String {
-    use crossterm::style::Stylize;
-    
-    if style.is_empty() || style.to_lowercase() == "none" {
-        return text.to_string();
-    }
-    
-    let mut result = text.to_string();
-    
-    // Split by comma to support multiple styles
-    for style_part in style.split(',') {
-        let style_part = style_part.trim().to_lowercase();
-        result = match style_part.as_str() {
-            "bold" => result.bold().to_string(),
-            "italic" => result.italic().to_string(),
-            "underline" | "underlined" => result.underlined().to_string(),
-            "strikethrough" | "crossed_out" => result.crossed_out().to_string(),
-            "dim" => result.dim().to_string(),
-            _ => {
-                // Log warning for unknown style values
-                crate::logger::log_warn(&format!("Invalid style value '{}' ignored. Valid styles: none, bold, italic, underline, strikethrough, dim", style_part));
-                result
-            }
-        };
-    }
-    
-    result
-}
+
+
+
 
 fn draw_header(
     mode: &Mode,
@@ -508,7 +466,6 @@ pub fn draw_screen(
         let mut browser = Browser::new(
             (0, HEADER_SIZE),  // top_left position
             COL1_WIDTH,        // width
-            max_lines,         // height
             categories,
             episodes,
         );
@@ -518,13 +475,13 @@ pub fn draw_screen(
         browser.first_visible_item = *first_entry;
         
         // Ensure selection is visible and bounds are correct
-        browser.ensure_selection_visible();
+        browser.ensure_selection_visible(max_lines);
         
         // Update first_entry to match browser's scroll position
         *first_entry = browser.first_visible_item;
         
         // Render the browser component
-        let browser_cells = browser.render(COL1_WIDTH, theme, true);
+        let browser_cells = browser.render(COL1_WIDTH, max_lines, theme, true);
         
         // Render the browser output to the terminal
         for (row_index, row) in browser_cells.iter().enumerate() {
@@ -788,7 +745,7 @@ fn draw_series_window(
         );
         
         // Render scrollbar to get visibility information
-        let series_scrollbar_cells = series_scrollbar.render(max_visible_series, theme, false);
+        let series_scrollbar_cells = series_scrollbar.render(1, max_visible_series, theme, false);
         let series_scrollbar_visible = !series_scrollbar_cells.is_empty();
         
         // Calculate effective series width (reduce by 1 if scroll bar is visible)
@@ -961,13 +918,6 @@ fn draw_window(
 }
 
 /// Draw the status line at the bottom of the terminal
-/// 
-/// # Arguments
-/// * `message` - The status message to display
-/// * `theme` - Theme containing status line colors
-/// 
-/// # Returns
-/// * `io::Result<()>` - Ok if successful, error otherwise
 fn draw_status_line(message: &str, theme: &Theme) -> io::Result<()> {
     let (cols, rows) = get_terminal_size()?;
     let status_row = rows - 1; // Last row (0-indexed)
@@ -1018,61 +968,15 @@ pub fn get_max_displayed_items() -> io::Result<usize> {
     Ok(max_lines)
 }
 
-/// Format an episode name with watched indicator and style if applicable
-/// 
-/// # Arguments
-/// * `name` - The episode name to format
-/// * `is_watched` - Whether the episode has been watched
-/// * `theme` - Theme containing the watched/unwatched indicators and styles
-/// 
-/// # Returns
-/// * `String` - The formatted episode name with indicator and style
-pub fn format_episode_with_indicator(name: &str, is_watched: bool, theme: &Theme) -> String {
-    if is_watched {
-        // Apply text style to the name
-        let styled_name = apply_text_style(name, &theme.watched_style);
-        
-        // Add indicator if configured (empty string means no indicator)
-        if theme.watched_indicator.is_empty() {
-            styled_name
-        } else {
-            format!("{} {}", theme.watched_indicator, styled_name)
-        }
-    } else {
-        // Apply unwatched text style to the name
-        let styled_name = apply_text_style(name, &theme.unwatched_style);
-        
-        // Add unwatched indicator if configured (empty string means no indicator)
-        if theme.unwatched_indicator.is_empty() {
-            styled_name
-        } else {
-            format!("{} {}", theme.unwatched_indicator, styled_name)
-        }
-    }
-}
+
+
+
 
 /// Convert a 2D Cell array to a String
 /// 
-/// # Arguments
-/// * `cells` - The 2D array of Cells to convert
-/// 
-/// # Returns
-/// * `String` - The string representation of the cells
-fn cells_to_string(cells: &[Vec<crate::components::Cell>]) -> String {
-    cells.iter()
-        .map(|row| row.iter().map(|cell| cell.character).collect::<String>())
-        .collect::<Vec<String>>()
-        .join("\n")
-}
+
 
 /// Convert a 2D array of Cells to a styled string with ANSI codes
-/// Each cell's colors and styles are preserved in the output
-/// 
-/// # Arguments
-/// * `cells` - The 2D array of Cells to convert
-/// 
-/// # Returns
-/// * `String` - The styled string with ANSI escape codes
 fn cells_to_styled_string(cells: &[Vec<crate::components::Cell>]) -> String {
     use crossterm::style::Stylize;
     

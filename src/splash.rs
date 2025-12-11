@@ -34,12 +34,6 @@ pub fn get_ascii_art() -> &'static str {
 }
 
 /// Renders the splash screen with ASCII art and press key prompt
-/// 
-/// # Arguments
-/// * `ascii_art` - The ASCII art to display
-/// * `press_key_prompt` - The prompt to display below the ASCII art
-/// * `terminal_width` - The width of the terminal in characters
-/// * `terminal_height` - The height of the terminal in characters
 pub fn render_splash(
     ascii_art: &str,
     press_key_prompt: &str,
@@ -97,16 +91,6 @@ pub fn render_splash(
 }
 
 /// Displays the splash screen and waits for user input
-/// 
-/// This function clears the terminal, hides the cursor, renders the splash screen
-/// with ASCII art and "Press any key" prompt, then waits for any key press.
-/// 
-/// # Returns
-/// * `Ok(())` if the splash screen was displayed successfully
-/// * `Err` if there was an error with terminal operations
-/// 
-/// # Errors
-/// Returns an error if terminal operations fail (clearing, cursor manipulation, or rendering)
 pub fn show_splash_screen() -> Result<(), Box<dyn std::error::Error>> {
     let mut stdout = io::stdout();
     
