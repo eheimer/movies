@@ -23,7 +23,7 @@ inclusion: always
 
 ## Build System
 
-Standard Cargo: `cargo build`, `cargo run`, `cargo test`
+Standard Cargo: `cargo build`, `cargo run`, `cargo test`, `cargo clippy`
 
 ## Database
 

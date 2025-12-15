@@ -59,6 +59,7 @@ pub enum ViewContext {
     Season { season_id: usize, series_name: String, season_number: usize },
 }
 
+#[derive(Clone)]
 pub enum Mode {
     Browse,       // video browse
     Edit,         // video details edit

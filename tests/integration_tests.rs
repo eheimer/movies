@@ -1548,7 +1548,7 @@ fn test_browser_component_display_integration() {
     
     // Create browser component as display.rs would
     let browser = Browser::new(
-        (0, 5),  // top_left position (matches HEADER_SIZE)
+        (0, 4),  // top_left position (typical header height)
         45,      // width (matches COL1_WIDTH)
         categories,
         episodes,

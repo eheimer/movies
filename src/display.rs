@@ -1,20 +1,21 @@
 use crate::components::{Component, category::{Category, CategoryType}, render_cells_at_column, Scrollbar, Browser};
 use crate::components::episode::Episode;
+use crate::components::header::{Header, HeaderContext};
 use crate::dto::{EpisodeDetail, Series};
 use crate::episode_field::EpisodeField;
-use crate::menu::{MenuItem, MenuContext};
+use crate::menu::MenuItem;
 use crate::terminal::{
     clear_line, clear_screen, get_terminal_size, hide_cursor, move_cursor, print_at, show_cursor,
 };
 use crate::theme::Theme;
-use crate::util::{can_repeat_action, truncate_string, Entry, LastAction, Mode, ViewContext};
+use crate::util::{truncate_string, Entry, LastAction, Mode, ViewContext};
 use crossterm::event::KeyCode;
 use crossterm::style::{Color, Stylize};
 use std::collections::HashSet;
 use std::convert::From;
 use std::io;
 
-const HEADER_SIZE: usize = 5;
+
 const FOOTER_SIZE: usize = 1; // Reserve 1 line for status line at bottom
 const COL1_WIDTH: usize = 45;
 const MIN_COL2_WIDTH: usize = 20;
@@ -131,174 +132,7 @@ pub fn string_to_fg_color_or_default(color: &str) -> Color {
 
 
 
-fn draw_header(
-    mode: &Mode,
-    filter: &String,
-    series_selected: bool,
-    season_selected: bool,
-    series_filter_active: bool,
-    last_action_display: &str,
-    is_dirty: bool,
-    selected_entry: Option<&Entry>,
-    edit_details: &EpisodeDetail,
-    filter_mode: bool,
-    theme: &Theme,
-    last_action: &Option<LastAction>,
-    view_context: &ViewContext,
-    is_first_run: bool,
-) -> io::Result<()> {
-    // Get terminal width for overflow calculation
-    let (terminal_width, _) = get_terminal_size()?;
-    
-    // Start building the header string
-    let mut header = String::new();
-    
-    // 1. Always start with "[F1] Menu, "
-    header.push_str("[F1] Menu, ");
-    
-    // 2. Build hardcoded context-specific helpers based on mode/context
-    let hardcoded_helpers = match mode {
-        Mode::Browse => {
-            // When in filter mode, show simplified menu helpers
-            if filter_mode {
-                "[ENTER] accept, [ESC] cancel".to_string()
-            } else if series_selected {
-                "[/] filter, [\u{2191}]/[\u{2193}] navigate, [ENTER] show episodes, [ESC] exit".to_string()
-            } else if season_selected {
-                "[/] filter, [\u{2191}]/[\u{2193}] navigate, [ENTER] show episodes, [ESC] back".to_string()
-            } else if series_filter_active {
-                "[/] filter, [\u{2191}]/[\u{2193}] navigate, [ENTER] play, [ESC] back".to_string()
-            } else {
-                "[/] filter, [\u{2191}]/[\u{2193}] navigate, [ENTER] play, [ESC] exit".to_string()
-            }
-        }
-        Mode::Edit => {
-            let mut instruction = "[\u{2191}]/[\u{2193}] change field, [ESC] cancel".to_string();
-            if is_dirty {
-                instruction.push_str(", [F2] save");
-            }
-            instruction
-        },
-        Mode::Entry => {
-            // Check if we're in first-run state (no entries and no database)
-            if is_first_run {
-                "Welcome! Enter the path to your video collection directory, [ESC] cancel".to_string()
-            } else {
-                "Enter a file path to scan, [ESC] cancel".to_string()
-            }
-        },
-        Mode::SeriesSelect => {
-            "[\u{2191}]/[\u{2193}] navigate, [ENTER] select, [ESC] cancel, [+] create a new series, [CTRL][-] deselect series".to_string()
-        },
-        Mode::SeriesCreate => "Type a series name, [ENTER] save, [ESC] cancel".to_string(),
-        Mode::Menu => {
-            "[\u{2191}]/[\u{2193}] navigate, [ENTER] select, [ESC] close menu".to_string()
-        },
-    };
-    
-    // Add hardcoded helpers to header
-    header.push_str(&hardcoded_helpers);
-    
-    // 3. Calculate remaining width for FirstLinePreferred items
-    let used_width = header.len();
-    let remaining_width = terminal_width.saturating_sub(used_width);
-    
-    // 4. Get FirstLinePreferred items (only in Browse mode, not in filter mode)
-    if matches!(mode, Mode::Browse) && !filter_mode {
-        let menu_context = MenuContext {
-            selected_entry: selected_entry.cloned(),
-            episode_detail: edit_details.clone(),
-            last_action: last_action.clone(),
-        };
-        
-        let first_line_preferred = crate::menu::get_first_line_preferred_items(&menu_context);
-        
-        // 5. Add FirstLinePreferred items that fit within remaining width
-        let mut available_width = remaining_width;
-        let mut first_item = true;
-        
-        for item in first_line_preferred {
-            let item_width = crate::menu::calculate_menu_helper_width(&item);
-            
-            if item_width <= available_width {
-                // Add separator before each item
-                if first_item {
-                    header.push_str(", ");
-                    available_width = available_width.saturating_sub(2);
-                    first_item = false;
-                }
-                
-                // Format the menu item: "[hotkey] label, "
-                let hotkey_str = format_hotkey(&item.hotkey);
-                let item_str = format!("{} {}, ", hotkey_str, item.label);
-                header.push_str(&item_str);
-                
-                available_width = available_width.saturating_sub(item_width);
-            } else {
-                // Item doesn't fit, stop adding items
-                break;
-            }
-        }
-    }
-    
-    // Remove trailing ", " if present
-    if header.ends_with(", ") {
-        header.truncate(header.len() - 2);
-    }
-    
-    // Clear the header line first (like status line does)
-    clear_line(0)?;
-    
-    // Calculate visual width (accounting for multi-byte UTF-8 characters)
-    // Unicode characters like ↑ (U+2191) are 3 bytes but display as 1 character
-    // Use .chars().count() instead of .len() to get visual width, not byte count
-    let visual_width = header.chars().count();
-    
-    // Pad to terminal width based on visual width, not byte length
-    // Use saturating_sub to prevent underflow when header is longer than terminal
-    let padding_needed = terminal_width.saturating_sub(visual_width);
-    
-    // Add padding spaces
-    for _ in 0..padding_needed {
-        header.push(' ');
-    }
-    
-    // Apply styling and print
-    // Note: The styling adds ANSI codes but they don't affect visual width
-    print_at(0, 0, &header.as_str().with(Color::Black).on(Color::White))?;
 
-    // Print last action display at row 1
-    print_at(0, 1, &last_action_display)?;
-
-    // Print breadcrumbs at row 2 based on view context
-    match view_context {
-        ViewContext::Series { series_name, .. } => {
-            print_at(0, 2, &format!("Browsing [{}]", series_name))?;
-        }
-        ViewContext::Season { series_name, season_number, .. } => {
-            print_at(0, 2, &format!("Browsing [{}] -> [season {}]", series_name, season_number))?;
-        }
-        ViewContext::TopLevel => {
-            // No breadcrumbs at top level
-        }
-    }
-
-    // Show filter line when filter_mode is true OR filter string is not empty
-    if filter_mode || !filter.is_empty() {
-        // Apply highlight to "filter:" label when in filter mode
-        let filter_label = if filter_mode {
-            format!("filter:")
-                .with(string_to_fg_color_or_default(&theme.current_fg))
-                .on(string_to_bg_color_or_default(&theme.current_bg))
-                .to_string()
-        } else {
-            "filter:".to_string()
-        };
-        
-        print_at(0, 3, &format!("{} {}", filter_label, filter))?;
-    }
-    Ok(())
-}
 
 pub fn draw_screen(
     entries: &[Entry],
@@ -336,51 +170,47 @@ pub fn draw_screen(
         && matches!(entries.get(current_item), Some(Entry::Season { .. }));
 
     //series_filter is true if the mode is browse and the current item in entries is an episode and the series field is not empty
-    let series_filter_active = matches!(mode, Mode::Browse)
+    let _series_filter_active = matches!(mode, Mode::Browse)
         && matches!(entries.get(current_item), Some(Entry::Episode { .. }))
         && edit_details.series.is_some();
-
-    // Calculate last_action_display string
-    let last_action_display = if !entries.is_empty() {
-        let selected_entry = entries.get(current_item);
-        if let Some(entry) = selected_entry {
-            if can_repeat_action(last_action, entry, edit_details) {
-                last_action.as_ref().map(|a| a.format_display()).unwrap_or_default()
-            } else {
-                String::new()
-            }
-        } else {
-            String::new()
-        }
-    } else {
-        String::new()
-    };
 
     // Calculate is_dirty from dirty_fields
     let is_dirty = !dirty_fields.is_empty();
 
-    // Extract selected entry for draw_header
+    // Extract selected entry for header
     let selected_entry = entries.get(current_item);
 
     // Determine if we're in first-run state (Entry mode with no entries)
     let is_first_run = matches!(mode, Mode::Entry) && entries.is_empty();
-    
-    draw_header(
-        mode,
-        filter,
-        series_selected,
-        season_selected,
-        series_filter_active,
-        &last_action_display,
-        is_dirty,
-        selected_entry,
-        edit_details,
+
+    // Get terminal width for header
+    let (terminal_width, _) = get_terminal_size()?;
+
+    // Create HeaderContext with all required data
+    let header_context = HeaderContext::new(
+        mode.clone(),
         filter_mode,
-        theme,
-        last_action,
-        view_context,
+        is_dirty,
         is_first_run,
-    )?;
+        terminal_width,
+        selected_entry.cloned(),
+        edit_details.clone(),
+        last_action.clone(),
+        view_context.clone(),
+        filter.clone(),
+        filter_mode, // filter_focused is same as filter_mode for now
+    );
+
+    // Create and render Header component
+    let header = Header::new(&header_context);
+    let header_height = header.calculate_height();
+    let header_cells = header.render(terminal_width, header_height, theme, false);
+
+    // Render header cells to terminal (always render all rows for fixed layout)
+    for (row_index, row) in header_cells.iter().enumerate() {
+        let text = cells_to_styled_string(&[row.clone()]);
+        print_at(0, row_index, &text)?;
+    }
 
     // Handle Entry mode display (both first-run and rescan scenarios)
     if let Mode::Entry = mode {
@@ -388,69 +218,69 @@ pub fn draw_screen(
             // First-run scenario - show welcome message with detailed instructions
             print_at(
                 0,
-                HEADER_SIZE,
+                header_height,
                 &"Welcome to the video library manager!".to_string(),
             )?;
             print_at(
                 0,
-                HEADER_SIZE + 1,
+                header_height + 1,
                 &"".to_string(),
             )?;
             print_at(
                 0,
-                HEADER_SIZE + 2,
+                header_height + 2,
                 &"To get started, enter the full path to your video collection directory below.".to_string(),
             )?;
             print_at(
                 0,
-                HEADER_SIZE + 3,
+                header_height + 3,
                 &"".to_string(),
             )?;
             print_at(
                 0,
-                HEADER_SIZE + 4,
+                header_height + 4,
                 &"What happens next:".to_string(),
             )?;
             print_at(
                 0,
-                HEADER_SIZE + 5,
+                header_height + 5,
                 &"  • If videos.sqlite exists in that directory, it will be used (preserving your data)".to_string(),
             )?;
             print_at(
                 0,
-                HEADER_SIZE + 6,
+                header_height + 6,
                 &"  • If not, a new database will be created and your videos will be scanned".to_string(),
             )?;
             print_at(
                 0,
-                HEADER_SIZE + 7,
+                header_height + 7,
                 &"".to_string(),
             )?;
             print_at(
                 0,
-                HEADER_SIZE + 8,
+                header_height + 8,
                 &format!("Path: {}", entry_path),
             )?;
         } else {
             // Rescan scenario - show simpler prompt
             print_at(
                 0,
-                HEADER_SIZE + 1,
+                header_height + 1,
                 &"Enter the path to a directory to scan for video files.".to_string(),
             )?;
             print_at(
                 0,
-                HEADER_SIZE + 2,
+                header_height + 2,
                 &"".to_string(),
             )?;
             print_at(
                 0,
-                HEADER_SIZE + 3,
+                header_height + 3,
                 &format!("Path: {}", entry_path),
             )?;
         }
     } else if !entries.is_empty() {
-        let max_lines = get_max_displayed_items()?;
+        let max_lines = get_max_displayed_items_with_header_height(header_height)?;
 
         //make sure current_item is between first_entry and first_entry + max_lines.  If it's not, adjust first_entry
         if current_item < *first_entry {
@@ -464,7 +294,7 @@ pub fn draw_screen(
         
         // Create Browser component
         let mut browser = Browser::new(
-            (0, HEADER_SIZE),  // top_left position
+            (0, header_height),  // top_left position
             COL1_WIDTH,        // width
             categories,
             episodes,
@@ -488,7 +318,7 @@ pub fn draw_screen(
             if !row.is_empty() {
                 // Convert Cell array to styled display text
                 let text = cells_to_styled_string(&[row.clone()]);
-                print_at(0, HEADER_SIZE + row_index, &text)?;
+                print_at(0, header_height + row_index, &text)?;
             }
         }
         if !series_selected && !season_selected && !matches!(mode, Mode::Menu) {
@@ -501,10 +331,11 @@ pub fn draw_screen(
                 season_number,
                 dirty_fields,
                 theme,
+                header_height,
             )?;
         }
         if let Mode::SeriesSelect | Mode::SeriesCreate = mode {
-            draw_series_window(mode, series, new_series, series_selection, theme, first_series)?;
+            draw_series_window(mode, series, new_series, series_selection, theme, first_series, header_height)?;
         }
     }
 
@@ -520,14 +351,14 @@ pub fn draw_screen(
     // This must be done AFTER all other drawing to ensure cursor is in the right place
     if filter_mode && matches!(mode, Mode::Browse) {
         show_cursor()?;
-        move_cursor(8 + edit_cursor_pos, 3)?; // "filter: " is 8 chars, row 3 is filter line
+        move_cursor(8 + edit_cursor_pos, 2)?; // "filter: " is 8 chars, row 2 is filter line
     } else if matches!(mode, Mode::Edit) && !entries.is_empty() {
         // In Edit mode, reposition the cursor to the edit field
         // The cursor was already shown and positioned in draw_detail_window,
         // but we need to ensure it stays visible after drawing the status line
         show_cursor()?;
         let start_col: usize = COL1_WIDTH + 2;
-        let start_row = HEADER_SIZE;
+        let start_row = header_height;
         let edit_cursor_min = if edit_field.is_editable() {
             edit_field.display_name().len() + 2
         } else {
@@ -551,9 +382,10 @@ fn draw_detail_window(
     season_number: Option<usize>,
     dirty_fields: &HashSet<EpisodeField>,
     theme: &Theme,
+    header_height: usize,
 ) -> io::Result<()> {
     let start_col: usize = COL1_WIDTH + 2;
-    let start_row = HEADER_SIZE;
+    let start_row = header_height;
     let sidebar_width = get_sidebar_width()?;
     let edit_mode = matches!(mode, Mode::Edit);
 
@@ -669,9 +501,10 @@ fn draw_series_window(
     series_selection: &mut Option<usize>,
     theme: &Theme,
     first_series: &mut usize,
+    header_height: usize,
 ) -> io::Result<()> {
     let start_col = COL1_WIDTH + 2;
-    let start_row = HEADER_SIZE + DETAIL_HEIGHT;
+    let start_row = header_height + DETAIL_HEIGHT;
     let sidebar_width = get_sidebar_width()?;
     let series_window_width = SERIES_WIDTH + 2;
 
@@ -962,11 +795,13 @@ fn draw_status_line(message: &str, theme: &Theme) -> io::Result<()> {
 
 
 
-pub fn get_max_displayed_items() -> io::Result<usize> {
+pub fn get_max_displayed_items_with_header_height(header_height: usize) -> io::Result<usize> {
     let (_, rows) = get_terminal_size()?;
-    let max_lines = rows - HEADER_SIZE - FOOTER_SIZE - 1; // Adjust for header and footer lines
+    let max_lines = rows - header_height - FOOTER_SIZE - 1; // Adjust for header and footer lines
     Ok(max_lines)
 }
+
+
 
 
 

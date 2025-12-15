@@ -17,7 +17,7 @@ use crate::menu::{MenuAction, MenuItem};
 use crate::path_resolver::PathResolver;
 use crate::util::{run_video_player, Entry, Mode, ViewContext};
 use crate::video_metadata;
-use display::get_max_displayed_items;
+use display::get_max_displayed_items_with_header_height;
 
 pub fn handle_entry_mode(
     code: KeyCode,
@@ -665,7 +665,8 @@ pub fn handle_browse_mode(
             }
         }
         KeyCode::PageUp if !*filter_mode => {
-            let max_lines = get_max_displayed_items()?;
+            // Use fixed header height for PageUp/PageDown
+            let max_lines = get_max_displayed_items_with_header_height(4)?;
             if *current_item > *first_entry {
                 *current_item = *first_entry;
             } else {
@@ -674,7 +675,8 @@ pub fn handle_browse_mode(
             *redraw = true;
         }
         KeyCode::PageDown if !*filter_mode => {
-            let max_lines = get_max_displayed_items()?;
+            // Use fixed header height for PageUp/PageDown
+            let max_lines = get_max_displayed_items_with_header_height(4)?;
             if *current_item < *first_entry + max_lines - 1 {
                 *current_item = *first_entry + max_lines - 1;
             } else {

@@ -5,10 +5,12 @@ pub mod episode;
 pub mod category;
 pub mod scrollbar;
 pub mod browser;
+pub mod header;
 
 pub use category::*;
 pub use scrollbar::Scrollbar;
 pub use browser::Browser;
+pub use header::{Header, HeaderContext, HotkeyHelper, LastActionLine, Breadcrumbs, FilterLine};
 
 /// Represents text styling attributes that can be applied to terminal output
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
