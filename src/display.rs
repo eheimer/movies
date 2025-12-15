@@ -1,4 +1,4 @@
-use crate::components::{Component, category::{Category, CategoryType}, render_cells_at_column, Scrollbar, Browser, DetailPanel, StatusBar};
+use crate::components::{Component, category::{Category, CategoryType}, render_cells_at_column, Scrollbar, Browser, DetailPanel, StatusBar, ContextMenu};
 use crate::components::episode::Episode;
 use crate::components::header::{Header, HeaderContext};
 use crate::dto::{EpisodeDetail, Series};
@@ -9,7 +9,7 @@ use crate::terminal::{
 };
 use crate::theme::Theme;
 use crate::util::{truncate_string, Entry, LastAction, Mode, ViewContext};
-use crossterm::event::KeyCode;
+
 use crossterm::style::{Color, Stylize};
 use std::collections::HashSet;
 use std::convert::From;
@@ -391,7 +391,29 @@ pub fn draw_screen(
 
     // Draw context menu if in Menu mode
     if let Mode::Menu = mode {
-        draw_context_menu(menu_items, menu_selection, theme)?;
+        // Create ContextMenu component
+        let context_menu = ContextMenu::new(menu_items.to_vec(), menu_selection);
+        
+        // Calculate menu position (right-justified, at first row)
+        let (terminal_width, terminal_height) = get_terminal_size()?;
+        
+        // Render the context menu component
+        let menu_cells = context_menu.render(terminal_width, terminal_height, theme, false);
+        
+        // Calculate menu dimensions for positioning
+        let menu_width = menu_cells.first().map(|row| row.len()).unwrap_or(0);
+        
+        // Position menu at top-right (right-justified, at first row)
+        let start_col = terminal_width.saturating_sub(menu_width);
+        let start_row = 0;
+        
+        // Render the menu cells to terminal
+        for (row_index, row) in menu_cells.iter().enumerate() {
+            if !row.is_empty() {
+                let text = cells_to_styled_string(&[row.clone()]);
+                print_at(start_col, start_row + row_index, &text)?;
+            }
+        }
     }
 
     // Draw status line at the bottom using StatusBar component
@@ -580,77 +602,9 @@ fn draw_series_window(
     Ok(())
 }
 
-fn draw_context_menu(
-    menu_items: &[MenuItem],
-    selected_index: usize,
-    theme: &Theme,
-) -> io::Result<()> {
-    if menu_items.is_empty() {
-        return Ok(());
-    }
 
-    // Calculate menu dimensions - need to account for label + spacing + hotkey
-    let max_label_width = menu_items
-        .iter()
-        .map(|item| item.label.len())
-        .max()
-        .unwrap_or(20);
-    
-    let max_hotkey_width = menu_items
-        .iter()
-        .map(|item| format_hotkey(&item.hotkey).len())
-        .max()
-        .unwrap_or(5);
-    
-    // Width = left padding + label + spacing + hotkey + right padding
-    let menu_width = 2 + max_label_width + 2 + max_hotkey_width + 2;
-    let menu_height = menu_items.len() + 2; // Add 2 for top and bottom borders
 
-    // Calculate menu position (right-justified, at first row)
-    let (terminal_width, _) = get_terminal_size()?;
-    let start_col = terminal_width.saturating_sub(menu_width);
-    let start_row = 0;
 
-    // Draw the menu window with double-line border
-    draw_window(start_col, start_row, menu_width, menu_height, true)?;
-
-    // Draw each menu item with left-justified label and right-justified hotkey
-    for (i, item) in menu_items.iter().enumerate() {
-        let hotkey_str = format_hotkey(&item.hotkey);
-        // Use saturating_sub to prevent underflow when menu is very narrow
-        let content_width = menu_width.saturating_sub(2); // Subtract borders
-        
-        // Create the display text with label left-justified and hotkey right-justified
-        let spacing = content_width.saturating_sub(item.label.len() + hotkey_str.len());
-        let display_text = format!("{}{}{}", item.label, " ".repeat(spacing), hotkey_str);
-        
-        let formatted_text = if i == selected_index {
-            // Highlight the selected item
-            format!(
-                "{}",
-                display_text
-                    .with(string_to_fg_color_or_default(&theme.current_fg))
-                    .on(string_to_bg_color_or_default(&theme.current_bg))
-            )
-        } else {
-            display_text
-        };
-
-        print_at(start_col + 1, start_row + 1 + i, &formatted_text)?;
-    }
-
-    Ok(())
-}
-
-fn format_hotkey(hotkey: &Option<KeyCode>) -> String {
-    match hotkey {
-        Some(KeyCode::F(n)) => format!("[F{}]", n),
-        Some(KeyCode::Char(c)) => format!("[{}]", c.to_uppercase()),
-        Some(KeyCode::Enter) => "[ENTER]".to_string(),
-        Some(KeyCode::Esc) => "[ESC]".to_string(),
-        _ => "".to_string(),
-    }
-}
 
 fn draw_window(
     left: usize,
