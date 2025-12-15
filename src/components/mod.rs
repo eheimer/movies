@@ -6,11 +6,17 @@ pub mod category;
 pub mod scrollbar;
 pub mod browser;
 pub mod header;
+pub mod detail_panel;
+pub mod metadata_display;
+pub mod episode_editor;
 
 pub use category::*;
 pub use scrollbar::Scrollbar;
 pub use browser::Browser;
 pub use header::{Header, HeaderContext, HotkeyHelper, LastActionLine, Breadcrumbs, FilterLine};
+pub use detail_panel::DetailPanel;
+pub use metadata_display::MetadataDisplay;
+pub use episode_editor::EpisodeEditor;
 
 /// Represents text styling attributes that can be applied to terminal output
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

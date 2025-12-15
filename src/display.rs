@@ -1,4 +1,4 @@
-use crate::components::{Component, category::{Category, CategoryType}, render_cells_at_column, Scrollbar, Browser};
+use crate::components::{Component, category::{Category, CategoryType}, render_cells_at_column, Scrollbar, Browser, DetailPanel};
 use crate::components::episode::Episode;
 use crate::components::header::{Header, HeaderContext};
 use crate::dto::{EpisodeDetail, Series};
@@ -322,17 +322,67 @@ pub fn draw_screen(
             }
         }
         if !series_selected && !season_selected && !matches!(mode, Mode::Menu) {
-            draw_detail_window(
-                &entries[current_item],
-                mode,
-                edit_details,
+            // Extract location from current entry
+            let entry_location = match &entries[current_item] {
+                Entry::Episode { location, .. } => location.clone(),
+                _ => String::new(),
+            };
+            
+            // Calculate detail panel position and dimensions
+            let start_col: usize = COL1_WIDTH + 2;
+            let start_row = header_height;
+            let sidebar_width = get_sidebar_width()?;
+            let edit_mode = matches!(mode, Mode::Edit);
+            
+            // Show or hide the cursor based on edit_mode
+            if edit_mode {
+                show_cursor()?;
+            }
+            
+            // Draw the window border
+            draw_window(
+                start_col,
+                start_row,
+                sidebar_width,
+                DETAIL_HEIGHT,
+                edit_mode,
+            )?;
+            
+            // Create and render DetailPanel component
+            let detail_panel = DetailPanel::new(
+                mode.clone(),
+                edit_details.clone(),
                 edit_field,
                 edit_cursor_pos,
                 season_number,
-                dirty_fields,
-                theme,
-                header_height,
-            )?;
+                dirty_fields.clone(),
+                entry_location,
+            );
+            
+            // Calculate content area (inside the border)
+            let content_width = sidebar_width.saturating_sub(2); // Subtract left and right borders
+            let content_height = DETAIL_HEIGHT.saturating_sub(2); // Subtract top and bottom borders
+            
+            // Render the DetailPanel component
+            let detail_cells = detail_panel.render(content_width, content_height, theme, false);
+            
+            // Render the detail panel output to the terminal (inside the border)
+            for (row_index, row) in detail_cells.iter().enumerate() {
+                if !row.is_empty() && row_index < content_height {
+                    // Convert Cell array to styled display text
+                    let text = cells_to_styled_string(&[row.clone()]);
+                    print_at(start_col + 1, start_row + 1 + row_index, &text)?;
+                }
+            }
+            
+            // Position cursor for Edit mode
+            if edit_mode && edit_field.is_editable() {
+                let edit_cursor_min = edit_field.display_name().len() + 2;
+                move_cursor(
+                    start_col + 1 + edit_cursor_min + edit_cursor_pos,
+                    start_row + 1 + usize::from(edit_field),
+                )?;
+            }
         }
         if let Mode::SeriesSelect | Mode::SeriesCreate = mode {
             draw_series_window(mode, series, new_series, series_selection, theme, first_series, header_height)?;
@@ -354,7 +404,7 @@ pub fn draw_screen(
         move_cursor(8 + edit_cursor_pos, 2)?; // "filter: " is 8 chars, row 2 is filter line
     } else if matches!(mode, Mode::Edit) && !entries.is_empty() {
         // In Edit mode, reposition the cursor to the edit field
-        // The cursor was already shown and positioned in draw_detail_window,
+        // The cursor was already shown and positioned in the DetailPanel rendering,
         // but we need to ensure it stays visible after drawing the status line
         show_cursor()?;
         let start_col: usize = COL1_WIDTH + 2;
@@ -373,126 +423,7 @@ pub fn draw_screen(
     Ok(())
 }
 
-fn draw_detail_window(
-    entry: &Entry,
-    mode: &Mode,
-    edit_details: &EpisodeDetail,
-    edit_field: EpisodeField,
-    edit_cursor_pos: usize,
-    season_number: Option<usize>,
-    dirty_fields: &HashSet<EpisodeField>,
-    theme: &Theme,
-    header_height: usize,
-) -> io::Result<()> {
-    let start_col: usize = COL1_WIDTH + 2;
-    let start_row = header_height;
-    let sidebar_width = get_sidebar_width()?;
-    let edit_mode = matches!(mode, Mode::Edit);
 
-    // Show or hide the cursor based on edit_mode
-    if edit_mode {
-        show_cursor()?;
-    }
-
-    draw_window(
-        start_col,
-        start_row,
-        sidebar_width,
-        DETAIL_HEIGHT,
-        edit_mode,
-    )?;
-
-    // Extract path and filename from location
-    let location = match entry {
-        Entry::Episode { location, .. } => location,
-        _ => "",
-    };
-    let path = location.rsplit_once('/').map(|x| x.0).unwrap_or("");
-    let filename = location.rsplit('/').next().unwrap_or("");
-
-    let mut edit_cursor_min: usize = 0;
-    if edit_mode && edit_field.is_editable() {
-        edit_cursor_min = edit_field.display_name().len() + 2;
-    }
-
-    for i in 0..=8 {
-        let field = EpisodeField::from(i);
-        let value: String = if field == EpisodeField::Path {
-            path.to_string()
-        } else if field == EpisodeField::Filename {
-            filename.to_string()
-        } else if field == EpisodeField::Season {
-            if edit_mode {
-                match season_number {
-                    Some(num) => num.to_string(),
-                    None => String::new(),
-                }
-            } else if let Some(season) = &edit_details.season {
-                season.number.to_string()
-            } else {
-                String::new()
-            }
-        } else {
-            let field_value = field.get_field_value(edit_details);
-            if field_value.is_empty() {
-                String::new()
-            } else {
-                field_value
-            }
-        };
-
-        // Build the line without colors first
-        let field_name = format!("{}:", field.display_name());
-        let line = format!("{} {}", field_name, value);
-        
-        // Truncate the plain text line
-        // Use saturating_sub to prevent underflow when sidebar is very narrow
-        let max_width = if edit_mode && edit_field.is_editable() {
-            sidebar_width.saturating_sub(4)
-        } else {
-            sidebar_width.saturating_sub(2)
-        };
-        
-        let truncated_line = truncate_string(&line, max_width);
-        
-        // Apply dirty colors to ONLY the field name if field is dirty
-        let display_line = if edit_mode && dirty_fields.contains(&field) {
-            // Color only the field name part
-            let colored_field_name = format!("{}:", field.display_name())
-                .with(string_to_fg_color_or_default(&theme.dirty_fg))
-                .on(string_to_bg_color_or_default(&theme.dirty_bg))
-                .to_string();
-            
-            // Extract the value part from the truncated line (everything after "field_name: ")
-            // Use char_indices to safely find the split point
-            let field_name_len = field_name.chars().count();
-            let remainder: String = truncated_line.chars().skip(field_name_len).collect();
-            
-            if !remainder.is_empty() {
-                format!("{}{}", colored_field_name, remainder)
-            } else {
-                colored_field_name
-            }
-        } else {
-            truncated_line
-        };
-        
-        print_at(
-            start_col + 1,
-            start_row + 1 + i,
-            &display_line,
-        )?;
-    }
-    // Put the cursor at the end of the current edit_field line
-    if edit_mode {
-        move_cursor(
-            start_col + 1 + edit_cursor_min + edit_cursor_pos,
-            start_row + 1 + usize::from(edit_field),
-        )?;
-    }
-
-    Ok(())
-}
 
 fn draw_series_window(
     mode: &Mode,

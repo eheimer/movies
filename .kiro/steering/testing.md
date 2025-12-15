@@ -11,3 +11,12 @@
 
 - Keep tests minimal and focused on core functionality
 - Avoid excessive edge case testing
+- Do not include "Correctness Properties" or detailed "Test Cases" sections in design documents
+- Focus on essential functionality testing only
+
+## Spec Design Approach
+
+- Design documents should focus on architecture, components, and interfaces
+- Avoid detailed test case specifications in design documents
+- Keep testing strategy sections brief and high-level
+- Emphasize practical implementation over theoretical correctness
