@@ -9,6 +9,7 @@ pub mod header;
 pub mod detail_panel;
 pub mod metadata_display;
 pub mod episode_editor;
+pub mod status_bar;
 
 pub use category::*;
 pub use scrollbar::Scrollbar;
@@ -17,6 +18,7 @@ pub use header::{Header, HeaderContext, HotkeyHelper, LastActionLine, Breadcrumb
 pub use detail_panel::DetailPanel;
 pub use metadata_display::MetadataDisplay;
 pub use episode_editor::EpisodeEditor;
+pub use status_bar::StatusBar;
 
 /// Represents text styling attributes that can be applied to terminal output
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

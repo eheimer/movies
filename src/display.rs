@@ -1,4 +1,4 @@
-use crate::components::{Component, category::{Category, CategoryType}, render_cells_at_column, Scrollbar, Browser, DetailPanel};
+use crate::components::{Component, category::{Category, CategoryType}, render_cells_at_column, Scrollbar, Browser, DetailPanel, StatusBar};
 use crate::components::episode::Episode;
 use crate::components::header::{Header, HeaderContext};
 use crate::dto::{EpisodeDetail, Series};
@@ -394,8 +394,22 @@ pub fn draw_screen(
         draw_context_menu(menu_items, menu_selection, theme)?;
     }
 
-    // Draw status line at the bottom
-    draw_status_line(status_message, theme)?;
+    // Draw status line at the bottom using StatusBar component
+    let (terminal_width, terminal_height) = get_terminal_size()?;
+    let status_row = terminal_height - 1; // Last row (0-indexed)
+    
+    // Clear the status line
+    clear_line(status_row)?;
+    
+    // Create and render StatusBar component
+    let status_bar = StatusBar::new(status_message.to_string());
+    let status_cells = status_bar.render(terminal_width, 1, theme, false);
+    
+    // Render the status bar to terminal
+    if let Some(status_row_cells) = status_cells.first() {
+        let text = cells_to_styled_string(&[status_row_cells.clone()]);
+        print_at(0, status_row, &text)?;
+    }
 
     // Position cursor when in filter mode or edit mode
     // This must be done AFTER all other drawing to ensure cursor is in the right place
@@ -681,48 +695,7 @@ fn draw_window(
     Ok(())
 }
 
-/// Draw the status line at the bottom of the terminal
-fn draw_status_line(message: &str, theme: &Theme) -> io::Result<()> {
-    let (cols, rows) = get_terminal_size()?;
-    let status_row = rows - 1; // Last row (0-indexed)
-    
-    // Clear the status line
-    clear_line(status_row)?;
-    
-    // Get status line colors from theme
-    let status_fg = string_to_fg_color_or_default(&theme.status_fg);
-    let status_bg = string_to_bg_color_or_default(&theme.status_bg);
-    
-    // Calculate visual width (accounting for multi-byte UTF-8 characters)
-    // Use .chars().count() instead of .len() to get visual width, not byte count
-    let visual_width = message.chars().count();
-    
-    // Truncate if message is too long (based on visual width)
-    let mut padded_message = if visual_width > cols {
-        message.chars().take(cols).collect::<String>()
-    } else {
-        message.to_string()
-    };
-    
-    // Pad to terminal width based on visual width
-    // Use saturating_sub to prevent underflow when message is longer than terminal
-    let current_visual_width = padded_message.chars().count();
-    let padding_needed = cols.saturating_sub(current_visual_width);
-    
-    // Add padding spaces
-    for _ in 0..padding_needed {
-        padded_message.push(' ');
-    }
-    
-    // Display the padded message with configured colors
-    let formatted_line = format!(
-        "{}",
-        padded_message.with(status_fg).on(status_bg)
-    );
-    print_at(0, status_row, &formatted_line)?;
-    
-    Ok(())
-}
+
 
 
 

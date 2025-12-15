@@ -8,6 +8,10 @@ use crossterm::{
 use std::io::{self, stdout, Write};
 
 pub fn initialize_terminal() -> io::Result<()> {
+    // Request terminal resize before entering alternate screen
+    // Target size: 30 rows x 110 columns
+    request_terminal_resize(30, 110)?;
+    
     let mut stdout = stdout();
     stdout.execute(terminal::EnterAlternateScreen)?;
     terminal::enable_raw_mode()?;
@@ -71,5 +75,26 @@ pub fn print_at(col: usize, row: usize, text: &dyn std::fmt::Display) -> io::Res
 pub fn flush_stdout() -> io::Result<()> {
     let mut stdout = stdout();
     stdout.flush()?;
+    Ok(())
+}
+
+/// Request terminal resize to specified dimensions if current size is smaller
+/// Uses ANSI escape sequence that may not work on all terminals - fails silently
+pub fn request_terminal_resize(target_rows: u16, target_cols: u16) -> io::Result<()> {
+    // Get current terminal size
+    let (current_cols, current_rows) = size()?;
+    
+    // Only resize if current terminal is smaller than target in either dimension
+    if current_rows < target_rows || current_cols < target_cols {
+        // Use the larger of current or target for each dimension
+        let new_rows = current_rows.max(target_rows);
+        let new_cols = current_cols.max(target_cols);
+        
+        // Send ANSI escape sequence to request terminal resize
+        // Format: \x1b[8;{rows};{cols}t
+        print!("\x1b[8;{};{}t", new_rows, new_cols);
+        flush_stdout()?;
+    }
+    
     Ok(())
 }
