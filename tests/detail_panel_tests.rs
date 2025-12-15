@@ -1,4 +1,6 @@
-use movies::components::{DetailPanel, MetadataDisplay, EpisodeEditor, Component};
+use movies::components::episode_editor::EpisodeEditor;
+use movies::components::metadata_display::MetadataDisplay;
+use movies::components::{DetailPanel, Component};
 use movies::dto::{EpisodeDetail, Series, Season};
 use movies::episode_field::EpisodeField;
 use movies::theme::Theme;
