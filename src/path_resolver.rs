@@ -182,9 +182,7 @@ impl PathResolver {
                     "Path validation failed: {} contains parent directory reference",
                     path.display()
                 ));
-                crate::logger::log_debug(&format!(
-                    "PathResolver: Detected parent directory reference in path components"
-                ));
+                crate::logger::log_debug("PathResolver: Detected parent directory reference in path components");
                 return Err(PathResolverError::InvalidRelativePath(
                     format!("Path contains parent directory reference: {}", path.display())
                 ));

@@ -10,7 +10,6 @@ pub struct SeriesSelector {
     selected_index: Option<usize>,
     first_visible_index: usize,
     visible_items: usize,
-    effective_width: usize,
 }
 
 impl SeriesSelector {
@@ -20,36 +19,16 @@ impl SeriesSelector {
         selected_index: Option<usize>,
         first_visible_index: usize,
         visible_items: usize,
-        effective_width: usize,
     ) -> Self {
         Self {
             series_list,
             selected_index,
             first_visible_index,
             visible_items,
-            effective_width,
         }
     }
     
-    /// Check if a scrollbar is needed for the series list
-    fn needs_scrollbar(&self) -> bool {
-        self.series_list.len() > self.visible_items
-    }
-    
-    /// Format a series item with numbered label "[N] Series Name"
-    fn format_series_item(&self, index: usize, series: &Series) -> String {
-        let label = format!("[{}] {}", index + 1, series.name);
-        truncate_string(&label, self.effective_width)
-    }
-    
-    /// Calculate effective width when scrollbar is visible
-    fn calculate_effective_width(&self, total_width: usize) -> usize {
-        if self.needs_scrollbar() {
-            total_width.saturating_sub(1) // Reserve 1 column for scrollbar
-        } else {
-            total_width
-        }
-    }
+
     
     /// Create scrollbar component for viewport management
     fn create_scrollbar(&self) -> Scrollbar {
@@ -60,19 +39,7 @@ impl SeriesSelector {
         )
     }
     
-    /// Update viewport to keep selected item visible
-    pub fn update_viewport_for_selection(&mut self) {
-        if let Some(selected) = self.selected_index {
-            // If selection is above visible area, scroll up
-            if selected < self.first_visible_index {
-                self.first_visible_index = selected;
-            }
-            // If selection is below visible area, scroll down
-            else if selected >= self.first_visible_index + self.visible_items {
-                self.first_visible_index = selected.saturating_sub(self.visible_items - 1);
-            }
-        }
-    }
+
 }
 
 impl Component for SeriesSelector {

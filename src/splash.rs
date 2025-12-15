@@ -1,5 +1,4 @@
-/// ASCII splash screen module for the movies application
-
+//! ASCII splash screen module for the movies application
 use crossterm::{
     cursor,
     event::{self, Event},

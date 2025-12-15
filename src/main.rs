@@ -135,7 +135,7 @@ fn first_run_flow(
                                     _ => {}
                                 }
                                 
-                                return Err(io::Error::new(io::ErrorKind::Other, error_msg));
+                                return Err(io::Error::other(error_msg));
                             }
                         };
                         
@@ -149,7 +149,7 @@ fn first_run_flow(
                                 e.path()
                                     .extension()
                                     .and_then(|ext| ext.to_str())
-                                    .map_or(false, |ext| {
+                                    .is_some_and(|ext| {
                                         config.video_extensions.contains(&ext.to_lowercase())
                                     })
                             })
@@ -543,12 +543,11 @@ fn main_loop(mut entries: Vec<Entry>, mut config: Config, theme: Theme, mut reso
                 }
 
                 // Clear dirty state when exiting EDIT mode
-                if !matches!(mode, Mode::Edit) {
-                    if original_edit_details.is_some() {
+                if !matches!(mode, Mode::Edit)
+                    && original_edit_details.is_some() {
                         original_edit_details = None;
                         dirty_fields.clear();
                     }
-                }
             }
         }
     }
@@ -626,7 +625,7 @@ fn main() -> io::Result<()> {
         // Now start the main loop with the configured database
         initialize_terminal()?;
         splash::show_splash_screen()
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+            .map_err(|e| io::Error::other(e.to_string()))?;
         terminal::clear_screen()?;
         let result = main_loop(entries, config, theme, Some(resolver), app_paths.config_file.clone(), initial_status);
         restore_terminal()?;
@@ -723,7 +722,7 @@ fn main() -> io::Result<()> {
     // Start main loop
     initialize_terminal()?;
     splash::show_splash_screen()
-        .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+        .map_err(|e| io::Error::other(e.to_string()))?;
     terminal::clear_screen()?;
     let result = main_loop(entries, config, theme, Some(resolver), app_paths.config_file, initial_status);
     restore_terminal()?;

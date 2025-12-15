@@ -25,7 +25,6 @@ fn test_metadata_display_creation() {
 
     let metadata_display = MetadataDisplay::new(
         episode_details,
-        Some(1),
         "/path/to/test/episode.mp4".to_string(),
     );
 
@@ -52,7 +51,6 @@ fn test_metadata_display_path_extraction() {
 
     let metadata_display = MetadataDisplay::new(
         episode_details,
-        None,
         "/home/user/videos/series/season1/episode.mp4".to_string(),
     );
 
@@ -78,7 +76,6 @@ fn test_metadata_display_empty_fields() {
 
     let metadata_display = MetadataDisplay::new(
         episode_details,
-        None,
         "episode.mp4".to_string(),
     );
 

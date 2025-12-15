@@ -10,7 +10,7 @@ use crate::terminal::{
 use crate::theme::Theme;
 use crate::util::{Entry, LastAction, Mode, ViewContext};
 
-use crossterm::style::Color;
+
 use std::collections::HashSet;
 use std::convert::From;
 use std::io;
@@ -20,7 +20,6 @@ const FOOTER_SIZE: usize = 1; // Reserve 1 line for status line at bottom
 const COL1_WIDTH: usize = 45;
 const MIN_COL2_WIDTH: usize = 20;
 const DETAIL_HEIGHT: usize = 11;
-const SERIES_WIDTH: usize = 40;
 
 /// Convert Entry objects to Browser component data
 fn entries_to_browser_data(
@@ -149,29 +148,7 @@ fn draw_detail_panel_border(
 
 
 
-pub fn string_to_color(color: &str) -> Option<Color> {
-    match color.to_lowercase().as_str() {
-        "black" => Some(Color::Black),
-        "red" => Some(Color::Red),
-        "green" => Some(Color::Green),
-        "yellow" => Some(Color::Yellow),
-        "blue" => Some(Color::Blue),
-        "magenta" => Some(Color::Magenta),
-        "cyan" => Some(Color::Cyan),
-        "white" => Some(Color::White),
-        "darkgray" | "dark_gray" => Some(Color::DarkGrey),
-        "reset" => Some(Color::Reset),
-        _ => None,
-    }
-}
 
-pub fn string_to_bg_color_or_default(color: &str) -> Color {
-    string_to_color(color).unwrap_or(Color::White)
-}
-
-pub fn string_to_fg_color_or_default(color: &str) -> Color {
-    string_to_color(color).unwrap_or(Color::Black)
-}
 
 
 
@@ -183,16 +160,16 @@ pub fn draw_screen(
     entries: &[Entry],
     current_item: usize,
     first_entry: &mut usize,
-    filter: &String,
+    filter: &str,
     theme: &Theme,
     mode: &Mode,
     entry_path: &String,
     edit_details: &EpisodeDetail,
     edit_field: EpisodeField,
     edit_cursor_pos: usize,
-    series: &Vec<Series>,
+    series: &[Series],
     series_selection: &mut Option<usize>,
-    new_series: &String,
+    new_series: &str,
     season_number: Option<usize>,
     last_action: &Option<LastAction>,
     dirty_fields: &HashSet<EpisodeField>,
@@ -242,7 +219,7 @@ pub fn draw_screen(
         edit_details.clone(),
         last_action.clone(),
         view_context.clone(),
-        filter.clone(),
+        filter.to_owned(),
         filter_mode, // filter_focused is same as filter_mode for now
     );
 
@@ -253,7 +230,7 @@ pub fn draw_screen(
 
     // Render header cells to terminal (always render all rows for fixed layout)
     for (row_index, row) in header_cells.iter().enumerate() {
-        let text = cells_to_styled_string(&[row.clone()]);
+        let text = cells_to_styled_string(std::slice::from_ref(row));
         print_at(0, row_index, &text)?;
     }
 
@@ -362,7 +339,7 @@ pub fn draw_screen(
         for (row_index, row) in browser_cells.iter().enumerate() {
             if !row.is_empty() {
                 // Convert Cell array to styled display text
-                let text = cells_to_styled_string(&[row.clone()]);
+                let text = cells_to_styled_string(std::slice::from_ref(row));
                 print_at(0, header_height + row_index, &text)?;
             }
         }
@@ -415,7 +392,7 @@ pub fn draw_screen(
             for (row_index, row) in detail_cells.iter().enumerate() {
                 if !row.is_empty() && row_index < content_height {
                     // Convert Cell array to styled display text
-                    let text = cells_to_styled_string(&[row.clone()]);
+                    let text = cells_to_styled_string(std::slice::from_ref(row));
                     print_at(start_col + 1, start_row + 1 + row_index, &text)?;
                 }
             }
@@ -446,9 +423,9 @@ pub fn draw_screen(
             // Create SeriesSelectWindow component
             let mut series_window = SeriesSelectWindow::new(
                 mode.clone(),
-                series.clone(),
+                series.to_owned(),
                 *series_selection,
-                new_series.clone(),
+                new_series.to_owned(),
                 edit_cursor_pos,
                 *first_series,
                 window_width,
@@ -458,8 +435,8 @@ pub fn draw_screen(
             // Handle edge cases for small terminals
             let (terminal_width, terminal_height) = get_terminal_size()?;
             series_window.handle_edge_cases(
-                terminal_width as usize,
-                terminal_height as usize,
+                terminal_width,
+                terminal_height,
                 header_height,
             )?;
             
@@ -469,7 +446,7 @@ pub fn draw_screen(
             // Render the series window cells to terminal
             for (row_index, row) in series_cells.iter().enumerate() {
                 if !row.is_empty() {
-                    let text = cells_to_styled_string(&[row.clone()]);
+                    let text = cells_to_styled_string(std::slice::from_ref(row));
                     print_at(window_x, window_y + row_index, &text)?;
                 }
             }
@@ -505,7 +482,7 @@ pub fn draw_screen(
         // Render the menu cells to terminal
         for (row_index, row) in menu_cells.iter().enumerate() {
             if !row.is_empty() {
-                let text = cells_to_styled_string(&[row.clone()]);
+                let text = cells_to_styled_string(std::slice::from_ref(row));
                 print_at(start_col, start_row + row_index, &text)?;
             }
         }
@@ -524,7 +501,7 @@ pub fn draw_screen(
     
     // Render the status bar to terminal
     if let Some(status_row_cells) = status_cells.first() {
-        let text = cells_to_styled_string(&[status_row_cells.clone()]);
+        let text = cells_to_styled_string(std::slice::from_ref(status_row_cells));
         print_at(0, status_row, &text)?;
     }
 
@@ -554,35 +531,11 @@ pub fn draw_screen(
     Ok(())
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 pub fn get_max_displayed_items_with_header_height(header_height: usize) -> io::Result<usize> {
     let (_, rows) = get_terminal_size()?;
     let max_lines = rows - header_height - FOOTER_SIZE - 1; // Adjust for header and footer lines
     Ok(max_lines)
 }
-
-
-
-
-
-
-
-/// Convert a 2D Cell array to a String
-/// 
-
 
 /// Convert a 2D array of Cells to a styled string with ANSI codes
 fn cells_to_styled_string(cells: &[Vec<crate::components::Cell>]) -> String {

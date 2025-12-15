@@ -48,7 +48,6 @@ impl Component for DetailPanel {
             Mode::Browse => {
                 let metadata_display = MetadataDisplay::new(
                     self.episode_details.clone(),
-                    self.season_number,
                     self.entry_location.clone(),
                 );
                 metadata_display.render(width, height, theme, is_selected)
@@ -68,7 +67,6 @@ impl Component for DetailPanel {
                 // For other modes, default to MetadataDisplay
                 let metadata_display = MetadataDisplay::new(
                     self.episode_details.clone(),
-                    self.season_number,
                     self.entry_location.clone(),
                 );
                 metadata_display.render(width, height, theme, is_selected)

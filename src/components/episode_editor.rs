@@ -179,11 +179,7 @@ impl EpisodeEditor {
         // Clamp cursor position to valid range within the field value
         let value_start = label_end;
         let value_end = field_line.len();
-        let max_cursor_pos = if value_end > value_start {
-            value_end - value_start
-        } else {
-            0
-        };
+        let max_cursor_pos = value_end.saturating_sub(value_start);
         
         let clamped_cursor = self.edit_cursor_pos.min(max_cursor_pos);
         Some(value_start + clamped_cursor)

@@ -97,7 +97,7 @@ pub fn handle_entry_mode(
                             e.path()
                                 .extension()
                                 .and_then(|ext| ext.to_str())
-                                .map_or(false, |ext| {
+                                .is_some_and(|ext| {
                                     config.video_extensions.contains(&ext.to_lowercase())
                                 })
                         })
@@ -932,7 +932,7 @@ pub fn handle_series_select_mode(
     series_selection: &mut Option<usize>,
     mode: &mut Mode,
     redraw: &mut bool,
-    series: &mut Vec<Series>,
+    series: &mut [Series],
     episode_id: usize,
     episode_detail: &mut EpisodeDetail,
     entries: &mut Vec<Entry>,
@@ -1486,7 +1486,7 @@ fn execute_menu_action(
                         e.path()
                             .extension()
                             .and_then(|ext| ext.to_str())
-                            .map_or(false, |ext| {
+                            .is_some_and(|ext| {
                                 config.video_extensions.contains(&ext.to_lowercase())
                             })
                     })

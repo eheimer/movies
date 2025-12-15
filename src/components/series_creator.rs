@@ -6,16 +6,14 @@ use crossterm::style::Color;
 pub struct SeriesCreator {
     text: String,
     cursor_position: usize,
-    field_width: usize,
 }
 
 impl SeriesCreator {
     /// Create a new SeriesCreator component
-    pub fn new(text: String, cursor_position: usize, field_width: usize) -> Self {
+    pub fn new(text: String, cursor_position: usize) -> Self {
         Self {
             text,
             cursor_position,
-            field_width,
         }
     }
     

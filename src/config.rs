@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use serde_yaml;
 use std::fs;
 use std::path::PathBuf;
 
@@ -118,7 +117,7 @@ pub fn generate_yaml_with_comments(config: &Config) -> String {
     } else {
         yaml.push_str("db_location: null\n");
     }
-    yaml.push_str("\n");
+    yaml.push('\n');
     
     // Theme configuration
     yaml.push_str("# === Theme Configuration ===\n");
@@ -126,7 +125,7 @@ pub fn generate_yaml_with_comments(config: &Config) -> String {
     yaml.push_str("# Theme files are stored in the same directory as this config file\n");
     yaml.push_str("# Default: THEME-default.yaml\n");
     yaml.push_str(&format!("active_theme: {}\n", config.active_theme));
-    yaml.push_str("\n");
+    yaml.push('\n');
     
     // Logging configuration
     yaml.push_str("# === Logging Configuration ===\n");
@@ -137,7 +136,7 @@ pub fn generate_yaml_with_comments(config: &Config) -> String {
     } else {
         yaml.push_str("log_file: null\n");
     }
-    yaml.push_str("\n");
+    yaml.push('\n');
     
     yaml.push_str("# Log level - controls verbosity of logging\n");
     yaml.push_str("# Valid levels:\n");
@@ -147,7 +146,7 @@ pub fn generate_yaml_with_comments(config: &Config) -> String {
     yaml.push_str("#   debug - Log all messages including detailed debugging information\n");
     yaml.push_str("# Invalid values will default to info\n");
     yaml.push_str(&format!("log_level: {}\n", config.log_level));
-    yaml.push_str("\n");
+    yaml.push('\n');
     
     // Video configuration
     yaml.push_str("# === Video Configuration ===\n");
@@ -156,7 +155,7 @@ pub fn generate_yaml_with_comments(config: &Config) -> String {
     for ext in &config.video_extensions {
         yaml.push_str(&format!("  - {}\n", ext));
     }
-    yaml.push_str("\n");
+    yaml.push('\n');
     
     yaml.push_str("# Path to external video player executable\n");
     yaml.push_str(&format!("video_player: {}\n", config.video_player));

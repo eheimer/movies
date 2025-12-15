@@ -29,7 +29,6 @@ fn string_to_fg_color_or_default(color: &str) -> Color {
 /// Read-only component for displaying episode metadata with consistent field layout
 pub struct MetadataDisplay {
     episode_details: EpisodeDetail,
-    season_number: Option<usize>,
     entry_location: String,
 }
 
@@ -37,12 +36,10 @@ impl MetadataDisplay {
     /// Create a new MetadataDisplay component
     pub fn new(
         episode_details: EpisodeDetail,
-        season_number: Option<usize>,
         entry_location: String,
     ) -> Self {
         Self {
             episode_details,
-            season_number,
             entry_location,
         }
     }

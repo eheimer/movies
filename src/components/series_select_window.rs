@@ -169,7 +169,7 @@ impl SeriesSelectWindow {
         match self.mode {
             Mode::SeriesSelect => {
                 // Calculate content dimensions (inside borders)
-                let content_width = self.window_width.saturating_sub(2);
+                let _content_width = self.window_width.saturating_sub(2);
                 let content_height = self.window_height.saturating_sub(2);
                 
                 // Calculate visible items (subtract 1 for prompt row)
@@ -183,22 +183,20 @@ impl SeriesSelectWindow {
                     self.series_selection,
                     adjusted_first_visible,
                     visible_items,
-                    content_width,
                 ))
             }
             Mode::SeriesCreate => {
                 // Calculate content dimensions (inside borders)
-                let content_width = self.window_width.saturating_sub(2);
+                let _content_width = self.window_width.saturating_sub(2);
                 
                 Box::new(SeriesCreator::new(
                     self.new_series_text.clone(),
                     self.edit_cursor_pos,
-                    content_width,
                 ))
             }
             _ => {
                 // Default to SeriesSelector for other modes
-                let content_width = self.window_width.saturating_sub(2);
+                let _content_width = self.window_width.saturating_sub(2);
                 let content_height = self.window_height.saturating_sub(2);
                 let visible_items = content_height.saturating_sub(1).max(1);
                 
@@ -210,7 +208,6 @@ impl SeriesSelectWindow {
                     self.series_selection,
                     adjusted_first_visible,
                     visible_items,
-                    content_width,
                 ))
             }
         }
