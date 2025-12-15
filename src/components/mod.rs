@@ -11,6 +11,9 @@ pub mod metadata_display;
 pub mod episode_editor;
 pub mod status_bar;
 pub mod context_menu;
+pub mod series_creator;
+pub mod series_selector;
+pub mod series_select_window;
 
 pub use category::*;
 pub use scrollbar::Scrollbar;
@@ -21,6 +24,9 @@ pub use metadata_display::MetadataDisplay;
 pub use episode_editor::EpisodeEditor;
 pub use status_bar::StatusBar;
 pub use context_menu::ContextMenu;
+pub use series_creator::SeriesCreator;
+pub use series_selector::SeriesSelector;
+pub use series_select_window::SeriesSelectWindow;
 
 /// Represents text styling attributes that can be applied to terminal output
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

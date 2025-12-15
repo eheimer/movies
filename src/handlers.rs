@@ -945,11 +945,22 @@ pub fn handle_series_select_mode(
 ) {
     match code {
         KeyCode::Up | KeyCode::Char('k') => {
-            *series_selection = series_selection.map(|s| s.saturating_sub(1)).or(Some(0));
+            if !series.is_empty() {
+                *series_selection = series_selection.map(|s| s.saturating_sub(1)).or(Some(0));
+            } else {
+                *series_selection = Some(0);
+            }
             *redraw = true;
         }
         KeyCode::Down | KeyCode::Char('j') => {
-            *series_selection = series_selection.map(|s| s.saturating_add(1)).or(Some(0));
+            if !series.is_empty() {
+                let max_index = series.len() - 1;
+                *series_selection = series_selection
+                    .map(|s| (s + 1).min(max_index))
+                    .or(Some(0));
+            } else {
+                *series_selection = Some(0);
+            }
             *redraw = true;
         }
         KeyCode::Enter => {
@@ -1388,7 +1399,7 @@ fn execute_menu_action(
             if let Entry::Episode { .. } = filtered_entries[remembered_item] {
                 // Reload series list
                 *series = database::get_all_series().expect("Failed to get series");
-                *series_selection = Some(0);
+                *series_selection = if series.is_empty() { None } else { Some(0) };
                 *first_series = 0;
                 *mode = Mode::SeriesSelect;
                 *redraw = true;

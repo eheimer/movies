@@ -1,4 +1,4 @@
-use crate::components::{Component, category::{Category, CategoryType}, render_cells_at_column, Scrollbar, Browser, DetailPanel, StatusBar, ContextMenu};
+use crate::components::{Component, category::{Category, CategoryType}, Browser, DetailPanel, StatusBar, ContextMenu, SeriesSelectWindow};
 use crate::components::episode::Episode;
 use crate::components::header::{Header, HeaderContext};
 use crate::dto::{EpisodeDetail, Series};
@@ -8,9 +8,9 @@ use crate::terminal::{
     clear_line, clear_screen, get_terminal_size, hide_cursor, move_cursor, print_at, show_cursor,
 };
 use crate::theme::Theme;
-use crate::util::{truncate_string, Entry, LastAction, Mode, ViewContext};
+use crate::util::{Entry, LastAction, Mode, ViewContext};
 
-use crossterm::style::{Color, Stylize};
+use crossterm::style::Color;
 use std::collections::HashSet;
 use std::convert::From;
 use std::io;
@@ -100,6 +100,51 @@ fn get_sidebar_width() -> io::Result<usize> {
     let (cols, _) = get_terminal_size()?;
     let sidebar_width = cols.saturating_sub(COL1_WIDTH + 2);
     Ok(sidebar_width.max(MIN_COL2_WIDTH))
+}
+
+fn draw_detail_panel_border(
+    left: usize,
+    top: usize,
+    width: usize,
+    height: usize,
+    thick: bool,
+) -> io::Result<()> {
+    use crate::terminal::print_at;
+    
+    // Choose border characters based on the thickness
+    let (top_left, top_right, bottom_left, bottom_right, horizontal, vertical) = if thick {
+        ('╔', '╗', '╚', '╝', '═', '║')
+    } else {
+        ('┌', '┐', '└', '┘', '─', '│')
+    };
+
+    // Draw top border
+    print_at(left, top, &top_left.to_string())?;
+    // Use saturating_sub to prevent underflow when width is very small
+    for _ in 1..width.saturating_sub(1) {
+        print!("{}", horizontal);
+    }
+    print!("{}", top_right);
+
+    // Draw side borders and clear interior
+    // Use saturating_sub to prevent underflow when height is very small
+    for row in (top + 1)..(top + height.saturating_sub(1)) {
+        print_at(left, row, &vertical.to_string())?;
+        // Clear the interior space
+        for _ in 1..width.saturating_sub(1) {
+            print!(" ");
+        }
+        print!("{}", vertical);
+    }
+
+    // Draw bottom border
+    print_at(left, top + height.saturating_sub(1), &bottom_left.to_string())?;
+    for _ in 1..width.saturating_sub(1) {
+        print!("{}", horizontal);
+    }
+    println!("{}", bottom_right);
+
+    Ok(())
 }
 
 
@@ -339,8 +384,8 @@ pub fn draw_screen(
                 show_cursor()?;
             }
             
-            // Draw the window border
-            draw_window(
+            // Draw the window border for detail panel
+            draw_detail_panel_border(
                 start_col,
                 start_row,
                 sidebar_width,
@@ -385,7 +430,57 @@ pub fn draw_screen(
             }
         }
         if let Mode::SeriesSelect | Mode::SeriesCreate = mode {
-            draw_series_window(mode, series, new_series, series_selection, theme, first_series, header_height)?;
+            // Calculate window dimensions based on series count and mode
+            let (window_width, window_height) = SeriesSelectWindow::calculate_dimensions(
+                series.len(),
+                header_height,
+                mode,
+            )?;
+            
+            // Calculate window position (centered horizontally in sidebar)
+            let (window_x, window_y) = SeriesSelectWindow::calculate_horizontal_position(
+                window_width,
+                header_height,
+            )?;
+            
+            // Create SeriesSelectWindow component
+            let mut series_window = SeriesSelectWindow::new(
+                mode.clone(),
+                series.clone(),
+                *series_selection,
+                new_series.clone(),
+                edit_cursor_pos,
+                *first_series,
+                window_width,
+                window_height,
+            );
+            
+            // Handle edge cases for small terminals
+            let (terminal_width, terminal_height) = get_terminal_size()?;
+            series_window.handle_edge_cases(
+                terminal_width as usize,
+                terminal_height as usize,
+                header_height,
+            )?;
+            
+            // Render the SeriesSelectWindow component
+            let series_cells = series_window.render(window_width, window_height, theme, false);
+            
+            // Render the series window cells to terminal
+            for (row_index, row) in series_cells.iter().enumerate() {
+                if !row.is_empty() {
+                    let text = cells_to_styled_string(&[row.clone()]);
+                    print_at(window_x, window_y + row_index, &text)?;
+                }
+            }
+            
+            // Handle cursor positioning for SeriesCreate mode
+            if let Mode::SeriesCreate = mode {
+                use crate::terminal::{show_cursor, move_cursor};
+                show_cursor()?;
+                // Position cursor in the text input field (row 2, after the prompt)
+                move_cursor(window_x + 1 + edit_cursor_pos, window_y + 2)?;
+            }
         }
     }
 
@@ -461,193 +556,13 @@ pub fn draw_screen(
 
 
 
-fn draw_series_window(
-    mode: &Mode,
-    series: &Vec<Series>,
-    new_series: &String,
-    series_selection: &mut Option<usize>,
-    theme: &Theme,
-    first_series: &mut usize,
-    header_height: usize,
-) -> io::Result<()> {
-    let start_col = COL1_WIDTH + 2;
-    let start_row = header_height + DETAIL_HEIGHT;
-    let sidebar_width = get_sidebar_width()?;
-    let series_window_width = SERIES_WIDTH + 2;
-
-    // Calculate the available height for the terminal
-    let (_, terminal_height) = get_terminal_size()?;
-    let max_height = terminal_height.saturating_sub(start_row + 2); // Adjust for borders
-    let mut series_window_height = (series.len() + 3).min(max_height).max(4); // Minimum height is 4
-
-    if let Mode::SeriesCreate = mode {
-        series_window_height = 4;
-        *series_selection = None;
-    } else {
-        //if series_selection is out of bounds, make it in-bounds, if it is None, set it to 0
-        if let Some(selection) = series_selection {
-            if *selection >= series.len() {
-                *series_selection = series.len().checked_sub(1);
-            }
-        } else {
-            *series_selection = Some(0);
-        }
-    }
-
-    let series_window_start_col = start_col + (sidebar_width.saturating_sub(series_window_width) / 2);
-
-    draw_window(
-        series_window_start_col,
-        start_row,
-        series_window_width,
-        series_window_height,
-        matches!(mode, Mode::SeriesCreate),
-    )?;
-
-    // write the contents
-    if let Mode::SeriesCreate = mode {
-        show_cursor()?;
-        print_at(
-            series_window_start_col + 1,
-            start_row + 1,
-            &format!(
-                "{}",
-                "Type the series name and press [ENTER]:"
-                    .with(Color::Black)
-                    .on(Color::White)
-            ),
-        )?;
-        print_at(
-            series_window_start_col + 1,
-            start_row + 2,
-            &new_series.to_string(),
-        )?;
-    } else {
-        print_at(
-            series_window_start_col + 1,
-            start_row + 1,
-            &format!(
-                "{}",
-                "Choose a series or [+] to create"
-                    .with(Color::Black)
-                    .on(Color::White)
-            ),
-        )?;
-        
-        // Calculate maximum visible series items (subtract borders and title)
-        let max_visible_series = series_window_height.saturating_sub(3).max(1);
-        
-        // Create Scrollbar component for the series select window
-        let series_scrollbar = Scrollbar::new(
-            series.len(),                           // total_items
-            max_visible_series,                     // visible_items
-            *first_series,                          // first_visible_index
-        );
-        
-        // Render scrollbar to get visibility information
-        let series_scrollbar_cells = series_scrollbar.render(1, max_visible_series, theme, false);
-        let series_scrollbar_visible = !series_scrollbar_cells.is_empty();
-        
-        // Calculate effective series width (reduce by 1 if scroll bar is visible)
-        // Use saturating_sub to prevent underflow
-        let effective_series_width = if series_scrollbar_visible {
-            SERIES_WIDTH.saturating_sub(1)
-        } else {
-            SERIES_WIDTH
-        };
-        
-        // Implement viewport adjustment logic
-        if let Some(selection) = series_selection {
-            if *selection < *first_series {
-                *first_series = *selection;
-            } else if *selection >= *first_series + max_visible_series {
-                *first_series = *selection - max_visible_series + 1;
-            }
-        }
-        
-        // Update series rendering to use viewport
-        for (i, series_item) in series.iter()
-            .enumerate()
-            .skip(*first_series)
-            .take(max_visible_series)
-        {
-            let display_text = format!(
-                "[{}] {}",
-                i + 1,
-                truncate_string(&series_item.name, effective_series_width)
-            );
-            let formatted_text = if Some(i) == *series_selection {
-                format!(
-                    "{}",
-                    display_text
-                        .with(string_to_fg_color_or_default(&theme.current_fg))
-                        .on(string_to_bg_color_or_default(&theme.current_bg))
-                )
-            } else {
-                display_text
-            };
-            // Adjust row calculation to account for skipped items
-            print_at(
-                series_window_start_col + 1,
-                start_row + 2 + (i - *first_series),
-                &formatted_text,
-            )?;
-        }
-        
-        // Render the scroll bar after rendering series items
-        if series_scrollbar_visible {
-            render_cells_at_column(&series_scrollbar_cells, series_window_start_col + series_window_width - 1, start_row + 2)?;
-        }
-    }
-    Ok(())
-}
 
 
 
 
 
-fn draw_window(
-    left: usize,
-    top: usize,
-    width: usize,
-    height: usize,
-    thick: bool,
-) -> io::Result<()> {
-    // Choose border characters based on the thickness
-    let (top_left, top_right, bottom_left, bottom_right, horizontal, vertical) = if thick {
-        ('╔', '╗', '╚', '╝', '═', '║')
-    } else {
-        ('┌', '┐', '└', '┘', '─', '│')
-    };
 
-    // Draw top border
-    print_at(left, top, &top_left)?;
-    // Use saturating_sub to prevent underflow when width is very small
-    for _ in 1..width.saturating_sub(1) {
-        print!("{}", horizontal);
-    }
-    print!("{}", top_right);
 
-    // Draw side borders and clear interior
-    // Use saturating_sub to prevent underflow when height is very small
-    for row in (top + 1)..(top + height.saturating_sub(1)) {
-        print_at(left, row, &vertical)?;
-        // Clear the interior space
-        for _ in 1..width.saturating_sub(1) {
-            print!(" ");
-        }
-        print!("{}", vertical);
-    }
-
-    // Draw bottom border
-    print_at(left, top + height.saturating_sub(1), &bottom_left)?;
-    for _ in 1..width.saturating_sub(1) {
-        print!("{}", horizontal);
-    }
-    println!("{}", bottom_right);
-
-    Ok(())
-}
 
 
 
