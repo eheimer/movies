@@ -12,6 +12,8 @@ pub mod logger;
 pub mod menu;
 pub mod path_resolver;
 pub mod paths;
+pub mod player_plugin;
+pub mod progress_tracker;
 pub mod splash;
 pub mod terminal;
 pub mod theme;

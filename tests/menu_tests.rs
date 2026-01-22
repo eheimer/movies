@@ -14,6 +14,8 @@ fn test_first_line_preferred_respects_availability() {
         series: None,
         season: None,
         episode_number: String::new(),
+        last_watched_time: None,
+        last_progress_time: None,
     };
 
     let context = MenuContext {
@@ -44,6 +46,8 @@ fn test_context_aware_filtering_episode_without_series() {
         series: None,
         season: None,
         episode_number: String::new(),
+        last_watched_time: None,
+        last_progress_time: None,
     };
 
     let context = MenuContext {
@@ -85,6 +89,8 @@ fn test_context_aware_filtering_episode_with_series() {
             number: 1,
         }),
         episode_number: "1".to_string(),
+        last_watched_time: None,
+        last_progress_time: None,
     };
 
     let context = MenuContext {
@@ -120,6 +126,8 @@ fn test_context_aware_filtering_series_selected() {
         series: None,
         season: None,
         episode_number: String::new(),
+        last_watched_time: None,
+        last_progress_time: None,
     };
 
     let context = MenuContext {
@@ -194,6 +202,8 @@ fn test_menu_selection_highlighting() {
         series: None,
         season: None,
         episode_number: String::new(),
+        last_watched_time: None,
+        last_progress_time: None,
     };
 
     let context = MenuContext {

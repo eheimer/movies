@@ -31,9 +31,10 @@ This is a simple program that helps you organize and browse your video collectio
 
 - Browse your entire video collection in one place
 - Organize TV shows into series and seasons
-- Track which episodes you've watched
+- Track which episodes you've watched with automatic progress tracking
+- Resume watching from where you left off (with Celluloid player)
 - Search for videos by typing
-- Launch videos in your favorite player (like VLC)
+- Launch videos in your favorite player (like VLC or Celluloid)
 
 Perfect for anyone with a large collection of movies or TV shows who wants a better way to keep track of what they have and what they've watched.
 
@@ -92,7 +93,7 @@ The first time you run the program, it will:
 
 Just enter the path where your videos are stored (e.g., `/home/yourname/Videos`) and the program will be ready to use!
 
-**Note:** The video player defaults to `/usr/bin/vlc`. If you use a different player, edit the `video_player:` setting in `config.yaml`. See the [Configuration Guide](docs/CONFIGURATION.md) for all available options.
+**Note:** The video player defaults to `/usr/bin/vlc`. If you use a different player, edit the `video_player:` setting in `config.yaml`. For automatic progress tracking and resume functionality, use Celluloid (`/usr/bin/celluloid`). See the [Configuration Guide](docs/CONFIGURATION.md) for all available options.
 
 ## How to use it
 
@@ -134,6 +135,15 @@ For the next episode from the same show, just press **F5** to quickly assign it 
 ### Tracking what you've watched
 
 Navigate to any episode and press **F3** to mark it as watched (or unwatched). Watched episodes show a special indicator so you can see at a glance what you've already seen.
+
+**Progress Tracking:** The program automatically tracks your viewing progress when using Celluloid as your video player:
+- When you start watching an episode, it's automatically marked as unwatched
+- Progress is saved when you exit Celluloid with **Shift+Q** (not the X button)
+- When you reach 95% of the video, it's automatically marked as watched
+- Toggling watched status (F3) resets progress and starts fresh next time
+- The `last_watched_time` field preserves when you last watched an episode
+
+**Note:** To save progress, you must exit Celluloid using **Shift+Q**. Closing with the X button does not save your position.
 
 Want to rewatch a whole series? Press **F7** to mark all episodes as unwatched. This works on:
 - The entire library (if you're at the top level)

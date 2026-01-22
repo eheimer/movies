@@ -17,6 +17,10 @@ pub struct Config {
     #[serde(default = "default_log_level")]
     pub log_level: String,
     
+    // Progress tracking configuration
+    #[serde(default = "default_watched_threshold")]
+    pub watched_threshold: u8,
+    
     pub video_extensions: Vec<String>,
     pub video_player: String,
 }
@@ -33,6 +37,10 @@ fn default_log_level() -> String {
     "info".to_string()
 }
 
+fn default_watched_threshold() -> u8 {
+    95
+}
+
 impl Default for Config {
     fn default() -> Self {
         Config {
@@ -40,6 +48,7 @@ impl Default for Config {
             active_theme: "THEME-default.yaml".to_string(),
             log_file: None,
             log_level: "info".to_string(),
+            watched_threshold: 95,
             video_extensions: vec![
                 "mp4".to_string(),
                 "mkv".to_string(),
@@ -69,6 +78,17 @@ impl Config {
     pub fn is_first_run(&self) -> bool {
         self.db_location.is_none()
     }
+    
+    /// Validate and correct the watched threshold value
+    pub fn validate_watched_threshold(&mut self) {
+        if self.watched_threshold < 1 || self.watched_threshold > 100 {
+            crate::logger::log_warn(&format!(
+                "Invalid watched_threshold value: {}. Must be between 1 and 100. Using default value of 95.",
+                self.watched_threshold
+            ));
+            self.watched_threshold = 95;
+        }
+    }
 }
 
 /// Read configuration from file, creating default if missing
@@ -77,7 +97,8 @@ pub fn read_config(config_path: &PathBuf) -> Config {
         match fs::read_to_string(config_path) {
             Ok(content) => {
                 match serde_yaml::from_str::<Config>(&content) {
-                    Ok(config) => {
+                    Ok(mut config) => {
+                        config.validate_watched_threshold();
                         config
                     }
                     Err(e) => {
@@ -146,6 +167,16 @@ pub fn generate_yaml_with_comments(config: &Config) -> String {
     yaml.push_str("#   debug - Log all messages including detailed debugging information\n");
     yaml.push_str("# Invalid values will default to info\n");
     yaml.push_str(&format!("log_level: {}\n", config.log_level));
+    yaml.push('\n');
+    
+    // Progress tracking configuration
+    yaml.push_str("# === Progress Tracking Configuration ===\n");
+    yaml.push_str("# Percentage of episode completion that triggers automatic watched status\n");
+    yaml.push_str("# Valid range: 1-100 (default: 95)\n");
+    yaml.push_str("# When an episode reaches this percentage of completion, it will be\n");
+    yaml.push_str("# automatically marked as watched\n");
+    yaml.push_str("# Invalid values will default to 95\n");
+    yaml.push_str(&format!("watched_threshold: {}\n", config.watched_threshold));
     yaml.push('\n');
     
     // Video configuration

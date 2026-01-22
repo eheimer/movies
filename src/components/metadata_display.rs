@@ -84,8 +84,8 @@ impl Component for MetadataDisplay {
     fn render(&self, width: usize, height: usize, theme: &Theme, _is_selected: bool) -> Vec<Vec<Cell>> {
         let mut result = Vec::new();
         
-        // Define the fields to display in order
-        let fields = [
+        // Define the base fields to display in order
+        let fields = vec![
             EpisodeField::Path,
             EpisodeField::Filename,
             EpisodeField::Title,
@@ -95,6 +95,8 @@ impl Component for MetadataDisplay {
             EpisodeField::Series,
             EpisodeField::Season,
             EpisodeField::EpisodeNumber,
+            EpisodeField::LastWatchedTime,
+            EpisodeField::LastProgressTime,
         ];
         
         for (row_index, &field) in fields.iter().enumerate() {

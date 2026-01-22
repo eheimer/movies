@@ -9,6 +9,8 @@ mod logger;
 mod menu;
 mod path_resolver;
 mod paths;
+mod player_plugin;
+mod progress_tracker;
 mod splash;
 mod terminal;
 mod theme;
@@ -240,6 +242,8 @@ fn main_loop(mut entries: Vec<Entry>, mut config: Config, theme: Theme, mut reso
         series: None,
         season: None,
         episode_number: String::new(),
+        last_watched_time: None,
+        last_progress_time: None,
     };
     let mut series = database::get_all_series().expect("Failed to get series");
     let mut series_selection: Option<usize> = None;
@@ -351,9 +355,10 @@ fn main_loop(mut entries: Vec<Entry>, mut config: Config, theme: Theme, mut reso
             redraw = false;
         }
 
-        // Check for messages from the thread
+        // Check for messages from the thread (video playback completed)
         if rx.try_recv().is_ok() {
             playing_file = None;
+            status_message = String::new();
             redraw = true;
         }
 
@@ -409,6 +414,8 @@ fn main_loop(mut entries: Vec<Entry>, mut config: Config, theme: Theme, mut reso
                                 series: None,
                                 season: None,
                                 episode_number: String::new(),
+                                last_watched_time: None,
+                                last_progress_time: None,
                             }),
                             &mut dirty_fields,
                         );

@@ -8,7 +8,7 @@ use std::io;
 
 // Constants from display.rs for positioning calculations
 const COL1_WIDTH: usize = 45;
-const DETAIL_HEIGHT: usize = 11;
+const DETAIL_HEIGHT: usize = 13; // Increased from 11 to accommodate progress tracking fields
 const SERIES_WIDTH: usize = 40;
 
 /// Container component that switches between sub-components based on application mode

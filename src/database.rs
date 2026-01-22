@@ -5,6 +5,17 @@ use rusqlite::{params, Connection, Result};
 use std::path::Path;
 use std::sync::{Mutex, OnceLock};
 
+/// Format ISO 8601 datetime string to human-readable format
+pub fn format_last_watched_time(iso_datetime: &str) -> String {
+    // Parse ISO 8601 datetime and format as human-readable
+    if let Ok(datetime) = chrono::DateTime::parse_from_rfc3339(iso_datetime) {
+        datetime.format("%Y-%m-%d %H:%M:%S").to_string()
+    } else {
+        // Fallback to original string if parsing fails
+        iso_datetime.to_string()
+    }
+}
+
 static DB_CONN: OnceLock<Mutex<Connection>> = OnceLock::new();
 
 /// Initialize the database connection and schema
@@ -69,6 +80,29 @@ pub fn initialize_database(db_path: &Path) -> Result<(), Box<dyn std::error::Err
     ) {
         crate::logger::log_error(&format!("Failed to create episode table: {}", e));
         return Err(e.into());
+    }
+    
+    // Progress tracking schema migration - add new columns if they don't exist
+    if let Err(e) = conn.execute(
+        "ALTER TABLE episode ADD COLUMN last_watched_time TEXT",
+        [],
+    ) {
+        // Column might already exist, check if it's a "duplicate column name" error
+        if !e.to_string().contains("duplicate column name") {
+            crate::logger::log_error(&format!("Failed to add last_watched_time column: {}", e));
+            return Err(e.into());
+        }
+    }
+    
+    if let Err(e) = conn.execute(
+        "ALTER TABLE episode ADD COLUMN last_progress_time INTEGER",
+        [],
+    ) {
+        // Column might already exist, check if it's a "duplicate column name" error
+        if !e.to_string().contains("duplicate column name") {
+            crate::logger::log_error(&format!("Failed to add last_progress_time column: {}", e));
+            return Err(e.into());
+        }
     }
     
     // Data cleanup operations
@@ -328,7 +362,9 @@ pub fn get_episode_detail(id: usize) -> Result<EpisodeDetail, Box<dyn std::error
                 COALESCE(series.name, '') as series_name, 
                 season.id as season_id,
                 COALESCE(season.number, '') as season_number, 
-                COALESCE(CAST(episode.episode_number AS TEXT), '') as episode_number
+                COALESCE(CAST(episode.episode_number AS TEXT), '') as episode_number,
+                episode.last_watched_time,
+                episode.last_progress_time
             FROM episode
             LEFT JOIN season ON season.id = episode.season_id AND season.series_id = episode.series_id
             LEFT JOIN series ON series.id = episode.series_id
@@ -375,6 +411,12 @@ pub fn get_episode_detail(id: usize) -> Result<EpisodeDetail, Box<dyn std::error
             None
         };
 
+        // Return raw progress data for UI formatting
+        let last_watched_time = row.get::<_, Option<String>>(9)?;
+        
+        let last_progress_time = row.get::<_, Option<i64>>(10)?
+            .map(|seconds| seconds.to_string());
+
         Ok(EpisodeDetail {
             title: row.get(0)?,
             year,
@@ -383,6 +425,8 @@ pub fn get_episode_detail(id: usize) -> Result<EpisodeDetail, Box<dyn std::error
             series,
             season,
             episode_number: row.get(8)?,
+            last_watched_time,
+            last_progress_time,
         })
     } else {
         Err("Episode not found".into())
@@ -414,15 +458,29 @@ pub fn update_episode_detail(
     Ok(())
 }
 
-pub fn toggle_watched_status(id: usize) -> Result<(), Box<dyn std::error::Error>> {
+pub fn toggle_watched_status(id: usize) -> Result<bool, Box<dyn std::error::Error>> {
     let conn = get_connection().lock().unwrap();
 
-    conn.execute(
-        "UPDATE episode SET watched = NOT watched WHERE id = ?1",
-        params![id],
-    )?;
-
-    Ok(())
+    // First, get the current watched status
+    let mut stmt = conn.prepare("SELECT watched FROM episode WHERE id = ?1")?;
+    let current_watched: bool = stmt.query_row(params![id], |row| row.get(0))?;
+    
+    if current_watched {
+        // If currently watched, mark as unwatched, preserve last_watched_time, and reset progress
+        conn.execute(
+            "UPDATE episode SET watched = false, last_progress_time = 0 WHERE id = ?1",
+            params![id],
+        )?;
+        Ok(false) // Now unwatched
+    } else {
+        // If currently unwatched, mark as watched with timestamp and reset progress
+        let now = chrono::Utc::now().to_rfc3339();
+        conn.execute(
+            "UPDATE episode SET watched = true, last_watched_time = ?1, last_progress_time = 0 WHERE id = ?2",
+            params![now, id],
+        )?;
+        Ok(true) // Now watched
+    }
 }
 
 pub fn unwatch_all_in_season(season_id: usize) -> Result<(), Box<dyn std::error::Error>> {
@@ -754,4 +812,65 @@ pub fn get_episodes_with_missing_length() -> Result<Vec<(usize, String)>, Box<dy
     .collect::<Result<Vec<_>>>()?;
     
     Ok(episodes)
+}
+
+/// Update episode progress time in seconds
+pub fn update_episode_progress(episode_id: usize, progress_seconds: u64) -> Result<(), Box<dyn std::error::Error>> {
+    let conn = get_connection().lock().unwrap();
+    
+    conn.execute(
+        "UPDATE episode SET last_progress_time = ?1 WHERE id = ?2",
+        params![progress_seconds as i64, episode_id],
+    )?;
+    
+    Ok(())
+}
+
+/// Get episode progress time in seconds
+pub fn get_episode_progress(episode_id: usize) -> Result<Option<u64>, Box<dyn std::error::Error>> {
+    let conn = get_connection().lock().unwrap();
+    
+    let mut stmt = conn.prepare("SELECT last_progress_time FROM episode WHERE id = ?1")?;
+    let progress: Option<i64> = stmt.query_row(params![episode_id], |row| row.get(0))?;
+    
+    Ok(progress.map(|p| p as u64))
+}
+
+/// Mark episode as watched with current timestamp and reset progress
+pub fn mark_episode_watched_with_timestamp(episode_id: usize) -> Result<(), Box<dyn std::error::Error>> {
+    let conn = get_connection().lock().unwrap();
+    
+    // Get current timestamp in ISO 8601 format
+    let now = chrono::Utc::now().to_rfc3339();
+    
+    conn.execute(
+        "UPDATE episode SET watched = true, last_watched_time = ?1, last_progress_time = 0 WHERE id = ?2",
+        params![now, episode_id],
+    )?;
+    
+    Ok(())
+}
+
+/// Mark episode as unwatched (preserves last_watched_time)
+pub fn mark_episode_unwatched(episode_id: usize) -> Result<(), Box<dyn std::error::Error>> {
+    let conn = get_connection().lock().unwrap();
+    
+    conn.execute(
+        "UPDATE episode SET watched = false WHERE id = ?1",
+        params![episode_id],
+    )?;
+    
+    Ok(())
+}
+
+/// Reset episode progress to zero
+pub fn reset_episode_progress(episode_id: usize) -> Result<(), Box<dyn std::error::Error>> {
+    let conn = get_connection().lock().unwrap();
+    
+    conn.execute(
+        "UPDATE episode SET last_progress_time = 0 WHERE id = ?1",
+        params![episode_id],
+    )?;
+    
+    Ok(())
 }

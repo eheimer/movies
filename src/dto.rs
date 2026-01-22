@@ -7,6 +7,8 @@ pub struct EpisodeDetail {
     pub series: Option<Series>,
     pub season: Option<Season>,
     pub episode_number: String,
+    pub last_watched_time: Option<String>,
+    pub last_progress_time: Option<String>,
 }
 
 #[derive(Clone)]

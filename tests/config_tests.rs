@@ -30,6 +30,9 @@ video_player: /usr/bin/vlc
     
     // Verify active_theme has default value
     assert_eq!(config.active_theme, "THEME-default.yaml");
+    
+    // Verify watched_threshold has default value
+    assert_eq!(config.watched_threshold, 95);
 
     // Verify existing fields are preserved
     assert_eq!(config.video_extensions, vec!["mp4", "mkv"]);
@@ -46,6 +49,7 @@ fn test_config_default_has_no_style_fields() {
     assert_eq!(config.log_level, "info");
     assert_eq!(config.active_theme, "THEME-default.yaml");
     assert_eq!(config.db_location, None);
+    assert_eq!(config.watched_threshold, 95);
     assert!(!config.video_extensions.is_empty());
     assert_eq!(config.video_player, "/usr/bin/vlc");
 }
@@ -64,6 +68,7 @@ fn test_config_with_all_fields_loads_correctly() {
     let complete_config = r#"active_theme: THEME-custom.yaml
 log_file: "/custom/path/app.log"
 log_level: debug
+watched_threshold: 80
 video_extensions:
   - mp4
 video_player: /usr/bin/mpv
@@ -77,6 +82,7 @@ video_player: /usr/bin/mpv
     assert_eq!(config.active_theme, "THEME-custom.yaml");
     assert_eq!(config.log_file, Some("/custom/path/app.log".to_string()));
     assert_eq!(config.log_level, "debug");
+    assert_eq!(config.watched_threshold, 80);
     assert_eq!(config.video_extensions, vec!["mp4"]);
     assert_eq!(config.video_player, "/usr/bin/mpv");
 }
@@ -117,6 +123,7 @@ fn test_save_config_includes_all_fields() {
     // Verify inline documentation is present
     assert!(saved_content.contains("=== Theme Configuration ==="));
     assert!(saved_content.contains("=== Logging Configuration ==="));
+    assert!(saved_content.contains("=== Progress Tracking Configuration ==="));
     
     // Verify color configuration section is NOT present
     assert!(!saved_content.contains("=== Color Configuration ==="));
@@ -247,6 +254,7 @@ fn test_yaml_generation_includes_comments() {
     assert!(yaml.contains("=== Database Configuration ==="));
     assert!(yaml.contains("=== Theme Configuration ==="));
     assert!(yaml.contains("=== Logging Configuration ==="));
+    assert!(yaml.contains("=== Progress Tracking Configuration ==="));
     assert!(yaml.contains("=== Video Configuration ==="));
 
     // Verify color configuration section is NOT present
@@ -262,6 +270,7 @@ fn test_yaml_generation_includes_comments() {
     assert!(yaml.contains("Path to the SQLite database file"));
     assert!(yaml.contains("Name of the active theme file"));
     assert!(yaml.contains("Log file location"));
+    assert!(yaml.contains("Percentage of episode completion that triggers automatic watched status"));
     assert!(yaml.contains("File extensions recognized as video files"));
     assert!(yaml.contains("Path to external video player executable"));
     
@@ -308,6 +317,7 @@ fn test_yaml_generation_preserves_values() {
     config.video_player = "/usr/bin/mpv".to_string();
     config.db_location = Some("/custom/path/db.sqlite".to_string());
     config.log_file = Some("/var/log/app.log".to_string());
+    config.watched_threshold = 85;
 
     let yaml = generate_yaml_with_comments(&config);
 
@@ -317,6 +327,7 @@ fn test_yaml_generation_preserves_values() {
     assert!(yaml.contains("video_player: /usr/bin/mpv"));
     assert!(yaml.contains("db_location: \"/custom/path/db.sqlite\""));
     assert!(yaml.contains("log_file: \"/var/log/app.log\""));
+    assert!(yaml.contains("watched_threshold: 85"));
     
     // Verify style fields are NOT in the output
     assert!(!yaml.contains("current_fg:"));
@@ -490,4 +501,131 @@ fn test_config_default_includes_active_theme() {
     assert_eq!(config.active_theme, "THEME-default.yaml");
     assert_eq!(config.log_level, "info");
     assert_eq!(config.log_file, None);
+    assert_eq!(config.watched_threshold, 95);
+}
+
+/// Test Case: Valid watched threshold values are preserved
+/// When config.yaml contains valid watched_threshold values (1-100),
+/// the loaded Config should contain those values.
+/// Validates: Requirements 1.1, 1.2
+#[test]
+fn test_valid_watched_threshold_values() {
+    let temp_dir = TempDir::new().expect("Failed to create temp dir");
+    let yaml_path = temp_dir.path().join("config.yaml");
+
+    // Test minimum valid value
+    let config_min = r#"watched_threshold: 1
+video_extensions:
+  - mp4
+video_player: /usr/bin/vlc
+"#;
+    fs::write(&yaml_path, config_min).expect("Failed to write test config");
+    let config = read_config(&yaml_path);
+    assert_eq!(config.watched_threshold, 1);
+
+    // Test maximum valid value
+    let config_max = r#"watched_threshold: 100
+video_extensions:
+  - mp4
+video_player: /usr/bin/vlc
+"#;
+    fs::write(&yaml_path, config_max).expect("Failed to write test config");
+    let config = read_config(&yaml_path);
+    assert_eq!(config.watched_threshold, 100);
+
+    // Test typical value
+    let config_typical = r#"watched_threshold: 85
+video_extensions:
+  - mp4
+video_player: /usr/bin/vlc
+"#;
+    fs::write(&yaml_path, config_typical).expect("Failed to write test config");
+    let config = read_config(&yaml_path);
+    assert_eq!(config.watched_threshold, 85);
+}
+
+/// Test Case: Invalid watched threshold values default to 95
+/// When config.yaml contains invalid watched_threshold values (outside 1-100),
+/// the loaded Config should use the default value of 95 and log a warning.
+/// Validates: Requirements 1.2, 1.3
+#[test]
+#[serial_test::serial]
+fn test_invalid_watched_threshold_defaults_to_95() {
+    use tempfile::TempDir;
+    
+    let temp_dir = TempDir::new().expect("Failed to create temp dir");
+    let yaml_path = temp_dir.path().join("config.yaml");
+    let log_file = temp_dir.path().join("test_threshold_validation.log");
+    
+    // Initialize logger
+    logger::initialize_logger(log_file.clone(), logger::LogLevel::Warn)
+        .expect("Failed to initialize logger");
+
+    // Test value too low (0)
+    let config_too_low = r#"watched_threshold: 0
+video_extensions:
+  - mp4
+video_player: /usr/bin/vlc
+"#;
+    fs::write(&yaml_path, config_too_low).expect("Failed to write test config");
+    let config = read_config(&yaml_path);
+    assert_eq!(config.watched_threshold, 95);
+
+    // Test value too high (101)
+    let config_too_high = r#"watched_threshold: 101
+video_extensions:
+  - mp4
+video_player: /usr/bin/vlc
+"#;
+    fs::write(&yaml_path, config_too_high).expect("Failed to write test config");
+    let config = read_config(&yaml_path);
+    assert_eq!(config.watched_threshold, 95);
+    
+    // Log a final message to ensure flush
+    logger::log_warn("test_complete");
+    
+    // Give time for log to flush
+    std::thread::sleep(std::time::Duration::from_millis(100));
+    
+    // Verify warning was logged
+    let log_contents = fs::read_to_string(&log_file)
+        .expect("Failed to read log file");
+    assert!(log_contents.contains("Invalid watched_threshold value"));
+}
+
+/// Test Case: Missing watched threshold uses default value
+/// When config.yaml does not contain a watched_threshold field,
+/// the loaded Config should use the default value of 95.
+/// Validates: Requirements 1.1, 1.4
+#[test]
+fn test_missing_watched_threshold_uses_default() {
+    let temp_dir = TempDir::new().expect("Failed to create temp dir");
+    let yaml_path = temp_dir.path().join("config.yaml");
+
+    let config_without_threshold = r#"video_extensions:
+  - mp4
+video_player: /usr/bin/vlc
+"#;
+    fs::write(&yaml_path, config_without_threshold).expect("Failed to write test config");
+
+    let config = read_config(&yaml_path);
+    assert_eq!(config.watched_threshold, 95);
+}
+
+/// Test Case: YAML generation includes watched threshold documentation
+/// When generate_yaml_with_comments is called, the output should include
+/// comprehensive documentation for the watched_threshold field.
+/// Validates: Requirements 1.1, 1.2, 1.3, 1.4
+#[test]
+fn test_yaml_generation_includes_watched_threshold_documentation() {
+    let config = Config::default();
+    let yaml = generate_yaml_with_comments(&config);
+
+    // Verify progress tracking configuration section is present
+    assert!(yaml.contains("=== Progress Tracking Configuration ==="));
+    assert!(yaml.contains("Percentage of episode completion that triggers automatic watched status"));
+    assert!(yaml.contains("Valid range: 1-100 (default: 95)"));
+    assert!(yaml.contains("automatically marked as watched"));
+    assert!(yaml.contains("Invalid values will default to 95"));
+    assert!(yaml.contains("watched_threshold: 95"));
 }

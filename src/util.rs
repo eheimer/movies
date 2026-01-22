@@ -90,11 +90,56 @@ pub fn truncate_string(s: &str, max_length: usize) -> String {
 }
 
 pub fn run_video_player(config: &Config, file_path: &Path) -> io::Result<Child> {
-    Command::new(&config.video_player)
-        .arg(file_path)
+    run_video_player_with_resume(config, file_path, None)
+}
+
+/// Run video player with optional resume position
+pub fn run_video_player_with_resume(
+    config: &Config, 
+    file_path: &Path, 
+    start_time: Option<u64>
+) -> io::Result<Child> {
+    let mut command = Command::new(&config.video_player);
+    command.arg(file_path);
+    
+    // Add resume position if provided
+    if let Some(seconds) = start_time {
+        add_resume_parameters(&mut command, &config.video_player, seconds);
+    }
+    
+    command
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
+}
+
+/// Add resume parameters based on video player type
+fn add_resume_parameters(command: &mut Command, player_path: &str, start_seconds: u64) {
+    // Extract player name from path for identification
+    let player_name = std::path::Path::new(player_path)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("")
+        .to_lowercase();
+    
+    // Format time for different players
+    if player_name.contains("vlc") {
+        // VLC: --start-time=seconds
+        command.arg(format!("--start-time={}", start_seconds));
+    } else if player_name.contains("mpv") {
+        // mpv: --start=seconds
+        command.arg(format!("--start={}", start_seconds));
+    } else if player_name.contains("mplayer") {
+        // MPlayer: -ss seconds
+        command.arg("-ss").arg(start_seconds.to_string());
+    } else if player_name.contains("ffplay") {
+        // ffplay: -ss seconds
+        command.arg("-ss").arg(start_seconds.to_string());
+    } else {
+        // Fallback: try common -ss format used by many players
+        // This works with: ffmpeg-based players, some others
+        command.arg("-ss").arg(start_seconds.to_string());
+    }
 }
 
 pub fn can_repeat_action(

@@ -15,7 +15,8 @@ use crate::episode_field::EpisodeField;
 use crate::logger;
 use crate::menu::{MenuAction, MenuItem};
 use crate::path_resolver::PathResolver;
-use crate::util::{run_video_player, Entry, Mode, ViewContext};
+use crate::player_plugin::create_player_plugin;
+use crate::util::{Entry, Mode, ViewContext};
 use crate::video_metadata;
 use display::get_max_displayed_items_with_header_height;
 
@@ -748,20 +749,154 @@ pub fn handle_browse_mode(
                                 // Log video playback
                                 logger::log_info(&format!("Playing video: {} ({})", name, absolute_location));
                                 
+                                // Mark episode as unwatched when starting playback
+                                if let Err(e) = database::mark_episode_unwatched(*episode_id) {
+                                    logger::log_warn(&format!("Failed to mark episode {} as unwatched: {}", episode_id, e));
+                                }
+                                
                                 // Set status message
                                 *status_message = format!("Playing video: {}", name);
                                 *redraw = true;
                                 
-                                // only play one video at a time
-                                match run_video_player(config, Path::new(&absolute_location)) {
-                                    Ok(mut player_process) => {
+                                // Create player plugin based on configured video player
+                                let plugin = create_player_plugin(&config.video_player);
+                                
+                                // Query existing progress for resume functionality
+                                let start_time = match database::get_episode_progress(*episode_id) {
+                                    Ok(Some(0)) => {
+                                        // Progress is explicitly 0 - start from beginning and override any watch-later file
+                                        logger::log_info("Starting video from beginning (progress reset)");
+                                        Some(0)
+                                    }
+                                    Ok(Some(progress_seconds)) if progress_seconds > 0 => {
+                                        // Non-zero progress - let Celluloid handle resume from watch-later file
+                                        logger::log_info(&format!("Resuming video (progress: {}s, using Celluloid's watch-later)", progress_seconds));
+                                        None
+                                    }
+                                    Ok(Some(_)) => {
+                                        // Shouldn't reach here, but handle it
+                                        logger::log_info("Starting video from beginning");
+                                        Some(0)
+                                    }
+                                    Ok(None) => {
+                                        // No progress data - let Celluloid handle resume from its watch-later file
+                                        logger::log_info("Starting video (no progress data)");
+                                        None
+                                    }
+                                    Err(e) => {
+                                        logger::log_warn(&format!("Failed to get progress for episode {}: {}. Starting from beginning.", episode_id, e));
+                                        None
+                                    }
+                                };
+                                
+                                // Launch player using plugin
+                                let (command, args) = plugin.launch_command(Path::new(&absolute_location), start_time);
+                                
+                                match std::process::Command::new(&command)
+                                    .args(&args)
+                                    .stdout(std::process::Stdio::null())
+                                    .stderr(std::process::Stdio::null())
+                                    .spawn()
+                                {
+                                    Ok(player_process) => {
                                         *playing_file = Some(location.to_string());
-
-                                        // Spawn a thread to wait for the process to finish
-                                        let tx = tx.clone();
+                                        logger::log_info(&format!("Video player launched: {} {:?}", command, args));
+                                        
+                                        // Spawn a thread to monitor progress and wait for player to finish
+                                        let tx_clone = tx.clone();
+                                        let episode_id_clone = *episode_id;
+                                        let absolute_location_clone = absolute_location.clone();
+                                        let watched_threshold = config.watched_threshold;
+                                        let episode_duration = if !edit_details.length.is_empty() && edit_details.length != "0" {
+                                            edit_details.length.parse::<u64>().unwrap_or(0)
+                                        } else {
+                                            0
+                                        };
+                                        
                                         thread::spawn(move || {
-                                            player_process.wait().ok();
-                                            tx.send(()).ok();
+                                            use std::time::Duration;
+                                            
+                                            let mut player_process = player_process;
+                                            let plugin = create_player_plugin(&command);
+                                            
+                                            // Monitor progress while player is running
+                                            loop {
+                                                // Check if player is still running
+                                                match player_process.try_wait() {
+                                                    Ok(Some(exit_status)) => {
+                                                        // Player has exited
+                                                        logger::log_info(&format!("Video player exited with status: {}", exit_status));
+                                                        
+                                                        // Give mpv a moment to write the watch-later file
+                                                        thread::sleep(Duration::from_millis(500));
+                                                        
+                                                        // Get final position
+                                                        match plugin.get_final_position(Path::new(&absolute_location_clone)) {
+                                                            Ok(Some(final_position)) => {
+                                                                logger::log_info(&format!("Retrieved final position: {}s", final_position));
+                                                                
+                                                                // Update database with final progress
+                                                                if let Err(e) = crate::database::update_episode_progress(episode_id_clone, final_position) {
+                                                                    logger::log_error(&format!("Failed to update progress for episode {}: {}", episode_id_clone, e));
+                                                                }
+                                                                
+                                                                // Check if watched threshold is met
+                                                                if episode_duration > 0 {
+                                                                    let progress_percentage = (final_position as f64 / episode_duration as f64) * 100.0;
+                                                                    let threshold = watched_threshold as f64;
+                                                                    
+                                                                    if progress_percentage >= threshold {
+                                                                        logger::log_info(&format!(
+                                                                            "Episode {} reached watched threshold ({:.1}% >= {:.1}%), marking as watched",
+                                                                            episode_id_clone, progress_percentage, threshold
+                                                                        ));
+                                                                        
+                                                                        if let Err(e) = crate::database::mark_episode_watched_with_timestamp(episode_id_clone) {
+                                                                            logger::log_error(&format!("Failed to mark episode {} as watched: {}", episode_id_clone, e));
+                                                                        } else {
+                                                                            // Delete watch-later file so next playback starts from beginning
+                                                                            if let Err(e) = plugin.delete_watch_later_file(Path::new(&absolute_location_clone)) {
+                                                                                logger::log_warn(&format!("Failed to delete watch-later file: {}", e));
+                                                                            }
+                                                                        }
+                                                                    } else {
+                                                                        logger::log_info(&format!(
+                                                                            "Episode {} progress: {:.1}% (threshold: {:.1}%)",
+                                                                            episode_id_clone, progress_percentage, threshold
+                                                                        ));
+                                                                    }
+                                                                }
+                                                            }
+                                                            Ok(None) => {
+                                                                logger::log_info("No final position available from player plugin");
+                                                            }
+                                                            Err(e) => {
+                                                                logger::log_warn(&format!("Failed to retrieve final position: {}", e));
+                                                            }
+                                                        }
+                                                        
+                                                        // Always clean up watch-later files, even if we couldn't read position
+                                                        // This prevents stale/empty files from causing issues
+                                                        if let Err(e) = plugin.cleanup_progress_files() {
+                                                            logger::log_warn(&format!("Failed to cleanup progress files: {}", e));
+                                                        }
+                                                        
+                                                        // Notify main thread that playback is complete
+                                                        tx_clone.send(()).ok();
+                                                        break;
+                                                    }
+                                                    Ok(None) => {
+                                                        // Player is still running, just sleep and check again
+                                                        // Don't read watch-later file while player is running to avoid file locking issues
+                                                        thread::sleep(Duration::from_secs(10));
+                                                    }
+                                                    Err(e) => {
+                                                        logger::log_error(&format!("Error checking player status: {}", e));
+                                                        tx_clone.send(()).ok();
+                                                        break;
+                                                    }
+                                                }
+                                            }
                                         });
                                     }
                                     Err(e) => {
@@ -1371,15 +1506,25 @@ fn execute_menu_action(
         }
         MenuAction::ToggleWatched => {
             // Toggle watched status for the remembered episode
-            if let Entry::Episode { episode_id, .. } = filtered_entries[remembered_item] {
-                if let Err(e) = database::toggle_watched_status(episode_id) {
-                    logger::log_error(&format!("Failed to toggle watched status for episode {}: {}", episode_id, e));
-                    eprintln!("Error: Failed to toggle watched status: {}", e);
-                    return;
+            if let Entry::Episode { episode_id, location, .. } = &filtered_entries[remembered_item] {
+                match database::toggle_watched_status(*episode_id) {
+                    Ok(now_watched) => {
+                        // Log watched status toggle
+                        logger::log_info(&format!("Toggled watched status for episode {} (now: {})", episode_id, now_watched));
+                        
+                        // Always delete watch-later file when toggling so next playback starts from beginning
+                        let absolute_location = resolver.to_absolute(Path::new(location));
+                        let plugin = create_player_plugin(&config.video_player);
+                        if let Err(e) = plugin.delete_watch_later_file(&absolute_location) {
+                            logger::log_warn(&format!("Failed to delete watch-later file: {}", e));
+                        }
+                    }
+                    Err(e) => {
+                        logger::log_error(&format!("Failed to toggle watched status for episode {}: {}", episode_id, e));
+                        eprintln!("Error: Failed to toggle watched status: {}", e);
+                        return;
+                    }
                 }
-                
-                // Log watched status toggle
-                logger::log_info(&format!("Toggled watched status for episode {}", episode_id));
 
                 // Reload entries based on current view context
                 *entries = match view_context {

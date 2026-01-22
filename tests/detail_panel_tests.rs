@@ -23,6 +23,8 @@ fn test_metadata_display_creation() {
             number: 1,
         }),
         episode_number: "1".to_string(),
+        last_watched_time: None,
+        last_progress_time: None,
     };
 
     let metadata_display = MetadataDisplay::new(
@@ -49,6 +51,8 @@ fn test_metadata_display_path_extraction() {
         series: None,
         season: None,
         episode_number: "".to_string(),
+        last_watched_time: None,
+        last_progress_time: None,
     };
 
     let metadata_display = MetadataDisplay::new(
@@ -74,6 +78,8 @@ fn test_metadata_display_empty_fields() {
         series: None,
         season: None,
         episode_number: "".to_string(),
+        last_watched_time: None,
+        last_progress_time: None,
     };
 
     let metadata_display = MetadataDisplay::new(
@@ -106,6 +112,8 @@ fn test_episode_editor_creation() {
             number: 1,
         }),
         episode_number: "1".to_string(),
+        last_watched_time: None,
+        last_progress_time: None,
     };
 
     let mut dirty_fields = HashSet::new();
@@ -139,6 +147,8 @@ fn test_episode_editor_field_highlighting() {
         series: None,
         season: None,
         episode_number: "1".to_string(),
+        last_watched_time: None,
+        last_progress_time: None,
     };
 
     let mut dirty_fields = HashSet::new();
@@ -172,6 +182,8 @@ fn test_episode_editor_non_editable_fields() {
         series: None,
         season: None,
         episode_number: "1".to_string(),
+        last_watched_time: None,
+        last_progress_time: None,
     };
 
     let dirty_fields = HashSet::new();
@@ -211,6 +223,8 @@ fn test_detail_panel_browse_mode() {
             number: 1,
         }),
         episode_number: "1".to_string(),
+        last_watched_time: None,
+        last_progress_time: None,
     };
 
     let dirty_fields = HashSet::new();
@@ -250,6 +264,8 @@ fn test_detail_panel_edit_mode() {
             number: 1,
         }),
         episode_number: "1".to_string(),
+        last_watched_time: None,
+        last_progress_time: None,
     };
 
     let mut dirty_fields = HashSet::new();
@@ -284,6 +300,8 @@ fn test_detail_panel_mode_switching() {
         series: None,
         season: None,
         episode_number: "1".to_string(),
+        last_watched_time: None,
+        last_progress_time: None,
     };
 
     let dirty_fields = HashSet::new();
@@ -334,6 +352,8 @@ fn test_detail_panel_other_modes_default_to_browse() {
         series: None,
         season: None,
         episode_number: "1".to_string(),
+        last_watched_time: None,
+        last_progress_time: None,
     };
 
     let dirty_fields = HashSet::new();

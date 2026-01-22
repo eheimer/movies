@@ -19,7 +19,7 @@ use std::io;
 const FOOTER_SIZE: usize = 1; // Reserve 1 line for status line at bottom
 const COL1_WIDTH: usize = 45;
 const MIN_COL2_WIDTH: usize = 20;
-const DETAIL_HEIGHT: usize = 11;
+const DETAIL_HEIGHT: usize = 13; // Increased from 11 to accommodate progress tracking fields
 
 /// Convert Entry objects to Browser component data
 fn entries_to_browser_data(

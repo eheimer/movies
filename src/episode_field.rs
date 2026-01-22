@@ -16,6 +16,8 @@ pub enum EpisodeField {
     Series = 6,
     Season = 7,
     EpisodeNumber = 8,
+    LastWatchedTime = 9,
+    LastProgressTime = 10,
 }
 
 impl From<usize> for EpisodeField {
@@ -30,6 +32,8 @@ impl From<usize> for EpisodeField {
             6 => EpisodeField::Series,
             7 => EpisodeField::Season,
             8 => EpisodeField::EpisodeNumber,
+            9 => EpisodeField::LastWatchedTime,
+            10 => EpisodeField::LastProgressTime,
             _ => panic!("Invalid EditField value"),
         }
     }
@@ -56,7 +60,9 @@ impl EpisodeField {
             | EpisodeField::Filename
             | EpisodeField::Watched
             | EpisodeField::Length
-            | EpisodeField::Series => false,
+            | EpisodeField::Series
+            | EpisodeField::LastWatchedTime
+            | EpisodeField::LastProgressTime => false,
             _ => true,
         }
     }
@@ -100,6 +106,29 @@ impl EpisodeField {
                 }
             } // Assuming Season is not a simple string field
             EpisodeField::EpisodeNumber => details.episode_number.clone(),
+            EpisodeField::LastWatchedTime => {
+                if let Some(iso_datetime) = &details.last_watched_time {
+                    crate::database::format_last_watched_time(iso_datetime)
+                } else {
+                    String::new()
+                }
+            }
+            EpisodeField::LastProgressTime => {
+                if let Some(progress_str) = &details.last_progress_time {
+                    if let Ok(seconds) = progress_str.parse::<u64>() {
+                        if seconds == 0 {
+                            String::new()
+                        } else {
+                            crate::video_metadata::format_duration_hms(seconds)
+                        }
+                    } else {
+                        // If parsing fails, return empty string
+                        String::new()
+                    }
+                } else {
+                    String::new()
+                }
+            }
         }
     }
 }
@@ -116,6 +145,8 @@ impl EpisodeField {
             EpisodeField::Series => "Series",
             EpisodeField::Season => "Season",
             EpisodeField::EpisodeNumber => "Ep #",
+            EpisodeField::LastWatchedTime => "Last Watched",
+            EpisodeField::LastProgressTime => "Progress",
         }
     }
 }
