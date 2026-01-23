@@ -154,6 +154,30 @@ fn draw_detail_panel_border_to_buffer(
 
 
 
+/// Main screen rendering function with double-buffer integration.
+///
+/// This function renders the entire UI by writing to a buffer instead of directly to the terminal.
+/// The buffer layer automatically handles differential updates, writing only changed cells.
+///
+/// # Buffer Integration
+///
+/// The function follows this pattern:
+/// 1. Clear desired buffer to start with empty slate
+/// 2. Get BufferWriter for this frame
+/// 3. Write all UI components to buffer
+/// 4. Compare buffers and write only changes to terminal
+///
+/// # Parameters
+///
+/// - `buffer_manager`: The BufferManager instance (added for double-buffer support)
+/// - All other parameters remain unchanged from the original implementation
+///
+/// # Integration Notes
+///
+/// - This is the ONLY function signature that changed (added one parameter)
+/// - Component rendering logic remains unchanged
+/// - Direct terminal writes replaced with BufferWriter calls
+/// - Cursor visibility still handled via direct terminal calls
 pub fn draw_screen(
     entries: &[Entry],
     current_item: usize,
@@ -472,7 +496,17 @@ pub fn get_max_displayed_items_with_header_height(header_height: usize) -> io::R
     Ok(max_lines)
 }
 
-/// Write component cells to buffer at specified position
+/// Write component cells to buffer at specified position.
+///
+/// This is a key integration point between the component system and the buffer layer.
+/// Components render to their own Cell arrays, which are then written to the buffer
+/// at the appropriate screen position.
+///
+/// # Buffer Integration
+///
+/// - Converts component Cell format to buffer Cell format
+/// - Handles positioning and styling
+/// - Replaces direct terminal write operations
 fn write_cells_to_buffer(
     writer: &mut crate::buffer::BufferWriter,
     cells: &[Vec<crate::components::Cell>],
