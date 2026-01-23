@@ -81,11 +81,12 @@ impl ContextMenu {
                 string_to_bg_color_or_default(&theme.current_bg),
             )
         } else {
-            (Color::Reset, Color::Reset)
+            // Use black background for menu to make it opaque and prevent artifacts
+            (Color::Reset, Color::Black)
         };
 
-        // Left border
-        cells.push(Cell::new('║', Color::Reset, Color::Reset, TextStyle::new()));
+        // Left border (with black background to make menu opaque)
+        cells.push(Cell::new('║', Color::Reset, Color::Black, TextStyle::new()));
 
         // Left padding
         cells.push(Cell::new(' ', fg_color, bg_color, TextStyle::new()));
@@ -115,8 +116,8 @@ impl ContextMenu {
         // Right padding
         cells.push(Cell::new(' ', fg_color, bg_color, TextStyle::new()));
 
-        // Right border
-        cells.push(Cell::new('║', Color::Reset, Color::Reset, TextStyle::new()));
+        // Right border (with black background to make menu opaque)
+        cells.push(Cell::new('║', Color::Reset, Color::Black, TextStyle::new()));
 
         cells
     }
@@ -141,14 +142,14 @@ impl Component for ContextMenu {
         // Use saturating arithmetic for dimension calculations
         let content_width = menu_width.saturating_sub(4); // Subtract borders and padding
 
-        // Top border - use saturating arithmetic to prevent underflow
+        // Top border - use saturating arithmetic to prevent underflow (with black background)
         let mut top_border = Vec::new();
-        top_border.push(Cell::new('╔', Color::Reset, Color::Reset, TextStyle::new()));
+        top_border.push(Cell::new('╔', Color::Reset, Color::Black, TextStyle::new()));
         let border_fill_width = menu_width.saturating_sub(2);
         for _ in 0..border_fill_width {
-            top_border.push(Cell::new('═', Color::Reset, Color::Reset, TextStyle::new()));
+            top_border.push(Cell::new('═', Color::Reset, Color::Black, TextStyle::new()));
         }
-        top_border.push(Cell::new('╗', Color::Reset, Color::Reset, TextStyle::new()));
+        top_border.push(Cell::new('╗', Color::Reset, Color::Black, TextStyle::new()));
         result.push(top_border);
 
         // Menu items
@@ -158,13 +159,13 @@ impl Component for ContextMenu {
             result.push(item_cells);
         }
 
-        // Bottom border - use saturating arithmetic to prevent underflow
+        // Bottom border - use saturating arithmetic to prevent underflow (with black background)
         let mut bottom_border = Vec::new();
-        bottom_border.push(Cell::new('╚', Color::Reset, Color::Reset, TextStyle::new()));
+        bottom_border.push(Cell::new('╚', Color::Reset, Color::Black, TextStyle::new()));
         for _ in 0..border_fill_width {
-            bottom_border.push(Cell::new('═', Color::Reset, Color::Reset, TextStyle::new()));
+            bottom_border.push(Cell::new('═', Color::Reset, Color::Black, TextStyle::new()));
         }
-        bottom_border.push(Cell::new('╝', Color::Reset, Color::Reset, TextStyle::new()));
+        bottom_border.push(Cell::new('╝', Color::Reset, Color::Black, TextStyle::new()));
         result.push(bottom_border);
 
         result

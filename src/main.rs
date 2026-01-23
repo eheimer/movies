@@ -1,3 +1,4 @@
+mod buffer;
 mod components;
 mod config;
 mod database;
@@ -24,13 +25,14 @@ use display::draw_screen;
 use dto::EpisodeDetail;
 use episode_field::EpisodeField;
 use path_resolver::PathResolver;
+use buffer::BufferManager;
 use std::collections::HashSet;
 use std::io;
 use std::panic;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::time::Duration;
-use terminal::{initialize_terminal, restore_terminal};
+use terminal::{initialize_terminal, restore_terminal, get_terminal_size};
 use theme::Theme;
 use util::{Entry, LastAction, Mode, ViewContext};
 use walkdir::WalkDir;
@@ -259,6 +261,13 @@ fn main_loop(mut entries: Vec<Entry>, mut config: Config, theme: Theme, mut reso
     let mut filter_mode: bool = false;
     let mut first_series: usize = 0;
 
+    // Initialize BufferManager with terminal dimensions
+    let (terminal_width, terminal_height) = get_terminal_size()?;
+    let mut buffer_manager = BufferManager::new(terminal_width, terminal_height);
+    
+    // Track previous mode for detecting mode changes
+    let mut previous_mode = mode.clone();
+
     // Create a channel to communicate between the thread and the main loop
     let (tx, rx): (Sender<()>, Receiver<()>) = mpsc::channel();
 
@@ -267,6 +276,12 @@ fn main_loop(mut entries: Vec<Entry>, mut config: Config, theme: Theme, mut reso
 
     loop {
         if redraw {
+            // Check if mode has changed and trigger full redraw if needed
+            if mode != previous_mode {
+                buffer_manager.force_full_redraw();
+                previous_mode = mode.clone();
+            }
+            
             // Split the search string into terms
             let search_terms: Vec<String> = search
                 .to_lowercase()
@@ -351,6 +366,7 @@ fn main_loop(mut entries: Vec<Entry>, mut config: Config, theme: Theme, mut reso
                 &view_context,
                 &status_message,
                 resolver.as_ref().expect("PathResolver should be initialized"),
+                &mut buffer_manager,
             )?;
             redraw = false;
         }
@@ -367,7 +383,8 @@ fn main_loop(mut entries: Vec<Entry>, mut config: Config, theme: Theme, mut reso
             let event = event::read()?;
             
             // Handle terminal resize events
-            if matches!(event, Event::Resize(..)) {
+            if let Event::Resize(width, height) = event {
+                buffer_manager.resize(width as usize, height as usize);
                 redraw = true;
                 continue;
             }
@@ -540,6 +557,7 @@ fn main_loop(mut entries: Vec<Entry>, mut config: Config, theme: Theme, mut reso
                                 &config,
                                 res,
                                 &mut status_message,
+                                &mut buffer_manager,
                             );
                         } else {
                             // If resolver is None, exit menu and enter Entry mode

@@ -1319,6 +1319,7 @@ pub fn handle_menu_mode(
     config: &Config,
     resolver: &PathResolver,
     status_message: &mut String,
+    buffer_manager: &mut crate::buffer::BufferManager,
 ) {
     // Handle navigation
     match code {
@@ -1372,6 +1373,8 @@ pub fn handle_menu_mode(
         KeyCode::Esc => {
             // Close menu and return to Browse mode
             *mode = Mode::Browse;
+            // Force full redraw to clear menu artifacts from detail panel
+            buffer_manager.force_full_redraw();
             *redraw = true;
         }
         _ => {

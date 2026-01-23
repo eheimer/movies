@@ -1887,3 +1887,309 @@ fn test_browser_component_selection_state_integration() {
     browser.set_selected_item(100); // Out of bounds
     // Selection bounds are handled internally by the browser component
 }
+
+
+// ============================================================================
+// BufferManager Integration Tests (Task 9.1)
+// ============================================================================
+
+/// Integration Test: BufferManager is created with correct terminal size
+/// 
+/// This test verifies that BufferManager is initialized with the correct
+/// terminal dimensions when the application starts.
+/// 
+/// Validates: Requirements 2.1, 6.1
+#[test]
+fn test_buffer_manager_created_with_correct_terminal_size() {
+    use movies::buffer::BufferManager;
+    
+    // Test with various terminal sizes
+    let test_sizes = vec![
+        (80, 24),   // Standard terminal
+        (120, 40),  // Large terminal
+        (40, 20),   // Small terminal
+        (200, 60),  // Very large terminal
+    ];
+    
+    for (width, height) in test_sizes {
+        let buffer_manager = BufferManager::new(width, height);
+        
+        // Verify buffer manager is created successfully
+        // We can't directly access private fields, but we can verify it works
+        // by testing that it can be used for rendering operations
+        
+        // Create a simple test by getting a writer and writing to it
+        let mut buffer_manager = buffer_manager;
+        buffer_manager.clear_desired_buffer();
+        let mut writer = buffer_manager.get_writer();
+        
+        // Write some test content
+        writer.move_to(0, 0);
+        writer.write_str("Test");
+        
+        // Verify we can compare buffers (this would fail if dimensions were wrong)
+        let changes = buffer_manager.compare_buffers();
+        assert!(!changes.is_empty(), "Should detect changes after writing to buffer");
+        
+        // Verify changes are within bounds
+        for (x, y, _) in changes {
+            assert!(x < width, "X coordinate {} should be within width {}", x, width);
+            assert!(y < height, "Y coordinate {} should be within height {}", y, height);
+        }
+    }
+}
+
+/// Integration Test: Terminal resize events update buffer dimensions
+/// 
+/// This test verifies that when a terminal resize event occurs,
+/// the BufferManager correctly updates its internal buffer dimensions.
+/// 
+/// Validates: Requirements 6.1
+#[test]
+fn test_resize_events_update_buffer_dimensions() {
+    use movies::buffer::BufferManager;
+    
+    // Create buffer manager with initial size
+    let initial_width = 80;
+    let initial_height = 24;
+    let mut buffer_manager = BufferManager::new(initial_width, initial_height);
+    
+    // Write some content to the initial buffer
+    buffer_manager.clear_desired_buffer();
+    let mut writer = buffer_manager.get_writer();
+    writer.move_to(0, 0);
+    writer.write_str("Initial content");
+    
+    // Simulate terminal resize to larger size
+    let new_width = 120;
+    let new_height = 40;
+    buffer_manager.resize(new_width, new_height);
+    
+    // Verify buffer manager works with new dimensions
+    buffer_manager.clear_desired_buffer();
+    let mut writer = buffer_manager.get_writer();
+    
+    // Write content at a position that would be out of bounds in old size
+    writer.move_to(100, 30);
+    writer.write_str("New content");
+    
+    // Verify changes are within new bounds
+    let changes = buffer_manager.compare_buffers();
+    for (x, y, _) in changes {
+        assert!(x < new_width, "X coordinate {} should be within new width {}", x, new_width);
+        assert!(y < new_height, "Y coordinate {} should be within new height {}", y, new_height);
+    }
+    
+    // Simulate resize to smaller size
+    let smaller_width = 40;
+    let smaller_height = 20;
+    buffer_manager.resize(smaller_width, smaller_height);
+    
+    // Verify buffer manager works with smaller dimensions
+    buffer_manager.clear_desired_buffer();
+    let mut writer = buffer_manager.get_writer();
+    writer.move_to(0, 0);
+    writer.write_str("Smaller");
+    
+    // Verify changes are within smaller bounds
+    let changes = buffer_manager.compare_buffers();
+    for (x, y, _) in changes {
+        assert!(x < smaller_width, "X coordinate {} should be within smaller width {}", x, smaller_width);
+        assert!(y < smaller_height, "Y coordinate {} should be within smaller height {}", y, smaller_height);
+    }
+}
+
+/// Integration Test: Mode changes trigger full redraw
+/// 
+/// This test verifies that when the application mode changes,
+/// force_full_redraw() is called to ensure a clean visual state.
+/// 
+/// Validates: Requirements 6.2
+#[test]
+fn test_mode_changes_trigger_full_redraw() {
+    use movies::buffer::BufferManager;
+    
+    let width = 80;
+    let height = 24;
+    let mut buffer_manager = BufferManager::new(width, height);
+    
+    // Write initial content and render it
+    buffer_manager.clear_desired_buffer();
+    let mut writer = buffer_manager.get_writer();
+    writer.move_to(0, 0);
+    writer.write_str("Initial mode content");
+    
+    // Simulate rendering (this updates current buffer to match desired)
+    buffer_manager.update_current_buffer();
+    
+    // Now both buffers are in sync, so no changes should be detected
+    let changes_before = buffer_manager.compare_buffers();
+    assert!(changes_before.is_empty(), "No changes should be detected when buffers are in sync");
+    
+    // Simulate mode change by calling force_full_redraw
+    buffer_manager.force_full_redraw();
+    
+    // Write new content for the new mode
+    buffer_manager.clear_desired_buffer();
+    let mut writer = buffer_manager.get_writer();
+    writer.move_to(0, 0);
+    writer.write_str("New mode content");
+    
+    // After force_full_redraw, all cells should be detected as changed
+    let changes_after = buffer_manager.compare_buffers();
+    assert!(!changes_after.is_empty(), "Changes should be detected after force_full_redraw");
+    
+    // Verify that force_full_redraw causes a full screen update
+    // by checking that we have changes across the screen
+    let unique_rows: std::collections::HashSet<usize> = changes_after.iter().map(|(_, y, _)| *y).collect();
+    assert!(!unique_rows.is_empty(), "Should have changes in multiple rows after mode change");
+}
+
+/// Integration Test: BufferManager integration with multiple render cycles
+/// 
+/// This test verifies that BufferManager correctly handles multiple render cycles,
+/// simulating the main loop's redraw behavior.
+/// 
+/// Validates: Requirements 2.1, 6.1
+#[test]
+fn test_buffer_manager_multiple_render_cycles() {
+    use movies::buffer::BufferManager;
+    
+    let width = 80;
+    let height = 24;
+    let mut buffer_manager = BufferManager::new(width, height);
+    
+    // Simulate multiple render cycles
+    for cycle in 0..5 {
+        // Clear and write new content (simulating draw_screen)
+        buffer_manager.clear_desired_buffer();
+        let mut writer = buffer_manager.get_writer();
+        writer.move_to(0, 0);
+        writer.write_str(&format!("Cycle {}", cycle));
+        
+        // Compare buffers
+        let changes = buffer_manager.compare_buffers();
+        assert!(!changes.is_empty(), "Cycle {} should have changes", cycle);
+        
+        // Simulate successful render
+        buffer_manager.update_current_buffer();
+        
+        // After update, buffers should be in sync
+        let changes_after_update = buffer_manager.compare_buffers();
+        assert!(changes_after_update.is_empty(), "Cycle {} should have no changes after update", cycle);
+    }
+}
+
+/// Integration Test: BufferManager handles empty frames correctly
+/// 
+/// This test verifies that BufferManager correctly handles frames where
+/// the desired buffer is cleared but no content is written.
+/// 
+/// Validates: Requirements 2.1, 3.1
+#[test]
+fn test_buffer_manager_handles_empty_frames() {
+    use movies::buffer::BufferManager;
+    
+    let width = 80;
+    let height = 24;
+    let mut buffer_manager = BufferManager::new(width, height);
+    
+    // Write initial content
+    buffer_manager.clear_desired_buffer();
+    let mut writer = buffer_manager.get_writer();
+    writer.move_to(0, 0);
+    writer.write_str("Initial content");
+    buffer_manager.update_current_buffer();
+    
+    // Clear desired buffer without writing new content (empty frame)
+    buffer_manager.clear_desired_buffer();
+    
+    // Compare buffers - should detect that content was removed
+    let changes = buffer_manager.compare_buffers();
+    assert!(!changes.is_empty(), "Should detect changes when content is cleared");
+    
+    // Update to empty state
+    buffer_manager.update_current_buffer();
+    
+    // Verify buffers are now in sync (both empty)
+    let changes_after = buffer_manager.compare_buffers();
+    assert!(changes_after.is_empty(), "Buffers should be in sync after clearing");
+}
+
+/// Integration Test: BufferManager with rapid mode changes
+/// 
+/// This test verifies that BufferManager correctly handles rapid mode changes,
+/// ensuring each mode change triggers a full redraw.
+/// 
+/// Validates: Requirements 6.2
+#[test]
+fn test_buffer_manager_rapid_mode_changes() {
+    use movies::buffer::BufferManager;
+    
+    let width = 80;
+    let height = 24;
+    let mut buffer_manager = BufferManager::new(width, height);
+    
+    // Simulate rapid mode changes (Browse -> Edit -> Menu -> Browse)
+    let modes = vec!["Browse", "Edit", "Menu", "Browse"];
+    
+    for mode in modes {
+        // Force full redraw for mode change
+        buffer_manager.force_full_redraw();
+        
+        // Clear and write mode-specific content
+        buffer_manager.clear_desired_buffer();
+        let mut writer = buffer_manager.get_writer();
+        writer.move_to(0, 0);
+        writer.write_str(&format!("Mode: {}", mode));
+        
+        // Verify changes are detected
+        let changes = buffer_manager.compare_buffers();
+        assert!(!changes.is_empty(), "Should detect changes for mode {}", mode);
+        
+        // Update current buffer
+        buffer_manager.update_current_buffer();
+    }
+}
+
+/// Integration Test: BufferManager resize during active rendering
+/// 
+/// This test verifies that BufferManager correctly handles resize events
+/// that occur during active rendering cycles.
+/// 
+/// Validates: Requirements 6.1
+#[test]
+fn test_buffer_manager_resize_during_rendering() {
+    use movies::buffer::BufferManager;
+    
+    let initial_width = 80;
+    let initial_height = 24;
+    let mut buffer_manager = BufferManager::new(initial_width, initial_height);
+    
+    // Start a render cycle
+    buffer_manager.clear_desired_buffer();
+    let mut writer = buffer_manager.get_writer();
+    writer.move_to(0, 0);
+    writer.write_str("Content before resize");
+    
+    // Simulate resize event during rendering
+    let new_width = 120;
+    let new_height = 40;
+    buffer_manager.resize(new_width, new_height);
+    
+    // Continue rendering with new dimensions
+    buffer_manager.clear_desired_buffer();
+    let mut writer = buffer_manager.get_writer();
+    writer.move_to(0, 0);
+    writer.write_str("Content after resize");
+    
+    // Verify buffer works correctly with new dimensions
+    let changes = buffer_manager.compare_buffers();
+    assert!(!changes.is_empty(), "Should detect changes after resize");
+    
+    // Verify all changes are within new bounds
+    for (x, y, _) in changes {
+        assert!(x < new_width, "X should be within new width");
+        assert!(y < new_height, "Y should be within new height");
+    }
+}

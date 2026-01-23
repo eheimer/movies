@@ -1,6 +1,7 @@
 // Library interface for integration testing
 // This module exposes the internal modules for testing purposes
 
+pub mod buffer;
 pub mod components;
 pub mod config;
 pub mod database;

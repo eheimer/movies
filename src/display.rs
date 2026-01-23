@@ -5,7 +5,7 @@ use crate::dto::{EpisodeDetail, Series};
 use crate::episode_field::EpisodeField;
 use crate::menu::MenuItem;
 use crate::terminal::{
-    clear_line, clear_screen, get_terminal_size, hide_cursor, move_cursor, print_at, show_cursor,
+    get_terminal_size, hide_cursor, move_cursor, show_cursor,
 };
 use crate::theme::Theme;
 use crate::util::{Entry, LastAction, Mode, ViewContext};
@@ -101,15 +101,14 @@ fn get_sidebar_width() -> io::Result<usize> {
     Ok(sidebar_width.max(MIN_COL2_WIDTH))
 }
 
-fn draw_detail_panel_border(
+fn draw_detail_panel_border_to_buffer(
+    writer: &mut crate::buffer::BufferWriter,
     left: usize,
     top: usize,
     width: usize,
     height: usize,
     thick: bool,
-) -> io::Result<()> {
-    use crate::terminal::print_at;
-    
+) {
     // Choose border characters based on the thickness
     let (top_left, top_right, bottom_left, bottom_right, horizontal, vertical) = if thick {
         ('╔', '╗', '╚', '╝', '═', '║')
@@ -118,32 +117,31 @@ fn draw_detail_panel_border(
     };
 
     // Draw top border
-    print_at(left, top, &top_left.to_string())?;
-    // Use saturating_sub to prevent underflow when width is very small
+    writer.move_to(left, top);
+    writer.write_char(top_left);
     for _ in 1..width.saturating_sub(1) {
-        print!("{}", horizontal);
+        writer.write_char(horizontal);
     }
-    print!("{}", top_right);
+    writer.write_char(top_right);
 
     // Draw side borders and clear interior
-    // Use saturating_sub to prevent underflow when height is very small
     for row in (top + 1)..(top + height.saturating_sub(1)) {
-        print_at(left, row, &vertical.to_string())?;
+        writer.move_to(left, row);
+        writer.write_char(vertical);
         // Clear the interior space
         for _ in 1..width.saturating_sub(1) {
-            print!(" ");
+            writer.write_char(' ');
         }
-        print!("{}", vertical);
+        writer.write_char(vertical);
     }
 
     // Draw bottom border
-    print_at(left, top + height.saturating_sub(1), &bottom_left.to_string())?;
+    writer.move_to(left, top + height.saturating_sub(1));
+    writer.write_char(bottom_left);
     for _ in 1..width.saturating_sub(1) {
-        print!("{}", horizontal);
+        writer.write_char(horizontal);
     }
-    println!("{}", bottom_right);
-
-    Ok(())
+    writer.write_char(bottom_right);
 }
 
 
@@ -180,8 +178,13 @@ pub fn draw_screen(
     view_context: &ViewContext,
     status_message: &str,
     resolver: &crate::path_resolver::PathResolver,
+    buffer_manager: &mut crate::buffer::BufferManager,
 ) -> io::Result<()> {
-    clear_screen()?;
+    // Clear desired buffer to start with empty slate
+    buffer_manager.clear_desired_buffer();
+    
+    // Get writer for this frame
+    let mut writer = buffer_manager.get_writer();
 
     hide_cursor()?;
 
@@ -228,78 +231,31 @@ pub fn draw_screen(
     let header_height = header.calculate_height();
     let header_cells = header.render(terminal_width, header_height, theme, false);
 
-    // Render header cells to terminal (always render all rows for fixed layout)
-    for (row_index, row) in header_cells.iter().enumerate() {
-        let text = cells_to_styled_string(std::slice::from_ref(row));
-        print_at(0, row_index, &text)?;
-    }
+    // Write header cells to buffer
+    write_cells_to_buffer(&mut writer, &header_cells, 0, 0);
 
     // Handle Entry mode display (both first-run and rescan scenarios)
     if let Mode::Entry = mode {
         if entries.is_empty() {
             // First-run scenario - show welcome message with detailed instructions
-            print_at(
-                0,
-                header_height,
-                &"Welcome to the video library manager!".to_string(),
-            )?;
-            print_at(
-                0,
-                header_height + 1,
-                &"".to_string(),
-            )?;
-            print_at(
-                0,
-                header_height + 2,
-                &"To get started, enter the full path to your video collection directory below.".to_string(),
-            )?;
-            print_at(
-                0,
-                header_height + 3,
-                &"".to_string(),
-            )?;
-            print_at(
-                0,
-                header_height + 4,
-                &"What happens next:".to_string(),
-            )?;
-            print_at(
-                0,
-                header_height + 5,
-                &"  • If videos.sqlite exists in that directory, it will be used (preserving your data)".to_string(),
-            )?;
-            print_at(
-                0,
-                header_height + 6,
-                &"  • If not, a new database will be created and your videos will be scanned".to_string(),
-            )?;
-            print_at(
-                0,
-                header_height + 7,
-                &"".to_string(),
-            )?;
-            print_at(
-                0,
-                header_height + 8,
-                &format!("Path: {}", entry_path),
-            )?;
+            writer.move_to(0, header_height);
+            writer.write_str("Welcome to the video library manager!");
+            writer.move_to(0, header_height + 2);
+            writer.write_str("To get started, enter the full path to your video collection directory below.");
+            writer.move_to(0, header_height + 4);
+            writer.write_str("What happens next:");
+            writer.move_to(0, header_height + 5);
+            writer.write_str("  • If videos.sqlite exists in that directory, it will be used (preserving your data)");
+            writer.move_to(0, header_height + 6);
+            writer.write_str("  • If not, a new database will be created and your videos will be scanned");
+            writer.move_to(0, header_height + 8);
+            writer.write_str(&format!("Path: {}", entry_path));
         } else {
             // Rescan scenario - show simpler prompt
-            print_at(
-                0,
-                header_height + 1,
-                &"Enter the path to a directory to scan for video files.".to_string(),
-            )?;
-            print_at(
-                0,
-                header_height + 2,
-                &"".to_string(),
-            )?;
-            print_at(
-                0,
-                header_height + 3,
-                &format!("Path: {}", entry_path),
-            )?;
+            writer.move_to(0, header_height + 1);
+            writer.write_str("Enter the path to a directory to scan for video files.");
+            writer.move_to(0, header_height + 3);
+            writer.write_str(&format!("Path: {}", entry_path));
         }
     } else if !entries.is_empty() {
         let max_lines = get_max_displayed_items_with_header_height(header_height)?;
@@ -335,14 +291,8 @@ pub fn draw_screen(
         // Render the browser component
         let browser_cells = browser.render(COL1_WIDTH, max_lines, theme, true);
         
-        // Render the browser output to the terminal
-        for (row_index, row) in browser_cells.iter().enumerate() {
-            if !row.is_empty() {
-                // Convert Cell array to styled display text
-                let text = cells_to_styled_string(std::slice::from_ref(row));
-                print_at(0, header_height + row_index, &text)?;
-            }
-        }
+        // Write browser cells to buffer
+        write_cells_to_buffer(&mut writer, &browser_cells, 0, header_height);
         if !series_selected && !season_selected && !matches!(mode, Mode::Menu) {
             // Extract location from current entry
             let entry_location = match &entries[current_item] {
@@ -362,13 +312,14 @@ pub fn draw_screen(
             }
             
             // Draw the window border for detail panel
-            draw_detail_panel_border(
+            draw_detail_panel_border_to_buffer(
+                &mut writer,
                 start_col,
                 start_row,
                 sidebar_width,
                 DETAIL_HEIGHT,
                 edit_mode,
-            )?;
+            );
             
             // Create and render DetailPanel component
             let detail_panel = DetailPanel::new(
@@ -388,14 +339,8 @@ pub fn draw_screen(
             // Render the DetailPanel component
             let detail_cells = detail_panel.render(content_width, content_height, theme, false);
             
-            // Render the detail panel output to the terminal (inside the border)
-            for (row_index, row) in detail_cells.iter().enumerate() {
-                if !row.is_empty() && row_index < content_height {
-                    // Convert Cell array to styled display text
-                    let text = cells_to_styled_string(std::slice::from_ref(row));
-                    print_at(start_col + 1, start_row + 1 + row_index, &text)?;
-                }
-            }
+            // Write detail panel cells to buffer (inside the border)
+            write_cells_to_buffer(&mut writer, &detail_cells, start_col + 1, start_row + 1);
             
             // Position cursor for Edit mode
             if edit_mode && edit_field.is_editable() {
@@ -443,13 +388,8 @@ pub fn draw_screen(
             // Render the SeriesSelectWindow component
             let series_cells = series_window.render(window_width, window_height, theme, false);
             
-            // Render the series window cells to terminal
-            for (row_index, row) in series_cells.iter().enumerate() {
-                if !row.is_empty() {
-                    let text = cells_to_styled_string(std::slice::from_ref(row));
-                    print_at(window_x, window_y + row_index, &text)?;
-                }
-            }
+            // Write series window cells to buffer
+            write_cells_to_buffer(&mut writer, &series_cells, window_x, window_y);
             
             // Handle cursor positioning for SeriesCreate mode
             if let Mode::SeriesCreate = mode {
@@ -479,31 +419,26 @@ pub fn draw_screen(
         let start_col = terminal_width.saturating_sub(menu_width);
         let start_row = 0;
         
-        // Render the menu cells to terminal
-        for (row_index, row) in menu_cells.iter().enumerate() {
-            if !row.is_empty() {
-                let text = cells_to_styled_string(std::slice::from_ref(row));
-                print_at(start_col, start_row + row_index, &text)?;
-            }
-        }
+        // Write menu cells to buffer
+        write_cells_to_buffer(&mut writer, &menu_cells, start_col, start_row);
     }
 
     // Draw status line at the bottom using StatusBar component
     let (terminal_width, terminal_height) = get_terminal_size()?;
     let status_row = terminal_height - 1; // Last row (0-indexed)
     
-    // Clear the status line
-    clear_line(status_row)?;
-    
     // Create and render StatusBar component
     let status_bar = StatusBar::new(status_message.to_string());
     let status_cells = status_bar.render(terminal_width, 1, theme, false);
     
-    // Render the status bar to terminal
-    if let Some(status_row_cells) = status_cells.first() {
-        let text = cells_to_styled_string(std::slice::from_ref(status_row_cells));
-        print_at(0, status_row, &text)?;
-    }
+    // Write status bar to buffer
+    write_cells_to_buffer(&mut writer, &status_cells, 0, status_row);
+    
+    // Drop the writer to release the mutable borrow
+    drop(writer);
+    
+    // Compare buffers and write differences to terminal
+    buffer_manager.render_to_terminal()?;
 
     // Position cursor when in filter mode or edit mode
     // This must be done AFTER all other drawing to ensure cursor is in the right place
@@ -537,38 +472,26 @@ pub fn get_max_displayed_items_with_header_height(header_height: usize) -> io::R
     Ok(max_lines)
 }
 
-/// Convert a 2D array of Cells to a styled string with ANSI codes
-fn cells_to_styled_string(cells: &[Vec<crate::components::Cell>]) -> String {
-    use crossterm::style::Stylize;
-    
-    cells.iter()
-        .map(|row| {
-            row.iter()
-                .map(|cell| {
-                    let mut styled = cell.character.to_string()
-                        .with(cell.fg_color)
-                        .on(cell.bg_color);
-                    
-                    // Apply text styles
-                    if cell.style.bold {
-                        styled = styled.bold();
-                    }
-                    if cell.style.italic {
-                        styled = styled.italic();
-                    }
-                    if cell.style.underlined {
-                        styled = styled.underlined();
-                    }
-                    if cell.style.dim {
-                        styled = styled.dim();
-                    }
-                    
-                    format!("{}", styled)
-                })
-                .collect::<String>()
-        })
-        .collect::<Vec<String>>()
-        .join("\n")
+/// Write component cells to buffer at specified position
+fn write_cells_to_buffer(
+    writer: &mut crate::buffer::BufferWriter,
+    cells: &[Vec<crate::components::Cell>],
+    start_x: usize,
+    start_y: usize,
+) {
+    for (row_index, row) in cells.iter().enumerate() {
+        writer.move_to(start_x, start_y + row_index);
+        for cell in row {
+            // Colors are already crossterm::style::Color, no conversion needed
+            writer.set_fg_color(cell.fg_color);
+            writer.set_bg_color(cell.bg_color);
+            writer.set_bold(cell.style.bold);
+            writer.set_italic(cell.style.italic);
+            writer.set_underlined(cell.style.underlined);
+            writer.set_dim(cell.style.dim);
+            writer.write_char(cell.character);
+        }
+    }
 }
 
 
