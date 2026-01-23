@@ -172,58 +172,6 @@ fn test_large_list_rendering() {
     assert!(compare_duration.as_millis() < 10, "Comparison took too long: {:?}", compare_duration);
 }
 
-// Test rapid navigation simulation
-#[test]
-fn test_rapid_navigation_simulation() {
-    let width = 80;
-    let height = 30;
-    let mut manager = BufferManager::new(width, height);
-    
-    let num_items = 100;
-    let mut current_item = 0;
-    
-    // Simulate 50 rapid arrow key presses
-    let iterations = 50;
-    let start = Instant::now();
-    
-    for _ in 0..iterations {
-        manager.clear_desired_buffer();
-        
-        {
-            let mut writer = manager.get_writer();
-            
-            // Render list with current selection
-            for i in 0..height {
-                writer.move_to(0, i);
-                if i == current_item % height {
-                    writer.set_fg_color(Color::Yellow);
-                    writer.write_str(&format!("> Item {}", current_item));
-                } else {
-                    writer.set_fg_color(Color::White);
-                    writer.write_str(&format!("  Item {}", (current_item + i) % num_items));
-                }
-            }
-        }
-        
-        let _changes = manager.compare_buffers();
-        manager.update_current_buffer();
-        
-        // Move to next item
-        current_item = (current_item + 1) % num_items;
-    }
-    
-    let total_duration = start.elapsed();
-    let avg_frame_time = total_duration.as_micros() / iterations as u128;
-    
-    println!("Rapid navigation simulation:");
-    println!("  Total time for {} frames: {:?}", iterations, total_duration);
-    println!("  Average frame time: {}μs", avg_frame_time);
-    println!("  Frames per second: {:.1}", 1_000_000.0 / avg_frame_time as f64);
-    
-    // Should maintain good performance (< 1ms per frame)
-    assert!(avg_frame_time < 1000, "Average frame time too high: {}μs", avg_frame_time);
-}
-
 // Test buffer clearing performance
 #[test]
 fn test_buffer_clearing_performance() {

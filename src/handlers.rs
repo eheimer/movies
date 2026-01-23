@@ -20,6 +20,39 @@ use crate::util::{Entry, Mode, ViewContext};
 use crate::video_metadata;
 use display::get_max_displayed_items_with_header_height;
 
+// Find the index of the first unwatched entry in a list
+pub fn find_first_unwatched_index(entries: &[Entry]) -> Option<usize> {
+    for (index, entry) in entries.iter().enumerate() {
+        match entry {
+            Entry::Episode { episode_id, .. } => {
+                // Check if episode is unwatched
+                if let Ok(details) = database::get_episode_detail(*episode_id) {
+                    if details.watched != "true" {
+                        return Some(index);
+                    }
+                }
+            }
+            Entry::Series { series_id, .. } => {
+                // Check if series has any unwatched episodes
+                if let Ok((_, unwatched)) = database::get_series_episode_counts(*series_id) {
+                    if unwatched > 0 {
+                        return Some(index);
+                    }
+                }
+            }
+            Entry::Season { season_id, .. } => {
+                // Check if season has any unwatched episodes
+                if let Ok((_, unwatched)) = database::get_season_episode_counts(*season_id) {
+                    if unwatched > 0 {
+                        return Some(index);
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
 pub fn handle_entry_mode(
     code: KeyCode,
     entry_path: &mut String,
@@ -708,10 +741,11 @@ pub fn handle_browse_mode(
                 Entry::Series { series_id, name } => {
                     search.clear();
                     // If a series is selected, reload the entries with the series filter
-                    *current_item = 0;
                     *entries = database::get_entries_for_series(*series_id)
                         .expect("Failed to get entries for series");
                     *filtered_entries = entries.clone();
+                    // Auto-select first unwatched entry, or default to 0
+                    *current_item = find_first_unwatched_index(&entries).unwrap_or(0);
                     *view_context = ViewContext::Series { 
                         series_id: *series_id, 
                         series_name: name.clone() 
@@ -916,10 +950,12 @@ pub fn handle_browse_mode(
                 Entry::Season { season_id, number } => {
                     search.clear();
                     // If a season is selected, reload the entries with the season filter
-                    *current_item = 0;
                     *entries = database::get_entries_for_season(*season_id)
                         .expect("Failed to get entries for season");
                     *filtered_entries = entries.clone();
+                    
+                    // Auto-select first unwatched episode
+                    *current_item = find_first_unwatched_index(entries).unwrap_or(0);
                     
                     // Get series info from current view context (we must be in a series view)
                     let series_name = match view_context {
@@ -963,13 +999,17 @@ pub fn handle_browse_mode(
                 "Browse mode: Navigating from season view to series view (series_id={})",
                 edit_details.series.as_ref().unwrap().id
             ));
-            *current_item = 0;
             search.clear();
             let series_id = edit_details.series.as_ref().unwrap().id;
             let series_name = edit_details.series.as_ref().unwrap().name.clone();
+            let season_id = edit_details.season.as_ref().unwrap().id;
             *entries = database::get_entries_for_series(series_id)
                 .expect("Failed to get entries for series");
             *filtered_entries = entries.clone();
+            // Find and select the season we just came from
+            *current_item = entries.iter().position(|e| {
+                matches!(e, Entry::Season { season_id: sid, .. } if *sid == season_id)
+            }).unwrap_or(0);
             *view_context = ViewContext::Series { series_id, series_name };
             *redraw = true;
         }
@@ -980,10 +1020,18 @@ pub fn handle_browse_mode(
                     && edit_details.series.is_some()) =>
         {
             logger::log_debug("Browse mode: Navigating from series/season view to top level");
-            *current_item = 0;
             search.clear();
+            let series_id = edit_details.series.as_ref().map(|s| s.id);
             *entries = database::get_entries().expect("Failed to get entries");
             *filtered_entries = entries.clone();
+            // Find and select the series we just came from
+            if let Some(sid) = series_id {
+                *current_item = entries.iter().position(|e| {
+                    matches!(e, Entry::Series { series_id, .. } if *series_id == sid)
+                }).unwrap_or(0);
+            } else {
+                *current_item = 0;
+            }
             *view_context = ViewContext::TopLevel;
             *redraw = true;
         }
