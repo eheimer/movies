@@ -59,14 +59,16 @@ pub enum ViewContext {
     Season { season_id: usize, series_name: String, season_number: usize },
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub enum Mode {
-    Browse,       // video browse
-    Edit,         // video details edit
-    Entry,        // initial load from disk
-    SeriesSelect, // series selection
-    SeriesCreate, // create a new series
-    Menu,         // context menu
+    Browse,              // video browse
+    Edit,                // video details edit
+    Entry,               // initial load from disk
+    SeriesSelect,        // series selection
+    SeriesCreate,        // create a new series
+    Menu,                // context menu
+    TorrentSearchInput,  // torrent search input
+    TorrentSearchResults, // torrent search results
 }
 
 pub fn truncate_string(s: &str, max_length: usize) -> String {

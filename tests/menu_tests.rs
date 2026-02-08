@@ -1,6 +1,6 @@
 use movies::menu::*;
 use movies::dto::{EpisodeDetail, Season, Series};
-use movies::util::Entry;
+use movies::util::{Entry, Mode};
 use crossterm::event::KeyCode;
 
 #[test]
@@ -25,6 +25,7 @@ fn test_first_line_preferred_respects_availability() {
             location: "/test".to_string(),
         }),
         episode_detail: episode_detail.clone(),
+        mode: Mode::Browse,
         last_action: None,
     };
 
@@ -57,6 +58,7 @@ fn test_context_aware_filtering_episode_without_series() {
             location: "/test".to_string(),
         }),
         episode_detail: episode_detail.clone(),
+        mode: Mode::Browse,
         last_action: None,
     };
 
@@ -100,6 +102,7 @@ fn test_context_aware_filtering_episode_with_series() {
             location: "/test".to_string(),
         }),
         episode_detail: episode_detail.clone(),
+        mode: Mode::Browse,
         last_action: None,
     };
 
@@ -136,6 +139,7 @@ fn test_context_aware_filtering_series_selected() {
             name: "Test Series".to_string(),
         }),
         episode_detail: episode_detail.clone(),
+        mode: Mode::Browse,
         last_action: None,
     };
 
@@ -213,6 +217,7 @@ fn test_menu_selection_highlighting() {
             location: "/test".to_string(),
         }),
         episode_detail: episode_detail.clone(),
+        mode: Mode::Browse,
         last_action: None,
     };
 
@@ -237,4 +242,73 @@ fn test_menu_selection_highlighting() {
     // 2. The display.rs::draw_context_menu() function applies colors based on selection index
     //    (which uses config.current_fg and config.current_bg for selected items)
     // This test confirms the menu system provides the correct items for highlighting.
+}
+
+#[test]
+fn test_search_online_available_in_browse_mode() {
+    let episode_detail = EpisodeDetail {
+        title: "Test Episode".to_string(),
+        year: "2023".to_string(),
+        watched: "0".to_string(),
+        length: "45".to_string(),
+        series: None,
+        season: None,
+        episode_number: String::new(),
+        last_watched_time: None,
+        last_progress_time: None,
+    };
+
+    // Test in Browse mode - SearchOnline should be available
+    let context_browse = MenuContext {
+        selected_entry: Some(Entry::Episode {
+            episode_id: 1,
+            name: "Test".to_string(),
+            location: "/test".to_string(),
+        }),
+        episode_detail: episode_detail.clone(),
+        mode: Mode::Browse,
+        last_action: None,
+    };
+
+    let available_items_browse = get_available_menu_items(&context_browse);
+    assert!(
+        available_items_browse.iter().any(|i| matches!(i.action, MenuAction::SearchOnline)),
+        "SearchOnline should be available in Browse mode"
+    );
+
+    // Test in Edit mode - SearchOnline should NOT be available
+    let context_edit = MenuContext {
+        selected_entry: Some(Entry::Episode {
+            episode_id: 1,
+            name: "Test".to_string(),
+            location: "/test".to_string(),
+        }),
+        episode_detail: episode_detail.clone(),
+        mode: Mode::Edit,
+        last_action: None,
+    };
+
+    let available_items_edit = get_available_menu_items(&context_edit);
+    assert!(
+        !available_items_edit.iter().any(|i| matches!(i.action, MenuAction::SearchOnline)),
+        "SearchOnline should NOT be available in Edit mode"
+    );
+
+    // Test in Menu mode - SearchOnline should NOT be available
+    let context_menu = MenuContext {
+        selected_entry: Some(Entry::Episode {
+            episode_id: 1,
+            name: "Test".to_string(),
+            location: "/test".to_string(),
+        }),
+        episode_detail: episode_detail.clone(),
+        mode: Mode::Menu,
+        last_action: None,
+    };
+
+    let available_items_menu = get_available_menu_items(&context_menu);
+    assert!(
+        !available_items_menu.iter().any(|i| matches!(i.action, MenuAction::SearchOnline)),
+        "SearchOnline should NOT be available in Menu mode"
+    );
 }

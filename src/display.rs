@@ -496,6 +496,201 @@ pub fn get_max_displayed_items_with_header_height(header_height: usize) -> io::R
     Ok(max_lines)
 }
 
+/// Render the torrent search input screen
+pub fn draw_torrent_search_input(
+    buffer_manager: &mut crate::buffer::BufferManager,
+    search_query: &str,
+    theme: &Theme,
+) -> io::Result<()> {
+    // Clear desired buffer to start with empty slate
+    buffer_manager.clear_desired_buffer();
+    
+    // Get writer for this frame
+    let mut writer = buffer_manager.get_writer();
+    
+    hide_cursor()?;
+    
+    let (terminal_width, _) = get_terminal_size()?;
+    
+    // Parse theme colors
+    let header_fg = string_to_color(&theme.header_fg).unwrap_or(crossterm::style::Color::Reset);
+    let help_fg = string_to_color(&theme.help_fg).unwrap_or(crossterm::style::Color::Reset);
+    
+    // Display header: "Search Online - The Pirate Bay"
+    writer.move_to(0, 0);
+    writer.set_fg_color(header_fg);
+    writer.set_bg_color(crossterm::style::Color::Reset);
+    writer.set_bold(true);
+    writer.write_str("Search Online - The Pirate Bay");
+    writer.set_bold(false);
+    
+    // Display input field with current query
+    writer.move_to(0, 2);
+    writer.set_fg_color(crossterm::style::Color::Reset);
+    writer.write_str("Query: ");
+    writer.write_str(search_query);
+    
+    // Display instructions: "Enter: Search | ESC: Cancel"
+    writer.move_to(0, 4);
+    writer.set_fg_color(help_fg);
+    writer.write_str("Enter: Search | ESC: Cancel");
+    
+    // Draw status line at the bottom
+    let (_, terminal_height) = get_terminal_size()?;
+    let status_row = terminal_height - 1;
+    
+    let status_bar = StatusBar::new("Enter your search query".to_string());
+    let status_cells = status_bar.render(terminal_width, 1, theme, false);
+    
+    // Write status bar to buffer
+    write_cells_to_buffer(&mut writer, &status_cells, 0, status_row);
+    
+    // Drop the writer to release the mutable borrow
+    drop(writer);
+    
+    // Compare buffers and write differences to terminal
+    buffer_manager.render_to_terminal()?;
+    
+    // Show cursor at the end of the query
+    show_cursor()?;
+    move_cursor(7 + search_query.len(), 2)?; // "Query: " is 7 chars, row 2
+    
+    Ok(())
+}
+
+/// Render the torrent search results screen
+pub fn draw_torrent_search_results(
+    buffer_manager: &mut crate::buffer::BufferManager,
+    results: &[crate::torrent_search::TorrentResult],
+    selected_index: usize,
+    theme: &Theme,
+) -> io::Result<()> {
+    // Clear desired buffer to start with empty slate
+    buffer_manager.clear_desired_buffer();
+    
+    // Get writer for this frame
+    let mut writer = buffer_manager.get_writer();
+    
+    hide_cursor()?;
+    
+    let (terminal_width, terminal_height) = get_terminal_size()?;
+    
+    // Parse theme colors
+    let header_fg = string_to_color(&theme.header_fg).unwrap_or(crossterm::style::Color::Reset);
+    let help_fg = string_to_color(&theme.help_fg).unwrap_or(crossterm::style::Color::Reset);
+    let selected_fg = string_to_color(&theme.current_fg).unwrap_or(crossterm::style::Color::Black);
+    let selected_bg = string_to_color(&theme.current_bg).unwrap_or(crossterm::style::Color::White);
+    let normal_fg = string_to_color(&theme.episode_fg).unwrap_or(crossterm::style::Color::Reset);
+    let normal_bg = string_to_color(&theme.episode_bg).unwrap_or(crossterm::style::Color::Reset);
+    
+    // Display header: "Search Results (Top 5)"
+    writer.move_to(0, 0);
+    writer.set_fg_color(header_fg);
+    writer.set_bg_color(crossterm::style::Color::Reset);
+    writer.set_bold(true);
+    writer.write_str("Search Results (Top 5)");
+    writer.set_bold(false);
+    
+    // Display table header
+    writer.move_to(0, 2);
+    writer.set_fg_color(header_fg);
+    writer.set_bold(true);
+    
+    // Calculate column widths
+    let title_width = terminal_width.saturating_sub(40); // Reserve space for other columns
+    let uploaded_width = 10;
+    let size_width = 10;
+    let seeds_width = 8;
+    let leeches_width = 8;
+    
+    // Write column headers
+    writer.write_str(&format!("{:<width$}", "Title", width = title_width));
+    writer.write_str(&format!("{:<width$}", "Uploaded", width = uploaded_width));
+    writer.write_str(&format!("{:<width$}", "Size", width = size_width));
+    writer.write_str(&format!("{:>width$}", "Seeds", width = seeds_width));
+    writer.write_str(&format!("{:>width$}", "Leeches", width = leeches_width));
+    writer.set_bold(false);
+    
+    // Display results
+    for (idx, result) in results.iter().enumerate() {
+        let row = 3 + idx;
+        writer.move_to(0, row);
+        
+        // Apply theme colors based on selection
+        if idx == selected_index {
+            writer.set_fg_color(selected_fg);
+            writer.set_bg_color(selected_bg);
+        } else {
+            writer.set_fg_color(normal_fg);
+            writer.set_bg_color(normal_bg);
+        }
+        
+        // Truncate title if too long
+        let title = if result.name.len() > title_width {
+            format!("{}...", &result.name[..title_width.saturating_sub(3)])
+        } else {
+            result.name.clone()
+        };
+        
+        // Write row data
+        writer.write_str(&format!("{:<width$}", title, width = title_width));
+        writer.write_str(&format!("{:<width$}", result.uploaded, width = uploaded_width));
+        writer.write_str(&format!("{:<width$}", result.size, width = size_width));
+        writer.write_str(&format!("{:>width$}", result.seeders, width = seeds_width));
+        writer.write_str(&format!("{:>width$}", result.leechers, width = leeches_width));
+        
+        // Clear to end of line to ensure full row is highlighted
+        writer.set_bg_color(crossterm::style::Color::Reset);
+    }
+    
+    // Display instructions
+    let instructions_row = 3 + results.len() + 2;
+    writer.move_to(0, instructions_row);
+    writer.set_fg_color(help_fg);
+    writer.set_bg_color(crossterm::style::Color::Reset);
+    writer.write_str("↑↓: Navigate | Enter: Download | ESC: Cancel");
+    
+    // Draw status line at the bottom
+    let status_row = terminal_height - 1;
+    
+    let status_message = if results.is_empty() {
+        "No results found".to_string()
+    } else {
+        format!("Select a torrent to download ({}/{})", selected_index + 1, results.len())
+    };
+    
+    let status_bar = StatusBar::new(status_message);
+    let status_cells = status_bar.render(terminal_width, 1, theme, false);
+    
+    // Write status bar to buffer
+    write_cells_to_buffer(&mut writer, &status_cells, 0, status_row);
+    
+    // Drop the writer to release the mutable borrow
+    drop(writer);
+    
+    // Compare buffers and write differences to terminal
+    buffer_manager.render_to_terminal()?;
+    
+    Ok(())
+}
+
+/// Convert a color string to a Color enum
+fn string_to_color(color: &str) -> Option<crossterm::style::Color> {
+    match color.to_lowercase().as_str() {
+        "black" => Some(crossterm::style::Color::Black),
+        "red" => Some(crossterm::style::Color::Red),
+        "green" => Some(crossterm::style::Color::Green),
+        "yellow" => Some(crossterm::style::Color::Yellow),
+        "blue" => Some(crossterm::style::Color::Blue),
+        "magenta" => Some(crossterm::style::Color::Magenta),
+        "cyan" => Some(crossterm::style::Color::Cyan),
+        "white" => Some(crossterm::style::Color::White),
+        "darkgray" | "dark_gray" => Some(crossterm::style::Color::DarkGrey),
+        "reset" => Some(crossterm::style::Color::Reset),
+        _ => None,
+    }
+}
+
 /// Write component cells to buffer at specified position.
 ///
 /// This is a key integration point between the component system and the buffer layer.

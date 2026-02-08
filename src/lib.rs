@@ -18,5 +18,6 @@ pub mod progress_tracker;
 pub mod splash;
 pub mod terminal;
 pub mod theme;
+pub mod torrent_search;
 pub mod util;
 pub mod video_metadata;

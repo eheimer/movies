@@ -615,6 +615,7 @@ pub fn handle_browse_mode(
     filter_mode: &mut bool,
     first_series: &mut usize,
     status_message: &mut String,
+    search_query: &mut String,
 ) -> io::Result<bool> {
     // Check for context menu hotkeys first (F2-F5) - but not in filter mode
     // Build menu context to check if actions are available
@@ -622,6 +623,7 @@ pub fn handle_browse_mode(
         let menu_context = crate::menu::MenuContext {
             selected_entry: filtered_entries.get(*current_item).cloned(),
             episode_detail: edit_details.clone(),
+            mode: mode.clone(),
             last_action: last_action.clone(),
         };
         let menu_items = crate::menu::get_context_menu_items(&menu_context);
@@ -652,6 +654,7 @@ pub fn handle_browse_mode(
                         config,
                         resolver,
                         status_message,
+                        search_query,
                     );
                     return Ok(true);
                 }
@@ -1368,6 +1371,7 @@ pub fn handle_menu_mode(
     resolver: &PathResolver,
     status_message: &mut String,
     buffer_manager: &mut crate::buffer::BufferManager,
+    search_query: &mut String,
 ) {
     // Handle navigation
     match code {
@@ -1416,6 +1420,7 @@ pub fn handle_menu_mode(
                 config,
                 resolver,
                 status_message,
+                search_query,
             );
         }
         KeyCode::Esc => {
@@ -1452,6 +1457,7 @@ pub fn handle_menu_mode(
                             config,
                             resolver,
                             status_message,
+                            search_query,
                         );
                         // Update menu selection to match the executed item
                         *menu_selection = index;
@@ -1484,6 +1490,7 @@ fn execute_menu_action(
     config: &Config,
     resolver: &PathResolver,
     status_message: &mut String,
+    search_query: &mut String,
 ) {
     match action {
         MenuAction::Edit => {
@@ -1864,5 +1871,115 @@ fn execute_menu_action(
                 *redraw = true;
             }
         }
+        MenuAction::SearchOnline => {
+            // Transition to TorrentSearchInput mode and initialize search query
+            *mode = Mode::TorrentSearchInput;
+            search_query.clear();
+            *redraw = true;
+        }
+    }
+}
+
+// Handle TorrentSearchInput mode - user enters search query
+pub fn handle_torrent_search_input(
+    code: KeyCode,
+    mode: &mut Mode,
+    search_query: &mut String,
+    torrent_results: &mut Vec<crate::torrent_search::TorrentResult>,
+    selected_torrent_result: &mut usize,
+    redraw: &mut bool,
+) {
+    match code {
+        KeyCode::Char(c) => {
+            search_query.push(c);
+            *redraw = true;
+        }
+        KeyCode::Backspace => {
+            search_query.pop();
+            *redraw = true;
+        }
+        KeyCode::Enter if !search_query.is_empty() => {
+            // Log search initiation
+            logger::log_info(&format!("Torrent search initiated: query=\"{}\"", search_query));
+            
+            // Execute async search using tokio runtime
+            let query = search_query.clone();
+            let runtime = tokio::runtime::Runtime::new().expect("Failed to create tokio runtime");
+            
+            match runtime.block_on(crate::torrent_search::search_torrents(&query)) {
+                Ok(results) => {
+                    *torrent_results = results;
+                    *selected_torrent_result = 0;
+                    *mode = Mode::TorrentSearchResults;
+                    logger::log_info(&format!("Search completed: {} results found", torrent_results.len()));
+                }
+                Err(e) => {
+                    logger::log_error(&format!("Torrent search failed: {}", e));
+                    eprintln!("Error: Search failed: {}", e);
+                    *mode = Mode::Browse;
+                }
+            }
+            *redraw = true;
+        }
+        KeyCode::Esc => {
+            logger::log_debug("Torrent search canceled by user");
+            *mode = Mode::Browse;
+            *redraw = true;
+        }
+        _ => {}
+    }
+}
+
+// Handle TorrentSearchResults mode - user navigates and selects results
+pub fn handle_torrent_search_results(
+    code: KeyCode,
+    mode: &mut Mode,
+    torrent_results: &[crate::torrent_search::TorrentResult],
+    selected_result: &mut usize,
+    status_message: &mut String,
+    redraw: &mut bool,
+) {
+    match code {
+        KeyCode::Up => {
+            if *selected_result > 0 {
+                *selected_result -= 1;
+                logger::log_debug(&format!("Torrent result selection moved up to index {}", selected_result));
+                *redraw = true;
+            }
+        }
+        KeyCode::Down => {
+            if *selected_result < torrent_results.len().saturating_sub(1) {
+                *selected_result += 1;
+                logger::log_debug(&format!("Torrent result selection moved down to index {}", selected_result));
+                *redraw = true;
+            }
+        }
+        KeyCode::Enter => {
+            if !torrent_results.is_empty() && *selected_result < torrent_results.len() {
+                let result = &torrent_results[*selected_result];
+                logger::log_info(&format!("User selected torrent result {}: \"{}\"", selected_result, result.name));
+                
+                // Attempt to open magnet link
+                match crate::torrent_search::open_magnet_link(&result.magnet_link) {
+                    Ok(_) => {
+                        *status_message = format!("Initiated download: {}", result.name);
+                        logger::log_info(&format!("Successfully opened magnet link for: {}", result.name));
+                        *mode = Mode::Browse;
+                    }
+                    Err(e) => {
+                        *status_message = format!("Error opening magnet link: {}", e);
+                        logger::log_error(&format!("Failed to open magnet link: {}", e));
+                        // Remain in results mode so user can try another result
+                    }
+                }
+                *redraw = true;
+            }
+        }
+        KeyCode::Esc => {
+            logger::log_debug("Torrent search results canceled by user");
+            *mode = Mode::Browse;
+            *redraw = true;
+        }
+        _ => {}
     }
 }

@@ -15,6 +15,7 @@ mod progress_tracker;
 mod splash;
 mod terminal;
 mod theme;
+mod torrent_search;
 mod util;
 mod video_metadata;
 
@@ -261,6 +262,11 @@ fn main_loop(mut entries: Vec<Entry>, mut config: Config, theme: Theme, mut reso
     let mut filter_mode: bool = false;
     let mut first_series: usize = 0;
 
+    // Torrent search state variables
+    let mut search_query = String::new();
+    let mut torrent_results: Vec<crate::torrent_search::TorrentResult> = Vec::new();
+    let mut selected_torrent_result: usize = 0;
+
     // Initialize BufferManager with terminal dimensions
     let (terminal_width, terminal_height) = get_terminal_size()?;
     let mut buffer_manager = BufferManager::new(terminal_width, terminal_height);
@@ -279,7 +285,11 @@ fn main_loop(mut entries: Vec<Entry>, mut config: Config, theme: Theme, mut reso
             // Check if mode has changed and trigger full redraw if needed
             if mode != previous_mode {
                 buffer_manager.force_full_redraw();
-                previous_mode = mode.clone();
+                // Only update previous_mode if we're not entering Menu mode
+                // (we want to remember what mode we were in before Menu)
+                if mode != Mode::Menu {
+                    previous_mode = mode.clone();
+                }
             }
             
             // Split the search string into terms
@@ -335,6 +345,7 @@ fn main_loop(mut entries: Vec<Entry>, mut config: Config, theme: Theme, mut reso
                 let menu_context = menu::MenuContext {
                     selected_entry: filtered_entries.get(remembered_item).cloned(),
                     episode_detail: edit_details.clone(),
+                    mode: previous_mode.clone(),
                     last_action: last_action.clone(),
                 };
                 menu::get_context_menu_items(&menu_context)
@@ -342,32 +353,52 @@ fn main_loop(mut entries: Vec<Entry>, mut config: Config, theme: Theme, mut reso
                 Vec::new()
             };
 
-            draw_screen(
-                &filtered_entries,
-                current_item,
-                &mut first_entry,
-                &search,
-                &theme,
-                &mode,
-                &entry_path,
-                &edit_details,
-                edit_field,
-                edit_cursor_pos,
-                &series,
-                &mut series_selection,
-                &new_series,
-                season_number,
-                &last_action,
-                &dirty_fields,
-                &menu_items,
-                menu_selection,
-                filter_mode,
-                &mut first_series,
-                &view_context,
-                &status_message,
-                resolver.as_ref().expect("PathResolver should be initialized"),
-                &mut buffer_manager,
-            )?;
+            // Call appropriate display function based on mode
+            match mode {
+                Mode::TorrentSearchInput => {
+                    display::draw_torrent_search_input(
+                        &mut buffer_manager,
+                        &search_query,
+                        &theme,
+                    )?;
+                }
+                Mode::TorrentSearchResults => {
+                    display::draw_torrent_search_results(
+                        &mut buffer_manager,
+                        &torrent_results,
+                        selected_torrent_result,
+                        &theme,
+                    )?;
+                }
+                _ => {
+                    draw_screen(
+                        &filtered_entries,
+                        current_item,
+                        &mut first_entry,
+                        &search,
+                        &theme,
+                        &mode,
+                        &entry_path,
+                        &edit_details,
+                        edit_field,
+                        edit_cursor_pos,
+                        &series,
+                        &mut series_selection,
+                        &new_series,
+                        season_number,
+                        &last_action,
+                        &dirty_fields,
+                        &menu_items,
+                        menu_selection,
+                        filter_mode,
+                        &mut first_series,
+                        &view_context,
+                        &status_message,
+                        resolver.as_ref().expect("PathResolver should be initialized"),
+                        &mut buffer_manager,
+                    )?;
+                }
+            }
             redraw = false;
         }
 
@@ -472,6 +503,7 @@ fn main_loop(mut entries: Vec<Entry>, mut config: Config, theme: Theme, mut reso
                                 &mut filter_mode,
                                 &mut first_series,
                                 &mut status_message,
+                                &mut search_query,
                             )? {
                                 break Ok(());
                             }
@@ -529,6 +561,7 @@ fn main_loop(mut entries: Vec<Entry>, mut config: Config, theme: Theme, mut reso
                         let menu_context = menu::MenuContext {
                             selected_entry: filtered_entries.get(remembered_item).cloned(),
                             episode_detail: edit_details.clone(),
+                            mode: previous_mode.clone(),
                             last_action: last_action.clone(),
                         };
                         let menu_items = menu::get_context_menu_items(&menu_context);
@@ -558,12 +591,33 @@ fn main_loop(mut entries: Vec<Entry>, mut config: Config, theme: Theme, mut reso
                                 res,
                                 &mut status_message,
                                 &mut buffer_manager,
+                                &mut search_query,
                             );
                         } else {
                             // If resolver is None, exit menu and enter Entry mode
                             mode = Mode::Entry;
                             redraw = true;
                         }
+                    }
+                    Mode::TorrentSearchInput => {
+                        handlers::handle_torrent_search_input(
+                            code,
+                            &mut mode,
+                            &mut search_query,
+                            &mut torrent_results,
+                            &mut selected_torrent_result,
+                            &mut redraw,
+                        );
+                    }
+                    Mode::TorrentSearchResults => {
+                        handlers::handle_torrent_search_results(
+                            code,
+                            &mut mode,
+                            &torrent_results,
+                            &mut selected_torrent_result,
+                            &mut status_message,
+                            &mut redraw,
+                        );
                     }
                 }
 

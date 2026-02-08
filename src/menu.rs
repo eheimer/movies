@@ -1,6 +1,6 @@
 use crossterm::event::KeyCode;
 use crate::dto::EpisodeDetail;
-use crate::util::{can_repeat_action, Entry, LastAction};
+use crate::util::{can_repeat_action, Entry, LastAction, Mode};
 
 #[derive(Debug, Clone)]
 pub struct MenuItem {
@@ -26,11 +26,13 @@ pub enum MenuAction {
     ClearSeriesData,
     UnwatchAll,
     Delete,
+    SearchOnline,
 }
 
 pub struct MenuContext {
     pub selected_entry: Option<Entry>,
     pub episode_detail: EpisodeDetail,
+    pub mode: crate::util::Mode,
     pub last_action: Option<LastAction>,
 }
 
@@ -71,6 +73,12 @@ fn define_all_menu_items() -> Vec<MenuItem> {
             label: "Unwatch All".to_string(),
             hotkey: Some(KeyCode::F(7)),
             action: MenuAction::UnwatchAll,
+            location: MenuLocation::ContextMenu,
+        },
+        MenuItem {
+            label: "Search Online".to_string(),
+            hotkey: Some(KeyCode::F(8)),
+            action: MenuAction::SearchOnline,
             location: MenuLocation::ContextMenu,
         },
         MenuItem {
@@ -135,6 +143,10 @@ fn is_item_available(item: &MenuItem, context: &MenuContext) -> bool {
         MenuAction::Delete => {
             // Available only when selected entry is an Episode
             matches!(context.selected_entry, Some(Entry::Episode { .. }))
+        }
+        MenuAction::SearchOnline => {
+            // Available only in Browse mode
+            matches!(context.mode, Mode::Browse)
         }
     }
 }

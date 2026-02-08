@@ -150,6 +150,25 @@ Want to rewatch a whole series? Press **F7** to mark all episodes as unwatched. 
 - Just one series (if you're viewing a series)
 - Just one season (if you're viewing a season)
 
+### Finding content with torrent search
+
+Can't find what you're looking for in your collection? Press **F8** to search for torrents online:
+
+1. Press **F8** to open the torrent search
+2. Type the name of the movie or show you're looking for
+3. Press **Enter** to search
+4. Browse the results with **arrow keys**
+5. Press **Enter** on a result to open the magnet link in your torrent client
+
+The search returns the top 5 results from The Pirate Bay, sorted by seeders (most popular first). Each result shows:
+- Name
+- File size
+- Number of seeders and leechers
+
+**Requirements:** You need a magnet link handler installed (like Transmission, qBittorrent, or Deluge) for this feature to work. When you select a result, the program opens the magnet link in your default torrent client, which will start downloading the content.  In your torrent client, be sure to save the video to the correct directory (where this app can scan them) and remember to do a rescan once the download is complete, in order for the video to show up in your browse list.
+
+Press **Esc** at any time to cancel the search and return to browsing your library.
+
 ### Editing episode details
 
 Navigate to an episode and press **F2** to edit its details:
@@ -171,6 +190,7 @@ Use the arrow keys to move between fields, type to edit, and press **F2** again 
 | **Enter** | Play video or open series/season |
 | **Esc** | Go back to previous screen / Exit the program |
 | **/** | Enter search/filter mode |
+| **F8** | Search for torrents online |
 | **F1** | Open menu to see all available actions |
 
 ### Quick actions (when viewing an episode)

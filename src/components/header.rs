@@ -137,6 +137,12 @@ impl HotkeyHelper {
             Mode::Menu => {
                 "[\u{2191}]/[\u{2193}] navigate, [ENTER] select, [ESC] close menu".to_string()
             }
+            Mode::TorrentSearchInput => {
+                "Enter: Search | ESC: Cancel".to_string()
+            }
+            Mode::TorrentSearchResults => {
+                "[\u{2191}]/[\u{2193}]: Navigate | Enter: Download | ESC: Cancel".to_string()
+            }
         }
     }
 
@@ -150,6 +156,7 @@ impl HotkeyHelper {
         let menu_context = MenuContext {
             selected_entry: self.selected_entry.clone(),
             episode_detail: self.edit_details.clone(),
+            mode: self.mode.clone(),
             last_action: self.last_action.clone(),
         };
 
